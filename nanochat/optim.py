@@ -43,14 +43,10 @@ def adamw_step_fused(
     """
     Fused AdamW step: weight_decay -> momentum_update -> bias_correction -> param_update
     All in one compiled graph to eliminate Python overhead between ops.
-    The 0-D CPU tensors avoid recompilation when hyperparameter values change (CUDA).
-    On MPS/CPU they are moved to the parameter device so eager ops stay on one device.
+    The 0-D scalar tensors avoid recompilation when hyperparameter values change (CUDA path);
+    on MPS/CPU the optimizer pre-pins them to the parameter device so per-step .to() syncs
+    don't dominate the iteration time.
     """
-    if p.device.type != "cuda":
-        device = p.device
-        step_t, lr_t, beta1_t, beta2_t, eps_t, wd_t = [
-            t.to(device) for t in (step_t, lr_t, beta1_t, beta2_t, eps_t, wd_t)
-        ]
     # Weight decay (decoupled, applied before the update)
     p.mul_(1 - lr_t * wd_t)
     # Update running averages (lerp_ is cleaner and fuses well)
@@ -59,10 +55,13 @@ def adamw_step_fused(
     # Bias corrections
     bias1 = 1 - beta1_t ** step_t
     bias2 = 1 - beta2_t ** step_t
-    # Compute update and apply
+    # Compute update and apply.
+    # Avoid the `alpha=` kwarg here: when step_size is a 0-D device tensor (the MPS
+    # pinned-scalar path), `alpha=` forces a .item() host fetch per call. Inlining the
+    # multiply keeps the whole step on-device. CUDA codegen handles either form.
     denom = (exp_avg_sq / bias2).sqrt() + eps_t
     step_size = lr_t / bias1
-    p.add_(exp_avg / denom, alpha=-step_size)
+    p.sub_((exp_avg / denom) * step_size)
 
 # -----------------------------------------------------------------------------
 """
@@ -119,15 +118,10 @@ def muon_step_fused(
     """
     Fused Muon step: momentum -> polar_express -> variance_reduction -> cautious_update
     All in one compiled graph to eliminate Python overhead between ops.
-    Some of the constants are 0-D CPU tensors to avoid recompilation when values change (CUDA).
-    On MPS/CPU they are moved to the parameter device so eager ops stay on one device.
+    Some of the constants are 0-D scalar tensors that avoid recompilation when values
+    change (CUDA path); on MPS/CPU the optimizer pre-pins them to the parameter device
+    so per-step .to() syncs don't dominate the iteration time.
     """
-    if stacked_grads.device.type != "cuda":
-        device = stacked_grads.device
-        momentum_t, lr_t, wd_t, beta2_t = [
-            t.to(device) for t in (momentum_t, lr_t, wd_t, beta2_t)
-        ]
-
     # Nesterov momentum
     momentum = momentum_t.to(stacked_grads.dtype)
     momentum_buffer.lerp_(stacked_grads, 1 - momentum)
@@ -200,19 +194,37 @@ class MuonAdamW(torch.optim.Optimizer):
     """
     def __init__(self, param_groups: list[dict]):
         super().__init__(param_groups, defaults={})
-        # 0-D CPU tensors to avoid torch.compile recompilation when values change
+        # 0-D scalar tensors used as fused-kernel hyperparameters.
+        # On CUDA we keep them on CPU so torch.compile doesn't recompile when
+        # values change (codegen reads the value, not the tensor address).
+        # On MPS/CPU we lazy-init them on the parameter device the first time
+        # _step_adamw / _step_muon runs — moving 0-D CPU scalars to MPS every
+        # step costs ~8ms each (host-device sync) and dominates the iteration.
+        scalar_device = "cpu"  # rebound on first step for non-CUDA backends
         # AdamW tensors
-        self._adamw_step_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
-        self._adamw_lr_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
-        self._adamw_beta1_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
-        self._adamw_beta2_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
-        self._adamw_eps_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
-        self._adamw_wd_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
+        self._adamw_step_t = torch.tensor(0.0, dtype=torch.float32, device=scalar_device)
+        self._adamw_lr_t = torch.tensor(0.0, dtype=torch.float32, device=scalar_device)
+        self._adamw_beta1_t = torch.tensor(0.0, dtype=torch.float32, device=scalar_device)
+        self._adamw_beta2_t = torch.tensor(0.0, dtype=torch.float32, device=scalar_device)
+        self._adamw_eps_t = torch.tensor(0.0, dtype=torch.float32, device=scalar_device)
+        self._adamw_wd_t = torch.tensor(0.0, dtype=torch.float32, device=scalar_device)
         # Muon tensors
-        self._muon_momentum_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
-        self._muon_lr_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
-        self._muon_wd_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
-        self._muon_beta2_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
+        self._muon_momentum_t = torch.tensor(0.0, dtype=torch.float32, device=scalar_device)
+        self._muon_lr_t = torch.tensor(0.0, dtype=torch.float32, device=scalar_device)
+        self._muon_wd_t = torch.tensor(0.0, dtype=torch.float32, device=scalar_device)
+        self._muon_beta2_t = torch.tensor(0.0, dtype=torch.float32, device=scalar_device)
+        self._scalars_pinned_to_param_device = False
+
+    def _pin_scalars_to_device(self, device):
+        """Move scalar hyperparam tensors onto `device` once. No-op for CUDA."""
+        if self._scalars_pinned_to_param_device or device.type == "cuda":
+            self._scalars_pinned_to_param_device = True
+            return
+        for name in ("_adamw_step_t", "_adamw_lr_t", "_adamw_beta1_t", "_adamw_beta2_t",
+                     "_adamw_eps_t", "_adamw_wd_t", "_muon_momentum_t", "_muon_lr_t",
+                     "_muon_wd_t", "_muon_beta2_t"):
+            setattr(self, name, getattr(self, name).to(device))
+        self._scalars_pinned_to_param_device = True
 
     def _step_adamw(self, group: dict) -> None:
         """
@@ -224,6 +236,7 @@ class MuonAdamW(torch.optim.Optimizer):
                 continue
             grad = p.grad
             state = self.state[p]
+            self._pin_scalars_to_device(p.device)
 
             # State init
             if not state:
@@ -263,6 +276,7 @@ class MuonAdamW(torch.optim.Optimizer):
         state = self.state[p]
         num_params = len(params)
         shape, device, dtype = p.shape, p.device, p.dtype
+        self._pin_scalars_to_device(device)
 
         # Momentum for every individual parameter
         if "momentum_buffer" not in state:
