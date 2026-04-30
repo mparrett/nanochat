@@ -40,6 +40,21 @@ After this fix, n_valid ranges 16.7–36.4% per step (median 29%), 0 fully-maske
 
 **Prevention**: When using bestfit packing on datasets with conversations longer than the row capacity, you need an eviction policy for over-length items, otherwise the buffer locks. Worth filing upstream — current `chat_sft.py` is silently broken for users with `max_seq_len < median conversation length`.
 
+## 2026-04-30 - NANOCHAT_DTYPE=bfloat16 fails on M2 MPS (mixed-precision)
+
+**Issue**: Setting `NANOCHAT_DTYPE=bfloat16` on M2 24GB causes Metal Performance Shaders Graph to fail at runtime:
+
+```
+'mps.multiply' op requires the same element type for all operands and results
+%4 = "mps.multiply"(%arg2, %3) : (tensor<1xbf16>, tensor<3x1x12xf32>) -> tensor<*xf32>
+```
+
+**Root Cause**: nanochat's bf16 path stores master weights and optimizer state in fp32 but casts activations and some optimizer buffers (e.g. polar express `X = g.bfloat16()`) to bf16. On MPS, mixed-dtype ops are not auto-promoted; the compiler hard-fails. CUDA tolerates this implicitly via codegen.
+
+**Solution**: Not pursued. Would require auditing every `*` / `lerp_` / `add_` site in `nanochat/optim.py` and `nanochat/gpt.py` for mixed-dtype operands and inserting explicit `.to(dtype)` calls. The hypothetical payoff (memory savings per PR #685's M4 Max user, possibly ~25%) might not be worth the maintenance cost — nanochat upstream doesn't test bf16-on-MPS.
+
+**Prevention**: On M2, leave `NANOCHAT_DTYPE` unset (defaults to `float32` on MPS). If someone wants to try bf16 on a newer Mac (M3+), expect to do mixed-precision plumbing first.
+
 ## 2026-04-30 - chat_sft `--eval-every=-1` does NOT skip final eval
 
 **Issue**: Passing `--eval-every=-1` to `scripts.chat_sft` skips intermediate val evaluations but still runs a full val eval at `last_step`. The condition at chat_sft.py:347 is `if last_step or (args.eval_every > 0 ...)` — `last_step` short-circuits the check.
