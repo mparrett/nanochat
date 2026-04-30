@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Field Report — A 73M-parameter ChatGPT, trained on a Mac</title>
+<style>
+  :root {
+    --paper: #f5f1e8;
+    --paper-dim: #ebe5d6;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-mute: #8a857a;
+    --rule: #c9c2b0;
+    --accent: #b04a2f;     /* iron oxide red */
+    --accent-soft: #d97b5c;
+    --green: #4a7c3f;
+    --code-bg: #1c1d1f;
+    --code-fg: #e8e3d4;
+    --code-mute: #8d8675;
+    --code-key: #c9b76b;
+    --code-str: #a3b87a;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Charter", "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(0,0,0,0.025) 31px 32px),
+      var(--paper);
+  }
+  .sheet {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 6rem;
+  }
+
+  /* Masthead */
+  .masthead {
+    border-top: 4px double var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0 1rem;
+    margin-bottom: 3rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1rem;
+  }
+  .masthead .kicker {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+  }
+  .masthead h1 {
+    font-family: "Iowan Old Style", "Charter", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(2rem, 4.6vw, 3.2rem);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .masthead h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .masthead .meta {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+    text-align: right;
+    line-height: 1.5;
+  }
+  .masthead .meta strong { color: var(--ink); font-weight: 600; }
+
+  /* Lede */
+  .lede {
+    font-size: 1.25rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin: 0 0 3rem;
+    max-width: 38em;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  /* Pull quote */
+  .pull {
+    border-left: 3px solid var(--accent);
+    padding: 1.2rem 1.5rem;
+    margin: 2.5rem 0;
+    background: var(--paper-dim);
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.15rem;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .pull .src {
+    display: block;
+    margin-top: 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-style: normal;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  /* Section */
+  section { margin: 3rem 0; }
+  section > .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+  section > h2 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.85rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0.2rem 0 1.2rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.6rem;
+  }
+  section h3 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 1.6rem 0 0.5rem;
+  }
+  p { margin: 0 0 1rem; }
+  p + p { text-indent: 1.5em; }
+
+  /* Code & terminal */
+  pre, code {
+    font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace;
+  }
+  code {
+    font-size: 0.92em;
+    background: var(--paper-dim);
+    padding: 0.05em 0.35em;
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 1.2rem 1.4rem;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    margin: 1.4rem 0;
+    border-left: 3px solid var(--code-mute);
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+  }
+  pre .c { color: var(--code-mute); }
+  pre .k { color: var(--code-key); }
+  pre .s { color: var(--code-str); }
+
+  /* Incident box */
+  .incident {
+    border: 1px solid var(--rule);
+    background: var(--paper-dim);
+    padding: 1.4rem 1.6rem;
+    margin: 1.6rem 0;
+    position: relative;
+  }
+  .incident > .num {
+    position: absolute;
+    top: -0.6rem;
+    left: 1rem;
+    background: var(--paper);
+    padding: 0 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .incident h3 {
+    margin: 0 0 0.6rem;
+    font-size: 1.1rem;
+  }
+  .incident .label-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-bottom: 0.8rem;
+  }
+  .incident .tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.18em 0.55em;
+    border-radius: 2px;
+    border: 1px solid currentColor;
+  }
+  .tag.fix { color: var(--green); }
+  .tag.gotcha { color: var(--accent); }
+  .tag.upstream { color: var(--ink-soft); }
+  .tag.local { color: var(--ink); background: var(--paper); }
+
+  /* Stats table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.4rem 0;
+    font-size: 0.95rem;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+  }
+  th, td {
+    padding: 0.7rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--paper-dim); }
+  th {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 600;
+    border-bottom: 2px solid var(--ink);
+    background: var(--paper);
+  }
+  td.num { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; color: var(--ink); }
+  td.delta-bad { color: var(--accent) !important; font-weight: 600; }
+  td.delta-good { color: var(--green) !important; font-weight: 600; }
+  tfoot th, tbody th {
+    background: var(--paper);
+    color: var(--ink);
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  /* Architecture diagram */
+  .pipe {
+    margin: 1.6rem 0;
+    padding: 1.4rem;
+    background: var(--paper-dim);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+    overflow-x: auto;
+  }
+  .pipe .stage {
+    display: inline-block;
+    padding: 0.3em 0.8em;
+    margin: 0.2em 0.15em;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  .pipe .stage.done { border-color: var(--green); color: var(--green); }
+  .pipe .arrow { color: var(--ink-mute); margin: 0 0.2em; }
+  .pipe .annot {
+    color: var(--ink-mute);
+    font-size: 0.72rem;
+    margin-top: 0.4em;
+    display: block;
+  }
+
+  /* Numbered list */
+  ol.takeaways {
+    list-style: none;
+    counter-reset: t;
+    padding: 0;
+    margin: 1.4rem 0;
+  }
+  ol.takeaways li {
+    counter-increment: t;
+    padding-left: 3rem;
+    position: relative;
+    margin-bottom: 1rem;
+  }
+  ol.takeaways li::before {
+    content: counter(t, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+  }
+  ol.takeaways b { font-weight: 700; }
+
+  /* Footer */
+  .colophon {
+    margin-top: 5rem;
+    padding-top: 1.5rem;
+    border-top: 4px double var(--ink);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--ink-mute);
+    line-height: 1.7;
+  }
+  .colophon a { color: var(--ink); }
+
+  /* Subtle text styling */
+  .smallcaps {
+    font-variant: small-caps;
+    letter-spacing: 0.05em;
+  }
+  hr.fancy {
+    border: none;
+    text-align: center;
+    margin: 2.5rem 0;
+    color: var(--ink-mute);
+  }
+  hr.fancy::before {
+    content: "·   ·   ·";
+    letter-spacing: 0.5em;
+  }
+
+  @media (max-width: 600px) {
+    .sheet { padding: 2rem 1.1rem 4rem; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead .meta { text-align: left; }
+    .lede { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+<article class="sheet">
+
+<header class="masthead">
+  <div>
+    <div class="kicker">Field Report &nbsp;·&nbsp; nanochat on Apple Silicon</div>
+    <h1>A <em>73M-parameter</em> ChatGPT,<br>trained overnight on a Mac.</h1>
+  </div>
+  <div class="meta">
+    <strong>Date</strong> 2026-04-30<br>
+    <strong>Hardware</strong> MacBook M2, 24GB<br>
+    <strong>Wall time</strong> ~5 hours<br>
+    <strong>Result</strong> coherent answers
+  </div>
+</header>
+
+<p class="lede">
+  Andrej Karpathy's <strong>nanochat</strong> ships a tuned recipe for getting through tokenizer training, pretraining, and supervised fine-tuning on a MacBook M3 Max. We have an <strong>M2 with 24GB</strong>. The README warns: <em>"You will not get far on your Macbook."</em> We got pretty far. Here's what it took, what broke, and the two real bugs we hit along the way — including one we're filing upstream.
+</p>
+
+<div class="pull">
+  "The capital of France is Paris. It is a city known for its historical landmarks and cultural institutions such as the Eiffel Tower and the Louvre Museum…"
+  <span class="src">— our model, after 5h of total training</span>
+</div>
+
+<section>
+  <div class="label">01 / The plan</div>
+  <h2>What we set out to do</h2>
+  <p>
+    nanochat is a single-GPU-node training harness — tokenizer, base pretraining, SFT, RL, eval, inference, web UI — designed to be a clean reference codebase rather than a configurable framework. Karpathy's <code>runs/runcpu.sh</code> bundles the whole thing into one bash script, tuned for an M3 Max in roughly 45 minutes.
+  </p>
+  <p>
+    Our M2 has fewer GPU cores and roughly a quarter of the memory bandwidth. We expected 3–5× slower wall-clock and went in willing to take an overnight run to find out where the M3-tuned recipe would or wouldn't translate. Spoiler: the speed delta was the easy part — the interesting failures were data-pipeline edge cases that the M3 Max happens to step around.
+  </p>
+</section>
+
+<section>
+  <div class="label">02 / The pipeline</div>
+  <h2>Architecture in one diagram</h2>
+  <div class="pipe">
+    <span class="stage done">ClimbMix-400B<br>9 shards (~800MB)</span>
+    <span class="arrow">→</span>
+    <span class="stage done">BPE tokenizer<br>32k vocab</span>
+    <span class="arrow">→</span>
+    <span class="stage done">Pretrain<br>d6, 73M params, 5000 iters</span>
+    <span class="arrow">→</span>
+    <span class="stage done">SFT<br>SmolTalk + identity, 1500 iters</span>
+    <span class="arrow">→</span>
+    <span class="stage done">chat_cli / chat_web</span>
+    <span class="annot">Bracketed by a single complexity dial — depth=6. Width, heads, learning rate, weight decay, training horizon all derive from depth so any size produces a compute-optimal model.</span>
+  </div>
+  <p>
+    The model is a vanilla-ish GPT with rotary embeddings, untied embed/lm_head, ReLU² MLPs, RMSNorm without learnable params, GQA attention, and Flash Attention 3 on Hopper+ with an SDPA fallback for everything else (including MPS). All artifacts go under <code>$NANOCHAT_BASE_DIR</code> — datasets, tokenizer pickle, checkpoints, the lot.
+  </p>
+  <p>
+    What's notable about the codebase: nearly every "hyperparameter" is a derived quantity, not a setting. There are no model factories, no config objects, no plugin systems. Want a different model size? Change <code>--depth</code>. The codebase is small enough to read end-to-end in an afternoon, which made the bug hunts that follow possible.
+  </p>
+</section>
+
+<section>
+  <div class="label">03 / The journey</div>
+  <h2>What broke and how we fixed it</h2>
+
+  <div class="incident">
+    <span class="num">INCIDENT 01</span>
+    <div class="label-row">
+      <span class="tag gotcha">Bug</span>
+      <span class="tag upstream">Upstream issue #590</span>
+      <span class="tag fix">Patched via PR #610</span>
+    </div>
+    <h3>SFT loss goes <code>NaN</code> at step 4, deterministically</h3>
+    <p>
+      First training step looks fine, second is fine, third is fine, fourth is <code>NaN</code> and never recovers. Tested everything: lower learning rate (10× smaller across the three optimizer groups), no inherited optimizer state, aggressive linear warmup. <strong>None of it mattered.</strong> The NaN trigger isn't a hyperparameter.
+    </p>
+    <p>
+      Found it by reading the open issues. <code>F.cross_entropy(reduction='mean')</code> divides by the number of non-ignored target tokens. When all targets are <code>-1</code> (the ignore index), it divides by zero. CUDA tends to mask this with autograd glue at certain optimizer state; MPS does not. The cure is to trap the case before <code>cross_entropy</code> sees it:
+    </p>
+<pre><code><span class="k">if</span> loss_reduction == <span class="s">'mean'</span> <span class="k">and</span> <span class="k">not</span> (targets != -1).any():
+    <span class="c"># All targets ignored — return graph-connected zero so</span>
+    <span class="c"># grad-accum sees no contribution rather than poisoning.</span>
+    <span class="k">return</span> logits.sum() * 0.0</code></pre>
+  </div>
+
+  <div class="incident">
+    <span class="num">INCIDENT 02</span>
+    <div class="label-row">
+      <span class="tag gotcha">Bug</span>
+      <span class="tag local">Found locally</span>
+      <span class="tag fix">Patched in chat_sft.py</span>
+    </div>
+    <h3>The dataloader silently lobotomized the model</h3>
+    <p>
+      With Incident 01 patched, SFT ran cleanly to the end. Loss displayed a beautiful exponential decay from 1.89 to 1e-5. The smoke test came back: <code>"juven neurotransmit�esterol meticul…"</code> Pure token soup. The val_bpb had gone from 1.07 (start) to 5.07 (end) — the model got <em>worse</em>.
+    </p>
+    <p>
+      We instrumented the training loop with <code>(y != -1).sum()</code> per step. The numbers told the story:
+    </p>
+    <table>
+      <thead><tr><th>step</th><th>n_valid / total</th><th>% valid</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td class="num">2,911 / 16,384</td><td class="num">17.8%</td></tr>
+        <tr><td class="num">2</td><td class="num">3,487 / 16,384</td><td class="num">21.3%</td></tr>
+        <tr><td class="num">3</td><td class="num">4,406 / 16,384</td><td class="num">26.9%</td></tr>
+        <tr><td class="num">4 — 49</td><td class="num delta-bad">0 / 16,384</td><td class="num delta-bad">0.0%</td></tr>
+      </tbody>
+    </table>
+    <p>
+      <strong>Forty-six of forty-nine steps had zero valid training targets.</strong> The model was getting no gradient updates for 94% of the run. The exponential decay we were watching was the EMA loss display draining toward zero because Incident 01's fix was returning <code>0.0</code> for fully-masked batches. Honest gradient, dishonest readout.
+    </p>
+    <p>
+      Root cause was in <code>sft_data_generator_bos_bestfit</code>. It maintains a buffer of 100 conversations and only pops them when one fits in <code>max_seq_len + 1 = 513</code> tokens. SmolTalk has many conversations longer than 513 tokens. Once the small ones drain in steps 1–3, the buffer fills permanently with over-length entries that can never fit any row, every row gets BOS-padded with mask=0, and <code>consumed</code> never advances. The <code>it</code> counter keeps incrementing — the appearance of training. The fix is straightforward: detect the lockup state and discard the over-length convs.
+    </p>
+<pre><code><span class="k">elif</span> len(row) == 0:
+    <span class="c"># Fresh row, nothing fits → buffer must be locked with</span>
+    <span class="c"># conversations larger than row_capacity. Drop them so</span>
+    <span class="c"># refill_buffer() can pull fresh data.</span>
+    n_dropped = len(conv_buffer)
+    consumed += n_dropped * ddp_world_size
+    conv_buffer.clear()
+    <span class="k">continue</span></code></pre>
+    <p>
+      After patching: median 29% valid tokens per step, zero fully-masked steps, loss descended honestly from 1.89 to 1.40. Worth filing upstream — current code silently fails on any setup where <code>max_seq_len</code> falls below the dataset's median conversation length.
+    </p>
+  </div>
+
+  <div class="incident">
+    <span class="num">INCIDENT 03</span>
+    <div class="label-row">
+      <span class="tag gotcha">Operational</span>
+      <span class="tag local">Process hygiene</span>
+    </div>
+    <h3>Defaults that nuke wall-clock; orphaned workers that hang the next run</h3>
+    <p>
+      <code>chat_sft</code> defaults <code>--chatcore-every</code> to <strong>200</strong>, meaning the full ChatCORE benchmark suite (ARC, MMLU, GSM8K, HumanEval, SpellingBee) runs every 200 steps. On M2 each pass takes hours. <code>--eval-every=-1</code> skips intermediate val evals but <em>not</em> the one at <code>last_step</code> — the default <code>--eval-tokens=21M</code> means a ~30-minute eval before the save block runs. Pass <code>--eval-tokens=0</code> to actually skip it.
+    </p>
+    <p>
+      Less obvious: a multiprocessing worker from an earlier debug probe stayed running for nearly three hours at 22% CPU after I'd "killed" the parent. It pinned the Metal context. The next training launch hung at 0% CPU after step 1 with no error. <code>pgrep -lf python</code> between runs is now muscle memory.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="label">04 / The numbers</div>
+  <h2>Time and disk budget</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>phase</th>
+        <th>M3 Max (Karpathy)</th>
+        <th>M2 24GB (us)</th>
+        <th>disk added</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Dataset download</td><td class="num">minutes</td><td class="num">~3 min</td><td class="num">~800 MB</td></tr>
+      <tr><td>Tokenizer train</td><td class="num">~34 s</td><td class="num">~80 s</td><td class="num">~MB</td></tr>
+      <tr><td>Pretrain (5000 it)</td><td class="num">~30 min</td><td class="num">~3.6 h</td><td class="num">~800 MB</td></tr>
+      <tr><td>SFT (1500 it)</td><td class="num">~10 min</td><td class="num">~66 min</td><td class="num">~800 MB</td></tr>
+      <tr><th>Total</th><td class="num">~45 min</td><td class="num">~5 h+</td><td class="num">~3 GB</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The 3–5× wall-clock factor matches the GPU core count and memory bandwidth ratio between the two chips. Nothing surprising here — what was surprising was that the M2 ran the entire pipeline once we got past the data-pipeline bug. No OOMs at <code>--device-batch-size=32</code>, no Metal driver crashes, no bf16 silliness (everything is fp32 on MPS, same as M3 Max).
+  </p>
+</section>
+
+<section>
+  <div class="label">05 / What the model can actually do</div>
+  <h2>Inference notes</h2>
+  <p>
+    The model nails Paris, namechecks the Eiffel Tower and the Louvre, and follows the chat template ("Hello! How can I help you today?"). Past a sentence or two it loses the thread: in our test runs it confidently described <em>"a soft-l ride could also be associated with those around the world"</em> as part of an explanation of why the sky is blue.
+  </p>
+  <p>
+    On sampling: standard advice (temperature 0.8, top-k 50) works fine here, but tightening either too much (we tried <code>temp=0.5, k=20</code>) collapses the model into degenerate loops — at one point it emitted <code>"a blue-batch called 'cending' and 'cending'"</code> roughly thirty times in a single response. Tiny models have narrow, deep attractors in token space; they need <em>some</em> sampling jitter to escape them, even at the cost of coherence. RLHF would flatten these out, but that's the next phase.
+  </p>
+</section>
+
+<section>
+  <div class="label">06 / Takeaways</div>
+  <h2>What I'd do differently</h2>
+  <ol class="takeaways">
+    <li><b>Instrument before you wait.</b> When loss decays to suspiciously low values, add a per-step counter for the actual training signal <em>immediately</em>. Don't run for an hour assuming overfitting if there's a chance the gradient is getting zeroed out.</li>
+    <li><b>Don't trust loss readouts in the presence of mask-related fixes.</b> The PR #610 NaN-guard returns 0 for fully-masked batches — gradient-correct, but it pulls the EMA toward zero and disguises a broken pipeline as fast convergence. We were three hours in before noticing.</li>
+    <li><b>Disable evals you don't need.</b> Pass <code>--eval-every=-1 --eval-tokens=0 --chatcore-every=-1</code> for any run where you don't specifically want benchmark numbers. On constrained hardware this saves more wall-clock than any other tweak.</li>
+    <li><b><code>caffeinate -i</code> for any run over ten minutes.</b> macOS App Nap will quietly suspend a process the kernel decides is idle. Caffeinate prevents this. Cheap, correct.</li>
+    <li><b>Clean up between runs.</b> Killing a Python process can leave multiprocessing workers and Metal contexts behind. <code>pgrep -lf python</code> before launching anything new.</li>
+  </ol>
+</section>
+
+<section>
+  <div class="label">07 / Next phase</div>
+  <h2>Where to go from here</h2>
+  <p>
+    The natural extensions, ranked by interestingness-per-effort:
+  </p>
+  <p>
+    <strong>Run RL on top of SFT</strong> (<code>scripts.chat_rl</code>). The mode-collapse and "cending" loop behaviors we saw at low temperatures are exactly what PPO is designed to flatten. The reward-model side of nanochat's recipe is small; might surface more bugs of the same flavor.
+  </p>
+  <p>
+    <strong>File the dataloader fix upstream.</strong> The buffer lockup will silently break SFT for anyone running with <code>max_seq_len &lt; median conversation length</code> on the smol-smoltalk dataset. Two-line patch with clear repro.
+  </p>
+  <p>
+    <strong>Try larger <code>--depth</code>.</strong> The M2 had no memory pressure at d6. d12 (≈300M params, GPT-1 sized) might fit in 24GB; the memory math says yes but Metal driver behavior at higher batch sizes is the unknown. Pretraining time would scale roughly 4×, so an overnight run.
+  </p>
+  <p>
+    <strong>Add token-weighted EMA logging.</strong> Right now the displayed loss is a per-step EMA that doesn't weight by <code>n_valid</code>. With masked SFT, partial batches contribute the same as full ones, which can mislead. Token-weighted EMA would surface actual per-token loss faithfully and keep us from re-discovering Incident 02 through trial-and-error next time.
+  </p>
+</section>
+
+<footer class="colophon">
+  <strong>Filed:</strong> 2026-04-30 by claude-code (matt) &nbsp;·&nbsp;
+  <strong>Repo:</strong> <a href="https://github.com/karpathy/nanochat">karpathy/nanochat</a> &nbsp;·&nbsp;
+  <strong>Issues referenced:</strong> #590, #610 &nbsp;·&nbsp;
+  <strong>Bug log:</strong> <code>docs/project_notes/bugs.md</code><br>
+  <span class="smallcaps">Set in Iowan Old Style and JetBrains Mono. No Tailwind was harmed in production.</span>
+</footer>
+
+</article>
+</body>
+</html>

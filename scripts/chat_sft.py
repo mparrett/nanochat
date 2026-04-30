@@ -250,9 +250,18 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
                     row.extend(conv)
                     mask_row.extend(conv_mask)
                     consumed += ddp_world_size  # Track actual consumption
+                elif len(row) == 0:
+                    # Fresh row and nothing fits: buffer is locked with convs longer
+                    # than row_capacity that will never fit any row. Drop them so
+                    # refill_buffer can pull fresh conversations and we make progress.
+                    # Without this, the buffer stays full of over-length convs forever,
+                    # every row is fully padded (mask=0), and no real training happens.
+                    n_dropped = len(conv_buffer)
+                    consumed += n_dropped * ddp_world_size
+                    conv_buffer.clear()
+                    continue  # retry; refill_buffer will repopulate at top of loop
                 else:
-                    # No conversation fits - pad the remainder instead of cropping
-                    # This ensures we never discard any tokens
+                    # Partial row, nothing else fits in remaining space - pad the rest.
                     content_len = len(row)
                     row.extend([bos_token] * remaining)  # Pad with BOS tokens
                     mask_row.extend([0] * remaining)
@@ -429,7 +438,11 @@ while True:
     # evaluate the gradient
     synchronize()
     t0 = time.time()
+    n_valid_total = 0
+    n_targets_total = 0
     for micro_step in range(grad_accum_steps):
+        n_valid_total += (y != -1).sum().item()
+        n_targets_total += y.numel()
         loss = model(x, y)
         train_loss = loss.detach() # for logging
         loss = loss / grad_accum_steps # each .backward() is a grad sum => normalize loss here
@@ -473,7 +486,8 @@ while True:
     mfu = 100 * flops_per_sec / (gpu_peak_flops * ddp_world_size)
     if step > 10:
         total_training_time += dt # only count the time after the first 10 steps
-    print0(f"step {step:05d} ({pct_done:.2f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | dt: {dt * 1000:.2f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.2f} | epoch: {current_epoch} | total time: {total_training_time/60:.2f}m")
+    valid_pct = 100.0 * n_valid_total / max(n_targets_total, 1)
+    print0(f"step {step:05d} ({pct_done:.2f}%) | loss: {debiased_smooth_loss:.6f} | n_valid: {n_valid_total}/{n_targets_total} ({valid_pct:.1f}%) | lrm: {lrm:.2f} | dt: {dt * 1000:.2f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.2f} | epoch: {current_epoch} | total time: {total_training_time/60:.2f}m")
     if step % 10 == 0:
         wandb_run.log({
             "step": step,
