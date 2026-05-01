@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Field Report II — Closing the M2 ↔ M3 Max gap on nanochat</title>
+<style>
+  :root {
+    --paper: #f5f1e8;
+    --paper-dim: #ebe5d6;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-mute: #8a857a;
+    --rule: #c9c2b0;
+    --accent: #b04a2f;     /* iron oxide red */
+    --accent-soft: #d97b5c;
+    --green: #4a7c3f;
+    --code-bg: #1c1d1f;
+    --code-fg: #e8e3d4;
+    --code-mute: #8d8675;
+    --code-key: #c9b76b;
+    --code-str: #a3b87a;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Charter", "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(0,0,0,0.025) 31px 32px),
+      var(--paper);
+  }
+  .sheet {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 6rem;
+  }
+
+  /* Masthead */
+  .masthead {
+    border-top: 4px double var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0 1rem;
+    margin-bottom: 3rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1rem;
+  }
+  .masthead .kicker {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+  }
+  .masthead h1 {
+    font-family: "Iowan Old Style", "Charter", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(2rem, 4.6vw, 3.2rem);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .masthead h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .masthead .meta {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+    text-align: right;
+    line-height: 1.5;
+  }
+  .masthead .meta strong { color: var(--ink); font-weight: 600; }
+
+  /* Lede */
+  .lede {
+    font-size: 1.25rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin: 0 0 3rem;
+    max-width: 38em;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  /* Pull quote */
+  .pull {
+    border-left: 3px solid var(--accent);
+    padding: 1.2rem 1.5rem;
+    margin: 2.5rem 0;
+    background: var(--paper-dim);
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.15rem;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .pull .src {
+    display: block;
+    margin-top: 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-style: normal;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  /* Section */
+  section { margin: 3rem 0; }
+  section > .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+  section > h2 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.85rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0.2rem 0 1.2rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.6rem;
+  }
+  section h3 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 1.6rem 0 0.5rem;
+  }
+  p { margin: 0 0 1rem; }
+  p + p { text-indent: 1.5em; }
+
+  /* Code & terminal */
+  pre, code {
+    font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace;
+  }
+  code {
+    font-size: 0.92em;
+    background: var(--paper-dim);
+    padding: 0.05em 0.35em;
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 1.2rem 1.4rem;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    margin: 1.4rem 0;
+    border-left: 3px solid var(--code-mute);
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+  }
+  pre .c { color: var(--code-mute); }
+  pre .k { color: var(--code-key); }
+  pre .s { color: var(--code-str); }
+
+  /* Stats table — fixed: tbody bg + alternating rows so cells are visible
+     against the .scoreboard panel. .scoreboard > .num scoping prevents the
+     CSS class collision that bit us last time. */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.4rem 0;
+    font-size: 0.95rem;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+  }
+  th, td {
+    padding: 0.7rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--paper-dim); }
+  th {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 600;
+    border-bottom: 2px solid var(--ink);
+    background: var(--paper);
+  }
+  td.numeric { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; color: var(--ink); }
+  td.win    { color: var(--green) !important; font-weight: 600; }
+  td.miss   { color: var(--accent) !important; font-weight: 600; }
+  td.neutral { color: var(--ink-mute) !important; }
+  tfoot th, tbody th {
+    background: var(--paper);
+    color: var(--ink);
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  /* Numbered "experiment" callouts */
+  .experiment {
+    border: 1px solid var(--rule);
+    background: var(--paper-dim);
+    padding: 1.4rem 1.6rem;
+    margin: 1.6rem 0;
+    position: relative;
+  }
+  .experiment > .num {
+    position: absolute;
+    top: -0.6rem;
+    left: 1rem;
+    background: var(--paper);
+    padding: 0 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .experiment h3 {
+    margin: 0 0 0.6rem;
+    font-size: 1.1rem;
+  }
+  .experiment .label-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-bottom: 0.8rem;
+  }
+  .experiment .tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.18em 0.55em;
+    border-radius: 2px;
+    border: 1px solid currentColor;
+  }
+  .tag.win   { color: var(--green); }
+  .tag.miss  { color: var(--accent); }
+  .tag.tied  { color: var(--ink-soft); }
+  .tag.committed { color: var(--ink); background: var(--paper); }
+  .tag.reverted { color: var(--accent-soft); }
+  .tag.unfinished { color: var(--ink-soft); border-style: dashed; }
+
+  /* Numbered list */
+  ol.takeaways {
+    list-style: none;
+    counter-reset: t;
+    padding: 0;
+    margin: 1.4rem 0;
+  }
+  ol.takeaways li {
+    counter-increment: t;
+    padding-left: 3rem;
+    position: relative;
+    margin-bottom: 1rem;
+  }
+  ol.takeaways li::before {
+    content: counter(t, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+  }
+  ol.takeaways b { font-weight: 700; }
+
+  /* Footer */
+  .colophon {
+    margin-top: 5rem;
+    padding-top: 1.5rem;
+    border-top: 4px double var(--ink);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--ink-mute);
+    line-height: 1.7;
+  }
+  .colophon a { color: var(--ink); }
+
+  .smallcaps { font-variant: small-caps; letter-spacing: 0.05em; }
+  hr.fancy {
+    border: none;
+    text-align: center;
+    margin: 2.5rem 0;
+    color: var(--ink-mute);
+  }
+  hr.fancy::before {
+    content: "·   ·   ·";
+    letter-spacing: 0.5em;
+  }
+
+  @media (max-width: 600px) {
+    .sheet { padding: 2rem 1.1rem 4rem; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead .meta { text-align: left; }
+    .lede { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+<article class="sheet">
+
+<header class="masthead">
+  <div>
+    <div class="kicker">Field Report II &nbsp;·&nbsp; nanochat performance on Apple Silicon</div>
+    <h1>Closing the <em>3.6h → 30min</em> gap.<br>How far does the M2 actually go?</h1>
+  </div>
+  <div class="meta">
+    <strong>Date</strong> 2026-04-30<br>
+    <strong>Hardware</strong> MacBook M2, 24GB<br>
+    <strong>Reference</strong> M3 Max, ~30 min<br>
+    <strong>Result</strong> 17% faster, ceiling found
+  </div>
+</header>
+
+<p class="lede">
+  Phase 1 got nanochat training end-to-end on a 24GB M2. Pretrain took <strong>3.6 hours</strong> against Karpathy's <strong>30 minutes on M3 Max</strong>. Raw hardware accounts for ~3-4× of that gap; we suspected another 2× was hiding in software. Phase 2 went looking for it. Found ~17%, hit a hard wall, and learned exactly where the wall is.
+</p>
+
+<div class="pull">
+  "The optimizer is 79% of every iteration. The Newton-Schulz matmul loop in Muon's polar express runs 10 sequential GEMM kernels per call. <em>torch.compile</em> can't fuse them on Metal."
+  <span class="src">— the bottleneck, in one line</span>
+</div>
+
+<section>
+  <div class="label">01 / Phase 2 scoreboard</div>
+  <h2>Every lever we tried</h2>
+  <p>
+    Seven experiments, ranked roughly by how much we wanted them to work. Three landed. Two were dead ends with useful data attached. Two are open follow-ups.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>experiment</th>
+        <th>result</th>
+        <th>status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Cherry-pick PR&nbsp;#145 optim fix (scalar device move + <code>_cuda_compile</code>)</td>
+        <td class="neutral">Robustness only — no perf change. Lets us run optim eagerly without device-mismatch errors.</td>
+        <td><span class="tag committed">committed <code>95f3623</code></span></td>
+      </tr>
+      <tr>
+        <td><code>torch.compile</code> on / off (model level)</td>
+        <td class="win numeric">2× win — keep <strong>on</strong></td>
+        <td><span class="tag tied">confirmed</span></td>
+      </tr>
+      <tr>
+        <td><code>device_batch_size</code> 32 → 48 → 64</td>
+        <td class="miss">32 is the hard memory ceiling. batch=48 thrashes (~67s/iter), batch=64 hits a 22.6 GB physical footprint and hangs.</td>
+        <td><span class="tag tied">measured</span></td>
+      </tr>
+      <tr>
+        <td>Pin scalars to device + replace <code>add_(alpha=)</code> with <code>sub_</code></td>
+        <td class="win">+10% throughput (2.1 → 1.9 s/iter)</td>
+        <td><span class="tag committed">committed <code>0089289</code></span></td>
+      </tr>
+      <tr>
+        <td><code>torch.compile</code> applied to muon kernel specifically</td>
+        <td class="neutral">CPU dispatch time drops 22×, but wall-clock unchanged. Metal doesn't fuse the polar-express matmul loop.</td>
+        <td><span class="tag reverted">reverted</span></td>
+      </tr>
+      <tr>
+        <td>Muon <code>ns_steps=3</code> vs <code>5</code></td>
+        <td class="win">Loss identical to 6 decimals over 9 steps. ~12% optimizer speedup.</td>
+        <td><span class="tag unfinished">needs full validation</span></td>
+      </tr>
+      <tr>
+        <td><code>NANOCHAT_DTYPE=bfloat16</code></td>
+        <td class="miss">Metal Graph compiler fails on bf16×fp32 ops in optim path — mixed-precision unhandled on MPS</td>
+        <td><span class="tag reverted">parked</span></td>
+      </tr>
+      <tr>
+        <td>MPS env vars (<code>PREFER_METAL</code>, <code>FAST_MATH</code>)</td>
+        <td class="miss">All combinations <strong>slower</strong> than defaults: PREFER_METAL=1 was 5× slower (10.4 s/iter), FAST_MATH=1 was 40% slower</td>
+        <td><span class="tag reverted">defaults win</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <div class="label">02 / The finding</div>
+  <h2>The optimizer is the cost</h2>
+  <p>
+    We profiled a steady-state pretrain step on M2 and got a number that resolved most of our hypotheses at once:
+  </p>
+  <table>
+    <thead><tr><th>phase</th><th>ms / iter</th><th>%</th></tr></thead>
+    <tbody>
+      <tr><td>forward</td><td class="numeric">432</td><td class="numeric">20.1%</td></tr>
+      <tr><td>backward</td><td class="numeric">17</td><td class="numeric">0.8%</td></tr>
+      <tr><td><strong>optimizer</strong></td><td class="numeric"><strong>1,696</strong></td><td class="numeric win"><strong>79.1%</strong></td></tr>
+    </tbody>
+  </table>
+  <p>
+    Forward is fast. Backward is essentially free. The entire wall-clock cost lives in <code>optimizer.step</code>, and within it, in <code>muon_step_fused</code>'s <em>polar express</em> Newton-Schulz loop — a sequence of <code>ns_steps</code> matrix×matrix multiplications used to orthogonalize the matrix-parameter gradient.
+  </p>
+  <p>
+    On CUDA, <code>torch.compile</code>'s Inductor fuses this loop into a single Triton kernel. On Metal, no such fusion exists — each matmul is its own kernel launch with its own dispatch overhead. We confirmed this directly: applying <code>@torch.compile</code> to <code>muon_step_fused</code> dropped CPU-side dispatch time by 22× but did <em>not</em> change wall-clock. The GPU is doing the work; it's just doing the work as 10 separate kernels per call instead of one.
+  </p>
+  <p>
+    This is the wall. Without Triton on Metal — and without rewriting the polar express in raw Metal — there isn't a software path to fuse it. M2's 24GB unified memory means we can't trade extra memory for fewer iterations either. The remaining ~3 hour pretrain floor is set by hardware and Apple's compiler stack.
+  </p>
+</section>
+
+<section>
+  <div class="label">03 / What worked</div>
+  <h2>The two committed wins</h2>
+
+  <div class="experiment">
+    <span class="num">WIN 01</span>
+    <div class="label-row">
+      <span class="tag committed">committed</span>
+      <span class="tag win">+10% throughput</span>
+    </div>
+    <h3>Pin optimizer scalars to the parameter device</h3>
+    <p>
+      The optimizer fills 0-D scalar tensors (<code>lr_t</code>, <code>beta1_t</code>, etc.) with hyperparam values each step. The original code keeps these on CPU so <code>torch.compile</code>'s codegen can read them as compile-time constants without recompilation. On MPS, that meant our cherry-picked fix was moving the scalars CPU→MPS every single step — and a 0-D scalar move on MPS costs ~8.6 ms because of host-device sync.
+    </p>
+    <p>
+      The fix: lazy-init device-resident copies on the first step, then <code>fill_()</code> them in-place. We also replaced one <code>add_(alpha=-step_size)</code> call with <code>sub_(... * step_size)</code> because <code>alpha=</code> with a device tensor forces a <code>.item()</code> host fetch.
+    </p>
+<pre><code><span class="k">def</span> _pin_scalars_to_device(self, device):
+    <span class="k">if</span> self._scalars_pinned_to_param_device <span class="k">or</span> device.type == <span class="s">"cuda"</span>:
+        self._scalars_pinned_to_param_device = <span class="k">True</span>
+        <span class="k">return</span>
+    <span class="k">for</span> name <span class="k">in</span> (<span class="s">"_adamw_step_t"</span>, <span class="s">"_adamw_lr_t"</span>, <span class="c"># ...</span>):
+        setattr(self, name, getattr(self, name).to(device))
+    self._scalars_pinned_to_param_device = <span class="k">True</span></code></pre>
+    <p>
+      Numerical equivalence: loss at SFT step 1 was <code>1.890413</code> with both the original and patched code, identical to 6 decimals. Net throughput on d6 pretrain: 2.3 → 1.9 s/iter.
+    </p>
+  </div>
+
+  <div class="experiment">
+    <span class="num">WIN 02</span>
+    <div class="label-row">
+      <span class="tag committed">committed</span>
+      <span class="tag tied">robustness</span>
+    </div>
+    <h3>PR&nbsp;#145 optim cherry-pick (no perf, but real safety)</h3>
+    <p>
+      Earlier we tried <code>TORCHDYNAMO_DISABLE=1</code> to skip <code>torch.compile</code> and immediately hit a CPU-vs-MPS device error inside the AdamW kernel — the original code was relying on Inductor's codegen to silently handle scalar promotion. PR #145's <code>_cuda_compile</code> decorator + explicit scalar-to-device move makes the eager path correct on MPS. It doesn't speed anything up, but it means we can run with or without compile. That option is what enabled experiment WIN 01 above.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="label">04 / What didn't</div>
+  <h2>The four dead ends (with notes)</h2>
+
+  <div class="experiment">
+    <span class="num">DEAD END 01</span>
+    <div class="label-row">
+      <span class="tag miss">memory ceiling</span>
+    </div>
+    <h3><code>device_batch_size</code> &gt; 32 doesn't fit on 24GB</h3>
+    <p>
+      Larger batch is usually free throughput up to the memory wall. We expected the wall to be much further out — the model is only ~73M params (~1 GB working set). It's not. <code>batch=48</code> ran at <strong>67 s/iter</strong> (memory thrashing); <code>batch=64</code> hit a <strong>22.6 GB</strong> physical footprint and stalled. Activation memory at fp32 with no Flash Attention is much higher than the parameter count suggests.
+    </p>
+  </div>
+
+  <div class="experiment">
+    <span class="num">DEAD END 02</span>
+    <div class="label-row">
+      <span class="tag miss">no Metal fusion</span>
+    </div>
+    <h3><code>torch.compile</code> on the Muon kernel specifically</h3>
+    <p>
+      We hoped Inductor would fuse the Newton-Schulz matmul loop into a single Metal kernel. CPU-side dispatch dropped from 220 ms → 10 ms per iter — real, but the wall-clock didn't move. The matmuls still run as 10 separate kernels per call; only Python overhead went away. Metal's compiler stack doesn't have an equivalent to Triton's loop-fusion.
+    </p>
+  </div>
+
+  <div class="experiment">
+    <span class="num">DEAD END 03</span>
+    <div class="label-row">
+      <span class="tag miss">mixed-precision plumbing</span>
+    </div>
+    <h3><code>NANOCHAT_DTYPE=bfloat16</code> on M2 MPS</h3>
+    <p>
+      An open issue (#685) reports bf16 working on M4 Max with ~25% memory savings — which would in principle unlock <code>device_batch_size=48</code> for us. On M2 it fails immediately:
+    </p>
+<pre><code><span class="c">'mps.multiply' op requires the same element type for all operands and results</span>
+<span class="c">%4 = "mps.multiply"(%arg2, %3) : (tensor&lt;1xbf16&gt;, tensor&lt;3x1x12xf32&gt;) -&gt; ...</span></code></pre>
+    <p>
+      nanochat's bf16 path keeps master weights and optimizer state in fp32 but casts activations and some optimizer buffers to bf16. CUDA implicitly promotes mixed-dtype operands; Metal hard-fails. Fixing this would require auditing every <code>*</code> / <code>lerp_</code> / <code>add_</code> in <code>optim.py</code> and <code>gpt.py</code> for mixed-dtype operands and inserting explicit casts. Real engineering work — out of scope for Phase 2 but the highest-leverage outstanding lever if we want to push further on this hardware.
+    </p>
+  </div>
+
+  <div class="experiment">
+    <span class="num">DEAD END 04</span>
+    <div class="label-row">
+      <span class="tag tied">interesting datum</span>
+    </div>
+    <h3>Cherry-picking PR&nbsp;#145 wholesale</h3>
+    <p>
+      PR #145 also gates <em>model-level</em> <code>torch.compile</code> behind <code>device_type == "cuda"</code> on the theory that compile is "unsupported on MPS and pointless on CPU." We applied it, ran a 5-iter probe, and got <strong>~4 s/iter</strong> instead of the usual ~2 s/iter. <code>torch.compile</code> on the model itself is a real ~2× win on M2, even with the warmup tax. Reverted that part of the PR; kept the optim parts.
+    </p>
+  </div>
+
+  <div class="experiment">
+    <span class="num">DEAD END 05</span>
+    <div class="label-row">
+      <span class="tag miss">defaults win</span>
+      <span class="tag tied">decisive measurement</span>
+    </div>
+    <h3>MPS env vars (<code>PREFER_METAL</code>, <code>FAST_MATH</code>) all hurt</h3>
+    <p>
+      The PyTorch MPS module exposes opt-in env vars that I had high hopes for. <code>PYTORCH_MPS_PREFER_METAL=1</code> bypasses MPS Graph and goes straight to Metal kernels for matmuls. <code>PYTORCH_MPS_FAST_MATH=1</code> relaxes IEEE 754 strictness. Both sounded like clear wins for our matmul-heavy optimizer. Both made things worse:
+    </p>
+    <table>
+      <thead><tr><th>config</th><th>s/iter</th><th>vs baseline</th></tr></thead>
+      <tbody>
+        <tr><td><strong>baseline</strong></td><td class="numeric">2.21</td><td class="numeric">1.00×</td></tr>
+        <tr><td><code>PREFER_METAL=1</code></td><td class="numeric">10.35</td><td class="numeric miss">0.21× <strong>(5× slower)</strong></td></tr>
+        <tr><td><code>FAST_MATH=1</code></td><td class="numeric">3.07</td><td class="numeric miss">0.72× (40% slower)</td></tr>
+        <tr><td>both</td><td class="numeric">5.60</td><td class="numeric miss">0.39× (2.5× slower)</td></tr>
+      </tbody>
+    </table>
+    <p>
+      The result is the opposite of my prediction — and inverts our intuition about the bottleneck. I had assumed MPS Graph was adding overhead and direct Metal would be faster. In fact, MPS Graph is doing real <em>fusion and batching</em> that direct Metal kernels don't get. For a polar express loop of stacked-tensor matmuls, the graph layer's batched dispatch beats raw Metal. <code>FAST_MATH=1</code> being slower is more surprising — possibly because fast-math kernels disqualify graph fusion or are tuned for half-precision rather than fp32.
+    </p>
+    <p>
+      The takeaway: the MPS defaults are well-tuned for our specific workload. The opt-in tuning knobs in PyTorch 2.9.1 are aimed at <em>different</em> workloads (probably large single-matmul inference). This rules out the entire class of "low-level MPS kernel tuning" as a Phase 2 lever and pushes any further work toward upgrading the framework itself.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="label">05 / Open follow-ups</div>
+  <h2>Three things worth pursuing</h2>
+
+  <h3>Upgrade to PyTorch 2.11 (cheapest, doing it next)</h3>
+  <p>
+    PyTorch 2.11 (March 2026) explicitly migrates many MPS ops from MPSGraph to native Metal kernels by default. That's the same direction as <code>PREFER_METAL=1</code>, but applied <em>selectively</em> to ops where the migration actually helps — not blanket-applied like the env var. There are also targeted SDPA correctness fixes (#174945) and broader bf16 support, both of which could unblock our parked bf16 attempt. Cost: 10–15 minutes if dependencies cooperate; 1–2 hours if there are version conflicts. This is Phase 2's natural off-ramp into Phase 3.
+  </p>
+
+  <h3>Validate <code>ns_steps=3</code> properly</h3>
+  <p>
+    Reducing Muon's Newton-Schulz iterations from 5 → 3 produced loss values identical to 6 decimals over 9 SFT steps, with ~12% optimizer speedup. The polar express coefficients are tuned for 5 iters per the original paper — using only the first 3 is theoretically suboptimal even though it's empirically identical at this scale. We need a real A/B: pretrain to step 5000 with <code>ns_steps=3</code>, compare final val_bpb against our existing baseline of 1.174. Cost: ~3 hours overnight. Ticketed in <code>docs/project_incoming/feat_muon_ns_steps_validation.md</code>.
+  </p>
+
+  <h3>The bf16 mixed-precision audit</h3>
+  <p>
+    If bf16 works with proper plumbing, it could unlock both larger batch (memory) and maybe faster matmul kernels (compute). The work is real but bounded — it's a half-day of careful editing in <code>optim.py</code> and <code>gpt.py</code>, plus a numerical-stability test. Worth doing if we want another serious attempt at closing the gap, or if anyone wants to send a more careful version of this fix upstream. <strong>Note:</strong> if PyTorch 2.11 fixes the underlying Metal Graph issue, this audit may not be needed at all.
+  </p>
+</section>
+
+<section>
+  <div class="label">06 / Reflection</div>
+  <h2>What we'd do differently</h2>
+  <ol class="takeaways">
+    <li><b>Profile first, hypothesize second.</b> We started Phase 2 with a list of plausible levers (batch size, dtype, attention backend) and tested them in vague order. The single most useful artifact in this whole session was the <code>torch.profiler</code> trace that showed optimizer = 79%. We should have run it first and let the data direct the search.</li>
+    <li><b>Cherry-pick PRs surgically, not wholesale.</b> PR #145 has multiple changes bundled together. Wholesale-applying it broke our throughput; surgical-applying it (just the optim parts) gave us a robustness improvement. Reading PRs as a menu of choices, not an all-or-nothing patch, is the right mental model.</li>
+    <li><b>Question your speedup assumptions.</b> We expected <code>ns_steps=3</code> to be ~40% faster (it was 12%). We expected larger batch to help (the memory wall arrived 50% earlier than predicted). The model was tiny on paper but activation memory was big in practice. Always measure before celebrating.</li>
+    <li><b>Identical loss to 6 decimals is suspicious. Investigate it.</b> When <code>ns_steps=3</code> produced bit-identical loss vs <code>ns_steps=5</code>, the right reaction was "interesting, what's actually happening?" — not "free speedup, ship it." The Newton-Schulz iteration is converging to numerical precision in 3 steps for these matrix shapes; that's a real and useful finding, but it deserves a proper full-pretrain validation before trusting it.</li>
+    <li><b>The wall is the wall.</b> ~3 hours pretrain on M2 24GB with the current codebase. Hardware (cores, bandwidth) accounts for most of the M2 vs M3 Max gap; software accounts for ~17%. There's no magic 2× hiding in the optimizer config — it's hiding in Apple Silicon's compiler stack (Triton equivalent) or in nanochat's bf16 path on MPS, neither of which we can fix in a Phase 2 sprint.</li>
+  </ol>
+</section>
+
+<footer class="colophon">
+  <strong>Filed:</strong> 2026-04-30 by claude-code (matt) &nbsp;·&nbsp;
+  <strong>Repo:</strong> <a href="https://github.com/karpathy/nanochat">karpathy/nanochat</a> &nbsp;·&nbsp;
+  <strong>Phase 1:</strong> <a href="m2_pipeline_2026-04-30.html">m2_pipeline_2026-04-30.html</a> &nbsp;·&nbsp;
+  <strong>Issues / PRs:</strong> #685, #486, #604, #145 &nbsp;·&nbsp;
+  <strong>Tickets:</strong> <code>docs/project_incoming/</code><br>
+  <span class="smallcaps">Same fonts as Phase 1. Same paper. Different wall, same room.</span>
+</footer>
+
+</article>
+</body>
+</html>

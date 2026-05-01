@@ -40,6 +40,23 @@ After this fix, n_valid ranges 16.7–36.4% per step (median 29%), 0 fully-maske
 
 **Prevention**: When using bestfit packing on datasets with conversations longer than the row capacity, you need an eviction policy for over-length items, otherwise the buffer locks. Worth filing upstream — current `chat_sft.py` is silently broken for users with `max_seq_len < median conversation length`.
 
+## 2026-04-30 - PYTORCH_MPS_PREFER_METAL=1 and FAST_MATH=1 both make our workload slower
+
+**Issue**: Tested the two MPS opt-in env vars from the PyTorch 2.11 docs as a Phase 2 perf lever. All combinations measurably slower than defaults:
+
+| config | s/iter | vs baseline |
+|---|---|---|
+| baseline | 2.21 | 1.00× |
+| `PYTORCH_MPS_PREFER_METAL=1` | 10.35 | **0.21× (5× slower)** |
+| `PYTORCH_MPS_FAST_MATH=1` | 3.07 | 0.72× (40% slower) |
+| both | 5.60 | 0.39× (2.5× slower) |
+
+**Root Cause (hypothesis)**: For our workload (many small matmuls in Muon's polar express loop on stacked tensors), MPS Graph performs real fusion / batched dispatch that direct Metal kernels lose. `PREFER_METAL=1` bypasses Graph and forces per-op kernel launches; the dispatch overhead dominates. `FAST_MATH=1` may disqualify certain graph fusions or be tuned for fp16 rather than our fp32 path.
+
+**Solution**: Don't set these env vars on M2 with this codebase. The MPS defaults are the right choice.
+
+**Prevention**: When evaluating any MPS env var, measure on the actual workload — these knobs are tuned for inference-shaped workloads (single large matmul) rather than tight optimizer loops.
+
 ## 2026-04-30 - NANOCHAT_DTYPE=bfloat16 fails on M2 MPS (mixed-precision)
 
 **Issue**: Setting `NANOCHAT_DTYPE=bfloat16` on M2 24GB causes Metal Performance Shaders Graph to fail at runtime:
