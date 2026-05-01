@@ -145,10 +145,13 @@ class Block(nn.Module):
         self.attn = CausalSelfAttention(config, layer_idx)
         self.mlp = MLP(config)
 
-    def forward(self, x, ve, cos_sin, window_size, kv_cache):
+    def forward(self, x, ve, cos_sin, window_size, kv_cache, memory_state=None):
+        # Stage 0 of Hope/NL plumbing: blocks always return (x, new_memory_state).
+        # No block exposes mutable state yet, so new_memory_state == memory_state (passthrough).
+        # Stage 1+ will override this in memory-bearing blocks.
         x = x + self.attn(norm(x), ve, cos_sin, window_size, kv_cache)
         x = x + self.mlp(norm(x))
-        return x
+        return x, memory_state
 
 
 class GPT(nn.Module):
@@ -371,6 +374,20 @@ class GPT(nn.Module):
             'total': total,
         }
 
+    def reset_memory(self):
+        """
+        Hope/NL Stage 0: produce a fresh memory_state suitable to pass to forward().
+
+        Returns a list of length n_layer with one entry per block. Stage 0 has no
+        memory-bearing blocks, so every entry is None — and forward() will pass
+        them through unchanged. Stage 1+ will populate entries for the blocks
+        that carry mutable state (e.g. linear-attention fast weights).
+
+        Callers that don't care about Hope/NL state should not call this and
+        should not pass `memory_state` to forward(); behavior is identical.
+        """
+        return [None] * self.config.n_layer
+
     def setup_optimizer(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02, weight_decay=0.0, scalar_lr=0.5):
         model_dim = self.config.n_embd
         ddp, rank, local_rank, world_size = get_dist_info()
@@ -419,8 +436,23 @@ class GPT(nn.Module):
             group["initial_lr"] = group["lr"]
         return optimizer
 
-    def forward(self, idx, targets=None, kv_cache=None, loss_reduction='mean'):
+    def forward(self, idx, targets=None, kv_cache=None, memory_state=None, loss_reduction='mean'):
+        """
+        Hope/NL Stage 0: optional `memory_state` arg threads per-block mutable state
+        through the forward pass. When `memory_state is None` (default), behavior is
+        bit-identical to the pre-Stage-0 model and the return type is unchanged.
+        When `memory_state` is provided as a list of length n_layer (entries may be
+        None or per-block state tensors), the function returns `(out, new_memory_state)`.
+
+        See `reset_memory()` for the canonical way to obtain a fresh state.
+        """
         B, T = idx.size()
+        thread_memory = memory_state is not None
+        if thread_memory:
+            assert len(memory_state) == self.config.n_layer, (
+                f"memory_state must have {self.config.n_layer} entries, got {len(memory_state)}"
+            )
+            new_memory_state = [None] * self.config.n_layer
 
         # Grab the rotary embeddings for the current sequence length (they are of shape (1, seq_len, 1, head_dim/2))
         assert T <= self.cos.size(1), f"Sequence length grew beyond the rotary embeddings cache: {T} > {self.cos.size(1)}"
@@ -462,7 +494,10 @@ class GPT(nn.Module):
         for i, block in enumerate(self.transformer.h):
             x = self.resid_lambdas[i] * x + self.x0_lambdas[i] * x0
             ve = self.value_embeds[str(i)](idx).to(x.dtype) if str(i) in self.value_embeds else None
-            x = block(x, ve, cos_sin, self.window_sizes[i], kv_cache)
+            block_state_in = memory_state[i] if thread_memory else None
+            x, block_state_out = block(x, ve, cos_sin, self.window_sizes[i], kv_cache, block_state_in)
+            if thread_memory:
+                new_memory_state[i] = block_state_out
             if i == backout_layer:
                 x_backout = x
         # Subtract mid-layer residual to remove low-level features before logit projection
@@ -484,12 +519,15 @@ class GPT(nn.Module):
                 # All targets ignored: F.cross_entropy with reduction='mean' returns NaN (0/0).
                 # Return a graph-connected zero so gradient accumulation isn't poisoned.
                 # See karpathy/nanochat#590 / PR #610.
-                return logits.sum() * 0.0
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1, reduction=loss_reduction)
-            return loss
+                out = logits.sum() * 0.0
+            else:
+                out = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1, reduction=loss_reduction)
         else:
             # inference: just return the logits directly
-            return logits
+            out = logits
+        if thread_memory:
+            return out, new_memory_state
+        return out
 
     @torch.inference_mode()
     def generate(self, tokens, max_tokens, temperature=1.0, top_k=None, seed=42):
