@@ -47,20 +47,26 @@ def adamw_step_fused(
     on MPS/CPU the optimizer pre-pins them to the parameter device so per-step .to() syncs
     don't dominate the iteration time.
     """
+    # Cast scalars to the parameter's dtype. nanochat stores some params (wte,
+    # value_embeds) at bf16 to save memory; CUDA implicitly promotes mixed-dtype
+    # operands but MPS hard-fails. Casting once and reusing keeps the whole step
+    # in p.dtype.
+    dtype = p.dtype
+    lr_d, wd_d, beta1_d, beta2_d, eps_d = lr_t.to(dtype), wd_t.to(dtype), beta1_t.to(dtype), beta2_t.to(dtype), eps_t.to(dtype)
     # Weight decay (decoupled, applied before the update)
-    p.mul_(1 - lr_t * wd_t)
+    p.mul_(1 - lr_d * wd_d)
     # Update running averages (lerp_ is cleaner and fuses well)
-    exp_avg.lerp_(grad, 1 - beta1_t)
-    exp_avg_sq.lerp_(grad.square(), 1 - beta2_t)
-    # Bias corrections
+    exp_avg.lerp_(grad, 1 - beta1_d)
+    exp_avg_sq.lerp_(grad.square(), 1 - beta2_d)
+    # Bias corrections (in scalar fp32, then cast back to dtype below)
     bias1 = 1 - beta1_t ** step_t
     bias2 = 1 - beta2_t ** step_t
     # Compute update and apply.
     # Avoid the `alpha=` kwarg here: when step_size is a 0-D device tensor (the MPS
     # pinned-scalar path), `alpha=` forces a .item() host fetch per call. Inlining the
     # multiply keeps the whole step on-device. CUDA codegen handles either form.
-    denom = (exp_avg_sq / bias2).sqrt() + eps_t
-    step_size = lr_t / bias1
+    denom = (exp_avg_sq / bias2.to(dtype)).sqrt() + eps_d
+    step_size = (lr_t / bias1).to(dtype)
     p.sub_((exp_avg / denom) * step_size)
 
 # -----------------------------------------------------------------------------
@@ -141,7 +147,9 @@ def muon_step_fused(
             A = X @ X.mT
             B = b * A + c * (A @ A)
             X = a * X + B @ X
-    g = X
+    # Cast g back to the parameter dtype so subsequent variance reduction and
+    # cautious update see consistent dtypes. CUDA implicitly promotes; MPS hard-fails.
+    g = X.to(stacked_params.dtype)
 
     # Variance reduction
     beta2 = beta2_t.to(g.dtype)
