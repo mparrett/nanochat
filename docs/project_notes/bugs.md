@@ -57,20 +57,26 @@ After this fix, n_valid ranges 16.7–36.4% per step (median 29%), 0 fully-maske
 
 **Prevention**: When evaluating any MPS env var, measure on the actual workload — these knobs are tuned for inference-shaped workloads (single large matmul) rather than tight optimizer loops.
 
-## 2026-04-30 - NANOCHAT_DTYPE=bfloat16 fails on M2 MPS (mixed-precision)
+## 2026-04-30 - NANOCHAT_DTYPE=bfloat16 fails on M2 MPS (mixed-precision) [RESOLVED]
 
-**Issue**: Setting `NANOCHAT_DTYPE=bfloat16` on M2 24GB causes Metal Performance Shaders Graph to fail at runtime:
+**Issue**: Setting `NANOCHAT_DTYPE=bfloat16` on M2 24GB caused Metal Performance Shaders Graph to fail at runtime:
 
 ```
 'mps.multiply' op requires the same element type for all operands and results
-%4 = "mps.multiply"(%arg2, %3) : (tensor<1xbf16>, tensor<3x1x12xf32>) -> tensor<*xf32>
+%4 = "mps.multiply"(%arg2, %3) : (tensor<1xf32>, tensor<32768x384xbf16>) -> tensor<*xf32>
 ```
 
-**Root Cause**: nanochat's bf16 path stores master weights and optimizer state in fp32 but casts activations and some optimizer buffers (e.g. polar express `X = g.bfloat16()`) to bf16. On MPS, mixed-dtype ops are not auto-promoted; the compiler hard-fails. CUDA tolerates this implicitly via codegen.
+**Root Cause**: nanochat's bf16 path stores some params (wte, value_embeds) at bf16 to save memory but keeps the optimizer's shared scalar tensors at fp32. The polar express loop in muon also intentionally casts gradients to bf16 mid-function. CUDA implicitly promotes mixed-dtype operands; MPS hard-fails. Concrete crash sites:
+- `adamw_step_fused`: `p.mul_(1 - lr_t * wd_t)` where `p` is bf16 (wte) and the scalars are fp32
+- `muon_step_fused`: `second_momentum_buffer.lerp_(..., 1 - beta2)` where the buffer is fp32 but `beta2` came from `g.dtype` which became bf16 after the polar express loop
 
-**Solution**: Not pursued. Would require auditing every `*` / `lerp_` / `add_` site in `nanochat/optim.py` and `nanochat/gpt.py` for mixed-dtype operands and inserting explicit `.to(dtype)` calls. The hypothetical payoff (memory savings per PR #685's M4 Max user, possibly ~25%) might not be worth the maintenance cost — nanochat upstream doesn't test bf16-on-MPS.
+**Solution**: Two-part patch in commit `7e21999`:
+1. In `adamw_step_fused`, cast scalar hyperparams to `p.dtype` at use sites
+2. In `muon_step_fused`, cast `g` back to `stacked_params.dtype` after the polar express loop so subsequent ops are single-dtype
 
-**Prevention**: On M2, leave `NANOCHAT_DTYPE` unset (defaults to `float32` on MPS). If someone wants to try bf16 on a newer Mac (M3+), expect to do mixed-precision plumbing first.
+**Outcome**: bf16 now works end-to-end on M2 (forward + backward + optimizer.step). Per-token throughput is unchanged (~3% improvement) because M2 lacks native bf16 hardware (M3+ does). The real unlock is memory: bf16 + `device_batch_size=48` now works (was OOM at fp32). Numerical drift exists (~1e-3 in loss by step 9 vs fp32) — full A/B validation against the fp32 baseline (val_bpb 1.174 at step 5000) is still pending.
+
+**Prevention / Followup**: A more rigorous bf16 validation run should be done before making bf16 the M2 default. Worth filing the patch upstream — nanochat's bf16 path was effectively broken on MPS for any mixed-dtype embedding setup before this fix.
 
 ## 2026-04-30 - chat_sft `--eval-every=-1` does NOT skip final eval
 
