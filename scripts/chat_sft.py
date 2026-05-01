@@ -349,8 +349,35 @@ min_val_bpb = float("inf")
 smooth_train_loss = 0 # EMA of training loss
 ema_beta = 0.9 # EMA decay factor
 total_training_time = 0 # total wall-clock time of training
+val_bpb = None # set by eval block; None means no eval has run yet
 step = 0
+
+# Cooperative pause: see scripts/base_train.py for the full pattern. touch the file to pause, rm to resume.
+PAUSE_FILE = os.environ.get("NANOCHAT_PAUSE_FILE", "/tmp/pause-nanochat")
+
 while True:
+    if os.path.exists(PAUSE_FILE):
+        # Effective horizon: --num-iterations is in optimizer steps, but the underlying
+        # scheduler/progress counter uses microbatch yields, so fold accum in for the %.
+        effective_total = args.num_iterations if args.num_iterations > 0 else None
+        pct = 100.0 * step / effective_total if effective_total else 0.0
+        rate_min_per_step = (total_training_time / 60) / max(step - 10, 1) if step > 10 else 0
+        eta_min = rate_min_per_step * max((effective_total or step) - step, 0)
+        print0("─" * 60)
+        print0(f"⏸  Paused at step {step}" + (f"/{effective_total} ({pct:.1f}%)" if effective_total else ""))
+        print0(f"   run/tag         : {args.model_tag or 'd?'}")
+        print0(f"   batch           : device={args.device_batch_size} total={args.total_batch_size:,} accum={grad_accum_steps}")
+        print0(f"   train_loss EMA  : {smooth_train_loss:.4f}")
+        print0(f"   last val_bpb    : {f'{val_bpb:.4f}' if val_bpb is not None else 'n/a'}")
+        print0(f"   min  val_bpb    : {f'{min_val_bpb:.4f}' if min_val_bpb != float('inf') else 'n/a'}")
+        print0(f"   wall so far     : {total_training_time/60:.2f} min  (~{rate_min_per_step:.2f} min/step avg post-warmup)")
+        if effective_total:
+            print0(f"   est. ETA        : {eta_min:.1f} min ({eta_min/60:.2f} h)")
+        print0(f"   resume          : rm {PAUSE_FILE}")
+        print0("─" * 60)
+        while os.path.exists(PAUSE_FILE):
+            time.sleep(1)
+        print0(f"▶  Resumed at step {step}.")
     flops_so_far = num_flops_per_token * args.total_batch_size * step
 
     # Synchronize last_step across all ranks to avoid hangs in the distributed setting

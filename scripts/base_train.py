@@ -414,8 +414,33 @@ print0(f"Tokens / micro-batch / rank: {args.device_batch_size} x {args.max_seq_l
 print0(f"Tokens / micro-batch: {world_tokens_per_fwdbwd:,}")
 print0(f"Total batch size {total_batch_size:,} => gradient accumulation steps: {grad_accum_steps}")
 
+# Cooperative pause: between optimizer steps, if NANOCHAT_PAUSE_FILE exists, block until it's removed.
+# Designed for laptop runs where the user needs to free the GPU temporarily without losing in-memory state.
+# touch the file to pause, rm it to resume. No effect when the file is absent (one stat() per iter).
+PAUSE_FILE = os.environ.get("NANOCHAT_PAUSE_FILE", "/tmp/pause-nanochat")
+
 # Go!
 while True:
+    if os.path.exists(PAUSE_FILE):
+        # Dump useful internals so a human checking in mid-run has the picture without grepping logs.
+        pct = 100.0 * step / max(num_iterations, 1)
+        rate_min_per_step = (total_training_time / 60) / max(step - 10, 1) if step > 10 else 0
+        eta_min = rate_min_per_step * max(num_iterations - step, 0)
+        print0("─" * 60)
+        print0(f"⏸  Paused at step {step}/{num_iterations} ({pct:.1f}%)")
+        print0(f"   run/tag         : {output_dirname}")
+        print0(f"   model           : depth={args.depth} n_embd={model_config_kwargs.get('n_embd')} hope_memory_layer={model_config_kwargs.get('hope_memory_layer')}")
+        print0(f"   batch           : device={args.device_batch_size} total={total_batch_size:,} accum={grad_accum_steps}")
+        print0(f"   train_loss EMA  : {smooth_train_loss:.4f}")
+        print0(f"   last val_bpb    : {val_bpb if val_bpb is not None else 'n/a'}")
+        print0(f"   min  val_bpb    : {min_val_bpb if min_val_bpb != float('inf') else 'n/a'}")
+        print0(f"   wall so far     : {total_training_time/60:.2f} min  (~{rate_min_per_step:.2f} min/step avg post-warmup)")
+        print0(f"   est. ETA        : {eta_min:.1f} min ({eta_min/60:.2f} h)")
+        print0(f"   resume          : rm {PAUSE_FILE}")
+        print0("─" * 60)
+        while os.path.exists(PAUSE_FILE):
+            time.sleep(1)
+        print0(f"▶  Resumed at step {step}.")
     last_step = step == num_iterations # loop runs num_iterations+1 times so that we can eval/save at the end
     flops_so_far = num_flops_per_token * total_batch_size * step
 
