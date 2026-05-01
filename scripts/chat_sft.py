@@ -184,6 +184,7 @@ val_dataset = TaskMixture([
 last_step = False # we will toggle this to True when we reach the end of the training dataset
 approx_progress = 0.0 # will go from 0 to 1 over the course of the epoch
 current_epoch = 1 # track epoch for logging
+microbatch_yields = 0 # generator's micro-batch yield count; helps catch optimizer/microbatch confusion
 def sft_data_generator_bos_bestfit(split, buffer_size=100):
     """
     BOS-aligned dataloader for SFT with bestfit-pad packing.
@@ -193,7 +194,7 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
     the row is padded (instead of cropping) to ensure no tokens are ever discarded.
     Padding positions have targets masked with -1 (ignore_index for cross-entropy).
     """
-    global last_step, approx_progress, current_epoch
+    global last_step, approx_progress, current_epoch, microbatch_yields
     assert split in {"train", "val"}, "split must be 'train' or 'val'"
     dataset = train_dataset if split == "train" else val_dataset
     dataset_size = len(dataset)
@@ -276,16 +277,22 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
             rows.append(row[:row_capacity])
             mask_rows.append(mask_row[:row_capacity])
 
-        # Stopping condition to respect num_iterations, if given
+        # Stopping condition to respect num_iterations, if given.
+        # The generator yields once per micro-batch, but --num-iterations is documented
+        # in optimizer steps. With grad_accum_steps>1 these diverge by that factor, so
+        # multiply through here. Without this, --num-iterations=N produces ~N/accum
+        # optimizer steps and the LR schedule warms down on the truncated horizon.
         it += 1
-        if 0 < args.num_iterations <= it and split == "train":
+        if split == "train":
+            microbatch_yields = it
+        if 0 < args.num_iterations * grad_accum_steps <= it and split == "train":
             last_step = True
 
         # Update progress tracking (based on consumed, not cursor, to account for buffering)
         if split == "train":
             current_epoch = epoch
             if args.num_iterations > 0:
-                approx_progress = it / args.num_iterations
+                approx_progress = it / (args.num_iterations * grad_accum_steps)
             else:
                 approx_progress = consumed / dataset_size
             # Trigger last_step when we've consumed enough (instead of when cursor wraps)
@@ -487,7 +494,7 @@ while True:
     if step > 10:
         total_training_time += dt # only count the time after the first 10 steps
     valid_pct = 100.0 * n_valid_total / max(n_targets_total, 1)
-    print0(f"step {step:05d} ({pct_done:.2f}%) | loss: {debiased_smooth_loss:.6f} | n_valid: {n_valid_total}/{n_targets_total} ({valid_pct:.1f}%) | lrm: {lrm:.2f} | dt: {dt * 1000:.2f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.2f} | epoch: {current_epoch} | total time: {total_training_time/60:.2f}m")
+    print0(f"step {step:05d} ({pct_done:.2f}%) | mby: {microbatch_yields}/{step * grad_accum_steps + 1} | loss: {debiased_smooth_loss:.6f} | n_valid: {n_valid_total}/{n_targets_total} ({valid_pct:.1f}%) | lrm: {lrm:.2f} | dt: {dt * 1000:.2f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.2f} | epoch: {current_epoch} | total time: {total_training_time/60:.2f}m")
     if step % 10 == 0:
         wandb_run.log({
             "step": step,
