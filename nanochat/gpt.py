@@ -37,6 +37,10 @@ class GPTConfig:
     # Characters: L=long (full context), S=short (quarter context)
     # Examples: "L"=all full context, "SL"=alternating, "SSL"=two short then one long
     window_pattern: str = "SSSL"
+    # Hope/NL Stage 1: if set to a layer index, that block uses LinearAttentionMemory
+    # (causal linear attention, fixed alpha=1, eta=1, parallel form) in place of MLP.
+    # Default None = pre-Stage-1 baseline behavior, bit-identical.
+    hope_memory_layer: int | None = None
 
 
 def norm(x):
@@ -139,11 +143,60 @@ class MLP(nn.Module):
         return x
 
 
+class LinearAttentionMemory(nn.Module):
+    """
+    Hope/NL Stage 1: minimal Titans-style fast-weight memory as an FFN replacement.
+
+    Implements (with fixed alpha=1, eta=1):
+        k_t, v_t, q_t = W_k x_t, W_v x_t, W_q x_t
+        M_t = M_{t-1} + v_t k_t^T            (M_0 = 0)
+        o_t = M_{t-1} q_t                    (read uses *previous* memory)
+        y_t = W_o o_t
+
+    Memory resets per forward (per batch). For Stage 1 we use the parallel form:
+
+        o_t = sum_{i<t} (k_i . q_t) v_i
+
+    which is equivalent to the recurrence above when alpha=1, M_0=0. This keeps
+    the implementation O(T^2) but parallelizable on MPS (no Python token loop).
+
+    Stages 2-3 will introduce learned alpha/eta and chunked computation.
+    """
+    def __init__(self, config, d_mem=None):
+        super().__init__()
+        d_model = config.n_embd
+        self.d_mem = d_mem if d_mem is not None else d_model
+        self.W_k = Linear(d_model, self.d_mem, bias=False)
+        self.W_v = Linear(d_model, self.d_mem, bias=False)
+        self.W_q = Linear(d_model, self.d_mem, bias=False)
+        self.W_o = Linear(self.d_mem, d_model, bias=False)
+        self._scale = self.d_mem ** -0.5  # stability scaling on q.k
+
+    def forward(self, x):
+        # x: (B, T, d_model)
+        T = x.size(1)
+        k = self.W_k(x)   # (B, T, d_mem)
+        v = self.W_v(x)   # (B, T, d_mem)
+        q = self.W_q(x)   # (B, T, d_mem)
+        # scores[b, t, s] = q_t . k_s
+        scores = torch.einsum('btd,bsd->bts', q, k) * self._scale
+        # Strict-causal mask: read uses M_{t-1}, so token t only sees i<t (no self).
+        # diagonal=-1 zeros the diagonal as well as upper triangle.
+        mask = torch.ones(T, T, device=x.device, dtype=torch.bool).tril(diagonal=-1)
+        scores = scores.masked_fill(~mask, 0.0)
+        o = torch.einsum('bts,bsd->btd', scores, v)   # (B, T, d_mem)
+        return self.W_o(o)
+
+
 class Block(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.attn = CausalSelfAttention(config, layer_idx)
-        self.mlp = MLP(config)
+        # Hope/NL Stage 1: optionally swap MLP for fast-weight memory at one layer.
+        if config.hope_memory_layer is not None and config.hope_memory_layer == layer_idx:
+            self.mlp = LinearAttentionMemory(config)
+        else:
+            self.mlp = MLP(config)
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache, memory_state=None):
         # Stage 0 of Hope/NL plumbing: blocks always return (x, new_memory_state).
@@ -229,8 +282,17 @@ class GPT(nn.Module):
             torch.nn.init.uniform_(block.attn.c_k.weight, -s, s)
             torch.nn.init.uniform_(block.attn.c_v.weight, -s, s)
             torch.nn.init.zeros_(block.attn.c_proj.weight) # projections are zero
-            torch.nn.init.uniform_(block.mlp.c_fc.weight, -s * 0.4, s * 0.4)  # 0.4x init scale for c_fc
-            torch.nn.init.zeros_(block.mlp.c_proj.weight)
+            if isinstance(block.mlp, MLP):
+                torch.nn.init.uniform_(block.mlp.c_fc.weight, -s * 0.4, s * 0.4)  # 0.4x init scale for c_fc
+                torch.nn.init.zeros_(block.mlp.c_proj.weight)
+            elif isinstance(block.mlp, LinearAttentionMemory):
+                # Hope/NL Stage 1 memory block: KVQ inits like attention KVQ; output proj zero like c_proj.
+                torch.nn.init.uniform_(block.mlp.W_k.weight, -s, s)
+                torch.nn.init.uniform_(block.mlp.W_v.weight, -s, s)
+                torch.nn.init.uniform_(block.mlp.W_q.weight, -s, s)
+                torch.nn.init.zeros_(block.mlp.W_o.weight)
+            else:
+                raise NotImplementedError(f"init_weights does not know how to init mlp of type {type(block.mlp).__name__}")
 
         # Per-layer scalars
         # Per-layer resid init: stronger residual at early layers, weaker at deep layers

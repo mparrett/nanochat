@@ -116,3 +116,99 @@ def test_forward_rejects_wrong_length_memory_state():
     bad_state = [None] * (config.n_layer + 1)
     with pytest.raises(AssertionError, match="memory_state must have"):
         model(idx, targets, memory_state=bad_state)
+
+
+# -----------------------------------------------------------------------------
+# Stage 1: LinearAttentionMemory as FFN replacement at one layer
+# -----------------------------------------------------------------------------
+
+
+def _build_tiny_model_with_memory(seed=0, memory_layer=2):
+    """Same tiny model as Stage 0 tests, but with one block's MLP swapped."""
+    torch.manual_seed(seed)
+    config = GPTConfig(
+        sequence_len=64,
+        vocab_size=128,
+        n_layer=4,
+        n_head=2,
+        n_kv_head=2,
+        n_embd=64,
+        window_pattern="L",
+        hope_memory_layer=memory_layer,
+    )
+    with torch.device("meta"):
+        model = GPT(config)
+    model.to_empty(device=torch.device("cpu"))
+    model.init_weights()
+    model.eval()
+    return model, config
+
+
+def test_stage1_memory_block_present_at_correct_layer():
+    """The configured layer uses LinearAttentionMemory; the rest still use MLP."""
+    from nanochat.gpt import MLP, LinearAttentionMemory
+    memory_layer = 2
+    model, config = _build_tiny_model_with_memory(memory_layer=memory_layer)
+    for i, block in enumerate(model.transformer.h):
+        if i == memory_layer:
+            assert isinstance(block.mlp, LinearAttentionMemory), (
+                f"layer {i} should be the memory block, got {type(block.mlp).__name__}"
+            )
+        else:
+            assert isinstance(block.mlp, MLP), (
+                f"layer {i} should still be MLP, got {type(block.mlp).__name__}"
+            )
+
+
+def test_stage1_loss_differs_from_baseline_after_perturbation():
+    """With one block swapped, loss should diverge once the memory block contributes.
+
+    Both blocks initialize their output projection (mlp.c_proj / mlp.W_o) to zero
+    by design — zero residual contribution at init is a stability convention
+    nanochat shares with the attention path. So at step 0 the architectures are
+    indistinguishable on the loss. We perturb the memory block's W_o to expose
+    that the *forward path* does something different.
+    """
+    baseline_model, config = _build_tiny_model()
+    stage1_model, _ = _build_tiny_model_with_memory(memory_layer=2)
+    idx, targets = _make_batch(config)
+    with torch.no_grad():
+        # Sanity: at init, both are bit-identical (zero MLP/memory contribution).
+        loss_init_baseline = baseline_model(idx, targets)
+        loss_init_stage1 = stage1_model(idx, targets)
+        assert torch.equal(loss_init_baseline, loss_init_stage1), (
+            "Architectures should be loss-equivalent at init since both zero out MLP/memory output."
+        )
+        # Perturb stage1's memory output projection so the block actually contributes.
+        stage1_model.transformer.h[2].mlp.W_o.weight.add_(0.1)
+        loss_perturbed_stage1 = stage1_model(idx, targets)
+    assert not torch.equal(loss_init_baseline, loss_perturbed_stage1), (
+        "Stage 1 loss equals baseline loss after perturbing W_o — the memory block isn't doing anything."
+    )
+    assert torch.isfinite(loss_perturbed_stage1).item()
+
+
+def test_stage1_forward_runs_without_error_and_is_deterministic():
+    """The memory block forward should run cleanly and be deterministic given fixed inputs."""
+    model, config = _build_tiny_model_with_memory(memory_layer=2)
+    idx, _ = _make_batch(config)
+    with torch.no_grad():
+        logits_a = model(idx)
+        logits_b = model(idx)
+    assert torch.equal(logits_a, logits_b), "Stage 1 forward is non-deterministic"
+
+
+def test_stage1_backward_produces_finite_gradients():
+    """Make sure gradients flow through the memory block without NaN/Inf."""
+    model, config = _build_tiny_model_with_memory(memory_layer=2)
+    idx, targets = _make_batch(config)
+    model.train()
+    loss = model(idx, targets)
+    loss.backward()
+    # Spot-check: all parameters that received a grad should be finite.
+    n_checked = 0
+    for name, p in model.named_parameters():
+        if p.grad is not None:
+            assert torch.isfinite(p.grad).all().item(), f"non-finite grad in {name}"
+            n_checked += 1
+    assert n_checked > 0, "no parameters received gradients?"

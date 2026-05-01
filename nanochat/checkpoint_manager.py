@@ -26,6 +26,9 @@ def _patch_missing_config_keys(model_config_kwargs):
     if "window_pattern" not in model_config_kwargs:
         model_config_kwargs["window_pattern"] = "L"
         log0(f"Patching missing window_pattern in model config to 'L'")
+    # Hope/NL Stage 1+: pre-Stage-1 checkpoints have no memory layer.
+    if "hope_memory_layer" not in model_config_kwargs:
+        model_config_kwargs["hope_memory_layer"] = None
 
 def _patch_missing_keys(model_data, model_config):
     """Add default values for new parameters that may be missing in old checkpoints."""
