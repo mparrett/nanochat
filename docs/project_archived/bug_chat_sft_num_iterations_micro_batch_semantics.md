@@ -1,11 +1,14 @@
 ---
-status: open
+status: done
 assigned: claude-code
 created: 2026-05-01
 updated: 2026-05-01
 project: nanochat
+resolved_in: a2d56ef
 ---
 # Bug: `chat_sft.py --num-iterations` is enforced as micro-batches, not optimizer steps
+
+**Resolved 2026-05-01 in commit `a2d56ef`** — applied "option 1" from this ticket (one-line fix at line 281 + matching fix to `approx_progress`) plus the `microbatch_yields` instrumentation Codex requested. Verified parses cleanly; behavior change confirmed against earlier B-iso workaround.
 
 ## Summary
 
