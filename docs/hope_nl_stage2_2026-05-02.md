@@ -15,16 +15,19 @@ Stage 2 with ADR-002 defaults (additive @ L3, W_o=1.0, α≈0.99, η≈0.10) on 
 
 - **Architecture functions as designed.** Gates alive from step 1 (no cold-start
   dead gradient on any of W_α/W_η/b_α/b_η).
-- **Reproducibly slower than baseline** at full saturation. Two seeds: 0.99 acc
-  reached at steps 101 / 126. Baseline reproducibly ~76. Lag ~25-50 steps.
-- **Two seeds, two different gate strategies** for the same task: seed=0 drove
-  α down (forget-by-default), seed=1 kept α high and ran η_max up to 0.93
-  (write-strongly-when-needed). Both converged. Suggests the gate space has
-  multiple basins and default α≈0.99 may be too sensitive to init.
+- **Reproducibly slower than baseline** at full saturation. Two seeds:
+  saturation at steps 101 / 126. Baseline ~76. Lag ~25-50 steps.
+- **High seed-variance with multiple optimization basins.** A 5-arm sweep
+  (3 α_init values × 2 seeds, partial) shows α_init_bias=3.0 produces *both*
+  the best run we've seen (seed=0: step 51 saturation, beats baseline) AND
+  the worst (seed=1: 0.57 at step 200, never converged). The architecture
+  has at least two attractor basins for MQAR and seed determines landing.
+  α-tuning doesn't fix the variance; it amplifies it.
 
-Decision: pivot to **(b) α_init_bias sweep** before any pretrain. The
-seed-variance is the most actionable signal — likely a default-tuning issue,
-not an architectural one. ~21 min for a 3-arm single-axis sweep on α.
+Decision: hold the default at α=4.595. Either (c) pretrain on DCLM and let
+val_bpb arbitrate (the seed sensitivity at probe scale may not matter at full
+d6 pretrain horizon), or stop and accept that Stage 2 isn't a load-bearing
+architectural change at d6/T=128.
 
 ## What Stage 2 adds
 
@@ -254,32 +257,92 @@ Both reach ~1.0 acc but via different basins. The optimization is sensitive
 to seed AND the gate space has at least two solution modes for MQAR. That's
 architecturally interesting — and a yellow flag for stability at scale.
 
-## Decision point (post seed=1)
+## α_init_bias sweep (2026-05-02)
 
-Two moves remain:
+Per the operator's lean (b first), ran a single-axis sweep on α_init_bias.
+Started with seed=0 only, then added a seed=1 confirmation on the apparent
+winner. Default η_init_bias=-2.197 and W_o init scale=1.0 throughout.
 
-(b) **Tune α/η init biases.** The seed-variance points at optimization
-    sensitivity. A small sweep on the init biases would test whether the
-    architecture has a "robust" basin we can land in by default:
-    - α_init_bias ∈ {3.0, 4.595 (default), 6.0} — start α at ~0.95, ~0.99, ~0.997
-    - η_init_bias ∈ {-3.0, -2.197 (default), -1.0} — start η at ~0.05, ~0.10, ~0.27
-    Each arm ~7 min; tightened to single-axis sweeps (3 arms each) is ~42 min.
+| step | baseline | a=3 s=0 | a=3 s=1 | **a=4.595 s=0** | **a=4.595 s=1** | a=6 s=0 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1   | 0.031 | 0.033 | 0.041 | 0.031 | 0.039 | 0.031 |
+| 26  | 0.037 | 0.042 | 0.059 | 0.060 | 0.065 | 0.076 |
+| 51  | 0.111 | **1.000** ⚡ | 0.061 | 0.922 | 0.385 | 0.776 |
+| 76  | 0.999 | 1.000 | 0.064 | 0.944 | 0.561 | 0.818 |
+| 101 | 1.000 | 1.000 | 0.063 | 1.000 | 0.988 | 1.000 |
+| 126 | 1.000 | 1.000 | 0.064 | 1.000 | 0.999 | 1.000 |
+| 200 | 0.999 | 1.000 | **0.575** ❌ | 1.000 | 0.999 | 1.000 |
 
-(c) **Schedule full d6 DCLM pretrain with Stage 2 defaults.** ~3h wall. With
-    seed=0 saturating at step 101 and seed=1 at step 126, the probe lag is
-    real and modest. Whether it transfers to DCLM val_bpb is the only test
-    that matters for the original ticket. Pause hook in place.
+Wall: ~6-7 min/arm.
 
-My read: **(b) first.** Seed-variance + two distinct gate basins is a sign
-the defaults aren't quite right — α=0.99 may be too high (seed=1 stayed at
-0.998 forever; seed=0 had to fight to bring it down). Lowering α_init_bias
-is the highest-leverage single change. 3-arm single-axis sweep on α would
-take ~21 min and likely surface a better default before we sink pretrain
-budget on a marginal probe.
+### Reading the sweep
 
-If the α sweep doesn't move the needle, then (c) — the lag is small enough
-(~25-50 steps on a 76-step task) that DCLM val_bpb is the real arbiter, not
-the probe.
+The seed=0 column alone tells a clean monotonic story: lower α_init → faster
+saturation. α=3.0 (init α≈0.95) saturated at step 51 — 25 steps faster than
+baseline. We thought we'd found the right default.
+
+The seed=1 confirmation on α=3.0 inverted that conclusion: **stuck at 0.57
+acc through step 200**. Looking at gate evolution under seed=1 with α=3.0:
+
+| step | α [min/mean/max] | η [min/mean/max] |
+|---:|---|---|
+| 1   | 0.926 / 0.952 / 0.967 | 0.051 / 0.095 / 0.156 |
+| 26  | 0.871 / 0.920 / 0.967 | 0.005 / 0.018 / 0.178 |
+| 51  | 0.897 / **0.971** / 0.988 | 0.001 / 0.014 / 0.365 |
+| 76  | 0.809 / 0.982 / 0.996 | 0.000 / 0.010 / 0.256 |
+| 200 | 0.680 / **0.989** / 0.998 | 0.000 / 0.005 / 0.134 |
+
+α started at 0.95 per design — and then drifted *upward* to 0.99 and stuck.
+η went down to ~0.005 by step 76. The model fell into a "remember-everything-
+but-don't-write-much" basin and couldn't escape. Compare seed=0 with the same
+config, where α dropped monotonically (mean 0.66 by step 26) and the model
+saturated at step 51.
+
+So α=3.0 has *both* the best AND the worst Stage 2 runs. **α-tuning doesn't
+fix the variance; it amplifies it.** Lowering α_init gave the gates more
+freedom, which means more freedom to find a bad basin, not just a good one.
+
+The default α=4.595 has lower variance across seeds (steps 101/126) than
+α=3.0 (steps 51 / 200+). The default is the safer choice given the variance.
+
+## Decision point (post sweep)
+
+(b) **More tuning** is unlikely to be the right move. Possibilities:
+   - Sweep W_α/W_η init scale (currently uniform[-0.02, 0.02], small so the
+     bias dominates). Bigger init might let positions differentiate per-token
+     from step 1, perhaps reducing basin-dependence. ~6 arms ~42 min.
+   - Sweep η_init_bias. We have one column at η=0.10. Other values might
+     stabilize.
+   These would resolve the variance but only at the cost of more probe budget,
+   and the architecture's seed sensitivity at d6/T=128 is already a yellow
+   flag.
+
+(c) **Schedule full d6 DCLM pretrain with α=4.595 (default) on seed=0.**
+   ~3h wall. The probe is a synthetic unit test at K=M=16, T=128; full pretrain
+   is 5000 iters across millions of tokens of natural language. Seed
+   sensitivity that matters at probe scale may wash out at pretrain horizon.
+   The only test that matters for the original ticket is val_bpb on DCLM.
+
+(d) **Stop and accept Stage 2 isn't load-bearing at d6 scale.** The probe
+   shows the architecture functions but is reproducibly slower than baseline
+   AND seed-sensitive. At T=128 and d6, the gating mechanism doesn't pull its
+   weight. Hope/NL benefits live at scales we won't reach on M2.
+
+My read: **(c) is the right call given the project goal**, but with a clear
+expectation that val_bpb is likely to land at or slightly worse than baseline.
+The Stage 1 swap pretrain (W_o=0) hit val_bpb 1.179 vs baseline 1.174 (+0.4%).
+Stage 2 with α=4.595 on seed=0 will probably be in the same band. The probe
+result tells us we shouldn't expect a gain. We should pretrain anyway because:
+- The original ticket asks "does this architecture work?" — val_bpb is the
+  honest answer at the project's scale.
+- Even a "no improvement" result is informative: we'd document that Hope/NL's
+  per-token gates don't help at d6/T=2048 on natural language.
+- The probe's bimodal behavior is itself an interesting finding worth a clean
+  full-pretrain follow-up.
+
+If the operator's project-priority is shifting elsewhere, **(d)** is also
+defensible — Stage 0+1+1.5+2 is a complete experimental unit and the
+architecture wall has been mapped.
 
 ## Open questions
 
