@@ -32,7 +32,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from nanochat.gpt import GPT, GPTConfig
+from nanochat.gpt import GPT, GPTConfig, LinearAttentionMemory, LearnedGateLinearMemory
 from nanochat.common import compute_init, autodetect_device_type
 
 
@@ -195,6 +195,67 @@ print(f'[{args.label}] task: T={args.T}, K={args.K}, M={args.M}, keys=[{args.key
 train_rng = np.random.default_rng(args.seed)
 eval_rng = np.random.default_rng(args.seed + 1_000_000)
 
+# -----------------------------------------------------------------------------
+# Diagnostics: locate the memory module (if any) and capture its input via a
+# forward pre-hook so we can log alpha/eta stats on demand. Hook is permanent —
+# overhead is just one tensor reference per forward.
+memory_module = None
+for block in model.transformer.h:
+    cand = block.add_memory if block.add_memory is not None else (
+        block.mlp if isinstance(block.mlp, LinearAttentionMemory) else None
+    )
+    if cand is not None:
+        memory_module = cand
+        break
+
+captured_input = {}
+if memory_module is not None:
+    def _capture_pre_hook(module, args):
+        captured_input['x'] = args[0].detach()
+    memory_module.register_forward_pre_hook(_capture_pre_hook)
+    print(f'[{args.label}] memory module: {type(memory_module).__name__}')
+
+
+def gate_stats():
+    """Returns dict of alpha/eta min/mean/max from the most recent forward, or None."""
+    if not isinstance(memory_module, LearnedGateLinearMemory) or 'x' not in captured_input:
+        return None
+    with torch.no_grad():
+        x = captured_input['x']
+        m = memory_module
+        alpha = m.alpha_max * torch.sigmoid(m.W_alpha(x) + m.b_alpha)
+        eta = m.eta_max * torch.sigmoid(m.W_eta(x) + m.b_eta)
+    return {
+        'a_min': alpha.min().item(), 'a_mean': alpha.mean().item(), 'a_max': alpha.max().item(),
+        'e_min': eta.min().item(),   'e_mean': eta.mean().item(),   'e_max': eta.max().item(),
+    }
+
+
+def grad_norms():
+    """Returns dict of grad-norm per gate-relevant parameter on the memory module, or None.
+
+    Captures K/V/Q/W_o for any memory module; adds W_alpha/W_eta/b_alpha/b_eta for
+    LearnedGateLinearMemory. Read this AFTER backward and BEFORE zero_grad. The
+    1.5b lesson: silent dead-gradient startup is invisible in loss, visible here.
+    """
+    if memory_module is None:
+        return None
+    g = {}
+    for name in ('W_k', 'W_v', 'W_q', 'W_o'):
+        w = getattr(memory_module, name).weight
+        if w.grad is not None:
+            g[name] = w.grad.norm().item()
+    if isinstance(memory_module, LearnedGateLinearMemory):
+        for name in ('W_alpha', 'W_eta'):
+            w = getattr(memory_module, name).weight
+            if w.grad is not None:
+                g[name] = w.grad.norm().item()
+        for name in ('b_alpha', 'b_eta'):
+            p = getattr(memory_module, name)
+            if p.grad is not None:
+                g[name] = p.grad.norm().item()
+    return g
+
 
 # -----------------------------------------------------------------------------
 # Train
@@ -210,10 +271,15 @@ for step in range(args.num_iterations):
     targets = targets.to(device)
     loss = model(inputs, targets)
     loss.backward()
+    do_eval = (step % args.eval_every == 0) or (step == args.num_iterations - 1)
+    # Snapshot diagnostics from the train forward BEFORE optimizer.step (gates
+    # match the gradient signal) and BEFORE evaluate (which overwrites the
+    # captured_input['x'] reference with eval-batch data).
+    g_norms = grad_norms() if do_eval else None
+    gs = gate_stats() if do_eval else None
     optimizer.step()
     model.zero_grad(set_to_none=True)
 
-    do_eval = (step % args.eval_every == 0) or (step == args.num_iterations - 1)
     if do_eval:
         acc, mean_lp = evaluate(
             model, args.K, args.M, args.T,
@@ -224,5 +290,11 @@ for step in range(args.num_iterations):
         print(f'[{args.label}] step {step+1:04d}/{args.num_iterations} | '
               f'loss: {loss.item():.4f} | eval acc: {acc:.4f} | mean lp: {mean_lp:+.3f} | '
               f'elapsed: {elapsed/60:.1f}m', flush=True)
+        if g_norms is not None:
+            print(f'[{args.label}]   grad: ' + ' '.join(f'{k}={v:.2e}' for k, v in g_norms.items()), flush=True)
+        if gs is not None:
+            print(f'[{args.label}]   gate: '
+                  f'alpha[{gs["a_min"]:.3f}/{gs["a_mean"]:.3f}/{gs["a_max"]:.3f}] '
+                  f'eta[{gs["e_min"]:.3f}/{gs["e_mean"]:.3f}/{gs["e_max"]:.3f}]', flush=True)
 
 print(f'[{args.label}] done in {(time.time()-t_start)/60:.2f}m')
