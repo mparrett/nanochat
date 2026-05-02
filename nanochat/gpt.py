@@ -55,6 +55,21 @@ class GPTConfig:
     # the K/V/Q init magnitude. Anything >0 unblocks K/V/Q gradient flow at step 1
     # but breaks the bit-identical-init guarantee.
     hope_memory_w_o_init_scale: float = 0.0
+    # Hope/NL Stage 2: which memory module to use at memory layers.
+    # 'linear'       = LinearAttentionMemory (Stage 1; fixed alpha=eta=1).
+    # 'learned_gate' = LearnedGateLinearMemory (Stage 2; per-token learned alpha/eta,
+    #                  vectorized via prefix log-products).
+    # Affects both hope_memory_layer (swap) and hope_additive_memory_layer (additive).
+    hope_memory_kind: str = "linear"
+    # Stage 2 caps and biases on the per-token gates. alpha_max < 1 keeps logs finite.
+    # alpha_init_bias sets initial alpha = alpha_max * sigmoid(b_alpha) — default ~0.99
+    # (long memory, not saturated). eta_init_bias sets initial eta = eta_max *
+    # sigmoid(b_eta) — default ~0.1 (small but live, NOT zero, which would recreate
+    # the W_o=0 cold-start gradient gate trap from Stage 1.5b).
+    hope_memory_alpha_max: float = 0.999
+    hope_memory_eta_max: float = 1.0
+    hope_memory_alpha_init_bias: float = 4.595  # logit(0.99 / 0.999) ≈ 4.595
+    hope_memory_eta_init_bias: float = -2.197   # logit(0.1) ≈ -2.197
 
 
 def norm(x):
@@ -87,6 +102,25 @@ def _init_w_o(weight, s, scale):
         torch.nn.init.zeros_(weight)
     else:
         torch.nn.init.uniform_(weight, -s * scale, s * scale)
+
+
+def _init_memory_module(mem, s, config):
+    """Common init for Hope/NL memory modules (Stage 1 linear, Stage 2 learned-gate).
+
+    K/V/Q init like attention K/V/Q; W_o per hope_memory_w_o_init_scale. For the
+    Stage 2 subclass, also init the alpha/eta gate projections — small uniform
+    weights so the bias dominates, plus constant biases set from config (see
+    ADR-002 for default values and rationale).
+    """
+    torch.nn.init.uniform_(mem.W_k.weight, -s, s)
+    torch.nn.init.uniform_(mem.W_v.weight, -s, s)
+    torch.nn.init.uniform_(mem.W_q.weight, -s, s)
+    _init_w_o(mem.W_o.weight, s, config.hope_memory_w_o_init_scale)
+    if isinstance(mem, LearnedGateLinearMemory):
+        torch.nn.init.uniform_(mem.W_alpha.weight, -0.02, 0.02)
+        torch.nn.init.uniform_(mem.W_eta.weight, -0.02, 0.02)
+        torch.nn.init.constant_(mem.b_alpha, config.hope_memory_alpha_init_bias)
+        torch.nn.init.constant_(mem.b_eta, config.hope_memory_eta_init_bias)
 
 def apply_rotary_emb(x, cos, sin):
     assert x.ndim == 4  # multihead attention
@@ -218,13 +252,96 @@ class LinearAttentionMemory(nn.Module):
         return self.W_o(o)
 
 
+class LearnedGateLinearMemory(LinearAttentionMemory):
+    """
+    Hope/NL Stage 2: per-token learned alpha/eta gates over a Titans-style
+    fast-weight memory, vectorized via prefix log-products. Generalizes
+    LinearAttentionMemory (Stage 1, fixed alpha=eta=1) — at alpha_max → 1 and
+    constant eta=1 the two are equivalent.
+
+    Per-token gates from x_t:
+        alpha_t = alpha_max * sigmoid(W_alpha x_t + b_alpha)   # bounded < alpha_max
+        eta_t   = eta_max   * sigmoid(W_eta   x_t + b_eta)
+    Memory recurrence (conceptually):
+        M_t = alpha_t * M_{t-1} + eta_t * v_t * k_t^T          (M_0 = 0)
+        o_t = M_{t-1} * q_t                                    (read = previous memory)
+        y_t = W_o o_t
+
+    Vectorized form (no Python token loop, O(T^2) like Stage 1):
+        log_alpha_t = log(clamp(alpha_t, eps, alpha_max))
+        S_t         = cumsum_{j<=t} log_alpha_j                 (prefix sum)
+        decay(t,i)  = exp(S_{t-1} - S_i)        for i < t       (else 0)
+        o_t         = sum_{i<t} (q_t . k_i) * eta_i * decay(t,i) * v_i
+
+    Per Codex's Stage 2 design notes (2026-05-02): default alpha near long memory
+    but NOT saturated, eta small but NOT near zero (zero eta recreates the same
+    gradient gate trap that W_o=0 caused in Stage 1.5b).
+    """
+    def __init__(self, config, d_mem=None):
+        super().__init__(config, d_mem=d_mem)
+        d_model = config.n_embd
+        # nanochat's custom Linear forward skips bias even when bias=True. Keep
+        # gate biases as explicit nn.Parameters so they actually participate in
+        # the forward; setup_optimizer routes 1D params to the scalar group.
+        self.W_alpha = Linear(d_model, 1, bias=False)
+        self.W_eta = Linear(d_model, 1, bias=False)
+        self.b_alpha = nn.Parameter(torch.zeros(1))
+        self.b_eta = nn.Parameter(torch.zeros(1))
+        self.alpha_max = config.hope_memory_alpha_max
+        self.eta_max = config.hope_memory_eta_max
+
+    def forward(self, x):
+        # x: (B, T, d_model)
+        T = x.size(1)
+        k = self.W_k(x)                                         # (B, T, d_mem)
+        v = self.W_v(x)
+        q = self.W_q(x)
+
+        # Per-token gates from x_t. Shape (B, T, 1) — broadcast across the d_mem axis.
+        alpha = self.alpha_max * torch.sigmoid(self.W_alpha(x) + self.b_alpha)
+        eta   = self.eta_max   * torch.sigmoid(self.W_eta(x)   + self.b_eta)
+
+        # Prefix log-product of alpha. Clamp keeps log finite at the small end and
+        # below alpha_max strictly at the large end (defense in depth — sigmoid * alpha_max
+        # is already strictly < alpha_max in fp32, but bf16 cast can round up).
+        log_alpha = torch.log(alpha.clamp(min=1e-6, max=self.alpha_max))  # (B, T, 1)
+        S = torch.cumsum(log_alpha, dim=1)                                # (B, T, 1)
+
+        # decay(t, i) = exp(S_{t-1} - S_i)  for i < t, else 0.
+        # S_shift[b, t] = S[b, t-1], with S_shift[b, 0] = 0.
+        S_shift = torch.cat([torch.zeros_like(S[:, :1, :]), S[:, :-1, :]], dim=1)  # (B, T, 1)
+        log_decay = S_shift - S.transpose(1, 2)                            # (B, T, T)
+        # Strict-causal mask: read at t uses M_{t-1}, so only i < t contribute.
+        causal = torch.ones(T, T, device=x.device, dtype=torch.bool).tril(diagonal=-1)
+        log_decay = log_decay.masked_fill(~causal, float('-inf'))
+        decay = torch.exp(log_decay)                                       # (B, T, T), zero off-causal
+
+        # scores[b, t, i] = q_t . k_i; weights = scores * eta_i * decay(t, i).
+        # eta is (B, T, 1) indexed by source position i — transpose to (B, 1, T) so
+        # the last dim of scores aligns with i.
+        scores = torch.einsum('btd,bid->bti', q, k) * self._scale          # (B, T, T)
+        weights = scores * eta.transpose(1, 2) * decay                     # (B, T, T)
+        o = torch.einsum('bti,bid->btd', weights, v)                       # (B, T, d_mem)
+        return self.W_o(o)
+
+
+def _make_memory_module(config):
+    """Construct the configured memory module (Stage 1 linear or Stage 2 learned-gate)."""
+    if config.hope_memory_kind == "linear":
+        return LinearAttentionMemory(config)
+    if config.hope_memory_kind == "learned_gate":
+        return LearnedGateLinearMemory(config)
+    raise ValueError(f"unknown hope_memory_kind: {config.hope_memory_kind!r}")
+
+
 class Block(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.attn = CausalSelfAttention(config, layer_idx)
         # Hope/NL Stage 1: optionally swap MLP for fast-weight memory at one layer.
+        # Stage 2 lets the memory module kind switch via config.hope_memory_kind.
         if config.hope_memory_layer is not None and config.hope_memory_layer == layer_idx:
-            self.mlp = LinearAttentionMemory(config)
+            self.mlp = _make_memory_module(config)
         else:
             self.mlp = MLP(config)
         # Hope/NL Stage 1-additive: optionally add a memory block as a *third* residual
@@ -232,7 +349,7 @@ class Block(nn.Module):
         # Both can in principle coexist but for Stage 1.5 we run them separately.
         self.add_memory = None
         if config.hope_additive_memory_layer is not None and config.hope_additive_memory_layer == layer_idx:
-            self.add_memory = LinearAttentionMemory(config)
+            self.add_memory = _make_memory_module(config)
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache, memory_state=None):
         # Stage 0 of Hope/NL plumbing: blocks always return (x, new_memory_state).
@@ -326,19 +443,14 @@ class GPT(nn.Module):
                 torch.nn.init.uniform_(block.mlp.c_fc.weight, -s * 0.4, s * 0.4)  # 0.4x init scale for c_fc
                 torch.nn.init.zeros_(block.mlp.c_proj.weight)
             elif isinstance(block.mlp, LinearAttentionMemory):
-                # Hope/NL Stage 1 memory block: KVQ inits like attention KVQ; output proj zero like c_proj.
-                torch.nn.init.uniform_(block.mlp.W_k.weight, -s, s)
-                torch.nn.init.uniform_(block.mlp.W_v.weight, -s, s)
-                torch.nn.init.uniform_(block.mlp.W_q.weight, -s, s)
-                _init_w_o(block.mlp.W_o.weight, s, self.config.hope_memory_w_o_init_scale)
+                # Hope/NL Stage 1 memory block: KVQ inits like attention KVQ; output proj per W_o init scale.
+                # Stage 2 (LearnedGateLinearMemory) inherits, so the isinstance check catches both.
+                _init_memory_module(block.mlp, s, self.config)
             else:
                 raise NotImplementedError(f"init_weights does not know how to init mlp of type {type(block.mlp).__name__}")
-            # Hope/NL Stage 1-additive: same init pattern as the swap variant — KVQ uniform, W_o zero.
+            # Hope/NL Stage 1-additive: same init pattern as the swap variant.
             if block.add_memory is not None:
-                torch.nn.init.uniform_(block.add_memory.W_k.weight, -s, s)
-                torch.nn.init.uniform_(block.add_memory.W_v.weight, -s, s)
-                torch.nn.init.uniform_(block.add_memory.W_q.weight, -s, s)
-                _init_w_o(block.add_memory.W_o.weight, s, self.config.hope_memory_w_o_init_scale)
+                _init_memory_module(block.add_memory, s, self.config)
 
         # Per-layer scalars
         # Per-layer resid init: stronger residual at early layers, weaker at deep layers
@@ -506,14 +618,21 @@ class GPT(nn.Module):
         # Filter by name (not shape) to keep this stable as other matrices change.
         h_named_params = list(self.transformer.h.named_parameters())
         ve_gate_params = [p for n, p in h_named_params if '.ve_gate.' in n]
-        matrix_params = [p for n, p in h_named_params if '.ve_gate.' not in n]
+        # Hope/NL Stage 2: per-token alpha/eta gate biases (1D scalars) — Muon
+        # expects 2D, so route to AdamW alongside the other model scalars.
+        gate_bias_params = [p for n, p in h_named_params if n.endswith('.b_alpha') or n.endswith('.b_eta')]
+        matrix_params = [p for n, p in h_named_params if '.ve_gate.' not in n and not (n.endswith('.b_alpha') or n.endswith('.b_eta'))]
         value_embeds_params = list(self.value_embeds.parameters())
         embedding_params = list(self.transformer.wte.parameters())
         lm_head_params = list(self.lm_head.parameters())
         resid_params = [self.resid_lambdas]
         x0_params = [self.x0_lambdas]
         smear_params = [self.smear_gate.weight, self.smear_lambda, self.backout_lambda]
-        assert len(list(self.parameters())) == len(matrix_params) + len(embedding_params) + len(lm_head_params) + len(value_embeds_params) + len(resid_params) + len(x0_params) + len(smear_params) + len(ve_gate_params)
+        assert len(list(self.parameters())) == (
+            len(matrix_params) + len(embedding_params) + len(lm_head_params)
+            + len(value_embeds_params) + len(resid_params) + len(x0_params)
+            + len(smear_params) + len(ve_gate_params) + len(gate_bias_params)
+        )
 
         # Scale the LR for the AdamW parameters by ∝1/√dmodel (tuned for 768 dim model)
         dmodel_lr_scale = (model_dim / 768) ** -0.5
@@ -530,6 +649,11 @@ class GPT(nn.Module):
             dict(kind='adamw', params=smear_params, lr=0.2, betas=(0.8, 0.95), eps=1e-10, weight_decay=0.0),
             dict(kind='adamw', params=ve_gate_params, lr=0.2, betas=(0.8, 0.95), eps=1e-10, weight_decay=0.0),
         ]
+        if gate_bias_params:
+            param_groups.append(dict(
+                kind='adamw', params=gate_bias_params, lr=scalar_lr,
+                betas=(0.8, 0.95), eps=1e-10, weight_decay=0.0,
+            ))
         # Muon groups (matrix params, grouped by shape for stacking)
         for shape in sorted({p.shape for p in matrix_params}):
             group_params = [p for p in matrix_params if p.shape == shape]

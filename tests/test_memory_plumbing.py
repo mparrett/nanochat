@@ -306,3 +306,168 @@ def test_additive_backward_produces_finite_gradients():
                     ('W_q', add_mem.W_q.weight), ('W_o', add_mem.W_o.weight)]:
         assert p.grad is not None, f"add_memory.{name} did not receive a gradient"
         assert torch.isfinite(p.grad).all().item(), f"non-finite grad in add_memory.{name}"
+
+
+# -----------------------------------------------------------------------------
+# Stage 2: LearnedGateLinearMemory with per-token learned alpha/eta
+# -----------------------------------------------------------------------------
+
+
+def _build_tiny_model_with_learned_gate(seed=0, memory_layer=2, additive=True, w_o_init_scale=1.0):
+    """Stage 2 tiny model: additive learned-gate memory at one layer, with
+    Stage 1.5b's W_o=1.0 default. The additive path is the recommended Stage 2
+    topology (per ADR-002)."""
+    torch.manual_seed(seed)
+    config = GPTConfig(
+        sequence_len=64,
+        vocab_size=128,
+        n_layer=4,
+        n_head=2,
+        n_kv_head=2,
+        n_embd=64,
+        window_pattern="L",
+        hope_memory_layer=None if additive else memory_layer,
+        hope_additive_memory_layer=memory_layer if additive else None,
+        hope_memory_w_o_init_scale=w_o_init_scale,
+        hope_memory_kind="learned_gate",
+    )
+    with torch.device("meta"):
+        model = GPT(config)
+    model.to_empty(device=torch.device("cpu"))
+    model.init_weights()
+    model.eval()
+    return model, config
+
+
+def test_stage2_learned_gate_module_present_at_correct_layer():
+    """The configured additive layer holds a LearnedGateLinearMemory."""
+    from nanochat.gpt import MLP, LearnedGateLinearMemory
+    model, _ = _build_tiny_model_with_learned_gate(memory_layer=2, additive=True)
+    for i, block in enumerate(model.transformer.h):
+        assert isinstance(block.mlp, MLP), f"layer {i} MLP should be preserved with additive insertion"
+        if i == 2:
+            assert isinstance(block.add_memory, LearnedGateLinearMemory), (
+                f"layer {i} should have learned-gate memory, got {type(block.add_memory).__name__}"
+            )
+        else:
+            assert block.add_memory is None
+
+
+def test_stage2_initial_alpha_and_eta_match_config():
+    """W_alpha/W_eta biases set initial alpha and eta to the configured values
+    (modulo the small-uniform W_alpha/W_eta noise term)."""
+    model, config = _build_tiny_model_with_learned_gate(memory_layer=2, additive=True)
+    mem = model.transformer.h[2].add_memory
+    # With W_alpha/W_eta weights small (uniform[-0.02, 0.02]) the bias dominates,
+    # so the initial gate values are close to alpha_max*sigmoid(b_alpha) and eta_max*sigmoid(b_eta).
+    expected_alpha = config.hope_memory_alpha_max * torch.sigmoid(torch.tensor(config.hope_memory_alpha_init_bias)).item()
+    expected_eta = config.hope_memory_eta_max * torch.sigmoid(torch.tensor(config.hope_memory_eta_init_bias)).item()
+    # Sanity: defaults give alpha~0.99, eta~0.1
+    assert 0.98 < expected_alpha < 0.999, f"unexpected default alpha: {expected_alpha}"
+    assert 0.05 < expected_eta < 0.20, f"unexpected default eta: {expected_eta}"
+    # Probe the actual gate values on a real input.
+    idx, _ = _make_batch(config)
+    with torch.no_grad():
+        # Embed input the same way the model does (wte + ... but for the gate
+        # we just need any tensor of shape (B, T, n_embd); cheapest is pulling
+        # out the actual block input). Easiest: run a forward and read x there.
+        # Instead, sanity-check by forwarding through the block directly with embeddings.
+        x = model.transformer.wte(idx.to(torch.long)).to(next(model.parameters()).dtype)
+        alpha_logits = mem.W_alpha(x) + mem.b_alpha
+        eta_logits = mem.W_eta(x) + mem.b_eta
+        alpha = mem.alpha_max * torch.sigmoid(alpha_logits)
+        eta = mem.eta_max * torch.sigmoid(eta_logits)
+    # With small W_alpha/W_eta weights, the bias dominates → values cluster near expected.
+    assert (alpha - expected_alpha).abs().max().item() < 0.05, "initial alpha drifted from configured bias"
+    assert (eta - expected_eta).abs().max().item() < 0.05, "initial eta drifted from configured bias"
+
+
+def test_stage2_forward_runs_finite_and_deterministic():
+    model, _ = _build_tiny_model_with_learned_gate(memory_layer=2, additive=True)
+    idx, _ = _make_batch(model.config) if False else _make_batch(_build_tiny_model_with_learned_gate()[1])
+    with torch.no_grad():
+        out_a = model(idx)
+        out_b = model(idx)
+    assert torch.equal(out_a, out_b), "Stage 2 forward is non-deterministic"
+    assert torch.isfinite(out_a).all().item(), "Stage 2 forward produced non-finite values"
+
+
+def test_stage2_backward_produces_finite_gradients_on_all_gate_params():
+    """Gradients flow through W_q/W_k/W_v/W_o AND W_alpha/W_eta. The 1.5b lesson
+    was that a silent dead-gradient startup is invisible in loss but visible in
+    grad norms — this test ensures W_alpha and W_eta receive nonzero finite grads
+    from step 1 with the recommended W_o=1.0 default."""
+    model, config = _build_tiny_model_with_learned_gate(memory_layer=2, additive=True, w_o_init_scale=1.0)
+    idx, targets = _make_batch(config)
+    model.train()
+    loss = model(idx, targets)
+    loss.backward()
+    mem = model.transformer.h[2].add_memory
+    for name in ("W_k", "W_v", "W_q", "W_o", "W_alpha", "W_eta"):
+        p = getattr(mem, name).weight
+        assert p.grad is not None, f"{name}.weight did not receive a gradient"
+        assert torch.isfinite(p.grad).all().item(), f"non-finite grad in {name}.weight"
+        assert p.grad.abs().sum().item() > 0, f"{name}.weight grad is exactly zero — dead gradient"
+
+
+def test_stage2_reduces_to_stage1_when_alpha_eta_constant():
+    """At alpha_max ≈ 1 with strong positive bias, and eta = 1 with strong positive bias,
+    Stage 2 should produce nearly the same output as Stage 1 (which has fixed alpha=eta=1).
+    This pins the generalization claim — Stage 2 is a strict superset.
+    """
+    from nanochat.gpt import GPT, GPTConfig, LinearAttentionMemory, LearnedGateLinearMemory
+    torch.manual_seed(0)
+    common = dict(
+        sequence_len=64, vocab_size=128, n_layer=4, n_head=2, n_kv_head=2,
+        n_embd=64, window_pattern="L", hope_additive_memory_layer=2,
+        hope_memory_w_o_init_scale=1.0,
+    )
+    config_s1 = GPTConfig(**common, hope_memory_kind="linear")
+    config_s2 = GPTConfig(
+        **common,
+        hope_memory_kind="learned_gate",
+        hope_memory_alpha_max=0.9999,
+        hope_memory_eta_max=1.0,
+        hope_memory_alpha_init_bias=20.0,   # sigmoid(20) ≈ 1.0 → alpha ≈ 0.9999
+        hope_memory_eta_init_bias=20.0,     # sigmoid(20) ≈ 1.0 → eta ≈ 1.0
+    )
+    with torch.device("meta"):
+        m1, m2 = GPT(config_s1), GPT(config_s2)
+    for m in (m1, m2):
+        m.to_empty(device=torch.device("cpu"))
+        m.init_weights()
+        m.eval()
+    # Force the K/V/Q/W_o weights of the two memory blocks to match (Stage 2 has
+    # extra W_alpha/W_eta on top, which is allowed).
+    s1_mem = m1.transformer.h[2].add_memory
+    s2_mem = m2.transformer.h[2].add_memory
+    assert isinstance(s1_mem, LinearAttentionMemory)
+    assert isinstance(s2_mem, LearnedGateLinearMemory)
+    with torch.no_grad():
+        for name in ("W_k", "W_v", "W_q", "W_o"):
+            getattr(s2_mem, name).weight.copy_(getattr(s1_mem, name).weight)
+        # Also make all OTHER blocks identical so the only difference is the memory module.
+        for i in range(4):
+            for name in ("attn", "mlp"):
+                src = getattr(m1.transformer.h[i], name)
+                dst = getattr(m2.transformer.h[i], name)
+                for p_name, p in src.named_parameters():
+                    dst.get_parameter(p_name).copy_(p)
+        m2.transformer.wte.weight.copy_(m1.transformer.wte.weight)
+        m2.lm_head.weight.copy_(m1.lm_head.weight)
+        m2.resid_lambdas.copy_(m1.resid_lambdas)
+        m2.x0_lambdas.copy_(m1.x0_lambdas)
+        m2.smear_lambda.copy_(m1.smear_lambda)
+        m2.backout_lambda.copy_(m1.backout_lambda)
+        m2.smear_gate.weight.copy_(m1.smear_gate.weight)
+        for k in m1.value_embeds:
+            m2.value_embeds[k].weight.copy_(m1.value_embeds[k].weight)
+    idx, _ = _make_batch(config_s1)
+    with torch.no_grad():
+        out1 = m1(idx)
+        out2 = m2(idx)
+    # Not bit-identical because Stage 2 multiplies by alpha/eta which are very-close-to
+    # but not exactly 1, AND the W_alpha/W_eta noise in W_alpha.weight and W_eta.weight
+    # adds a tiny per-token perturbation. So compare with tolerance.
+    diff = (out1 - out2).abs().max().item()
+    assert diff < 0.5, f"Stage 2 with alpha~1, eta~1 should approximate Stage 1; max diff={diff}"

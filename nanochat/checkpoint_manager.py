@@ -35,6 +35,18 @@ def _patch_missing_config_keys(model_config_kwargs):
     # Hope/NL Stage 1.5b: W_o init scale defaults to zero for backward compat.
     if "hope_memory_w_o_init_scale" not in model_config_kwargs:
         model_config_kwargs["hope_memory_w_o_init_scale"] = 0.0
+    # Hope/NL Stage 2: per-token learned-gate memory module + caps + init biases.
+    # Defaults preserve Stage 1 behavior on pre-Stage-2 checkpoints.
+    if "hope_memory_kind" not in model_config_kwargs:
+        model_config_kwargs["hope_memory_kind"] = "linear"
+    if "hope_memory_alpha_max" not in model_config_kwargs:
+        model_config_kwargs["hope_memory_alpha_max"] = 0.999
+    if "hope_memory_eta_max" not in model_config_kwargs:
+        model_config_kwargs["hope_memory_eta_max"] = 1.0
+    if "hope_memory_alpha_init_bias" not in model_config_kwargs:
+        model_config_kwargs["hope_memory_alpha_init_bias"] = 4.595
+    if "hope_memory_eta_init_bias" not in model_config_kwargs:
+        model_config_kwargs["hope_memory_eta_init_bias"] = -2.197
 
 def _patch_missing_keys(model_data, model_config):
     """Add default values for new parameters that may be missing in old checkpoints."""

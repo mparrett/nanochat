@@ -54,6 +54,12 @@ parser.add_argument("--max-seq-len", type=int, default=2048, help="max context l
 parser.add_argument("--window-pattern", type=str, default="SSSL", help="sliding window pattern tiled across layers: L=full, S=half context (e.g. 'SSL')")
 parser.add_argument("--hope-memory-layer", type=int, default=None, help="Hope/NL Stage 1: replace MLP at this layer index with LinearAttentionMemory (default: None = baseline)")
 parser.add_argument("--hope-additive-memory-layer", type=int, default=None, help="Hope/NL Stage 1-additive: ADD LinearAttentionMemory as a 3rd residual at this layer (default: None)")
+parser.add_argument("--hope-memory-w-o-init-scale", type=float, default=0.0, help="Hope/NL Stage 1.5b: W_o init scale (0.0 = zeros, 1.0 = uniform[-s,s] like K/V/Q). Recommended 1.0 for any memory-bearing config; see ADR-002.")
+parser.add_argument("--hope-memory-kind", type=str, default="linear", choices=["linear", "learned_gate"], help="Hope/NL Stage 2: memory module kind. 'linear' = Stage 1 (alpha=eta=1). 'learned_gate' = Stage 2 (per-token learned alpha/eta).")
+parser.add_argument("--hope-memory-alpha-max", type=float, default=0.999, help="Stage 2: cap on per-token alpha (must be <1).")
+parser.add_argument("--hope-memory-eta-max", type=float, default=1.0, help="Stage 2: cap on per-token eta.")
+parser.add_argument("--hope-memory-alpha-init-bias", type=float, default=4.595, help="Stage 2: bias on W_alpha; default ~0.99 initial alpha.")
+parser.add_argument("--hope-memory-eta-init-bias", type=float, default=-2.197, help="Stage 2: bias on W_eta; default ~0.1 initial eta. NOT zero (gradient gate trap).")
 # Training horizon (only one used, in order of precedence)
 parser.add_argument("--num-iterations", type=int, default=-1, help="explicit number of optimization steps (-1 = disable)")
 parser.add_argument("--target-flops", type=float, default=-1.0, help="calculate num_iterations to reach target_flops (-1 = disable)")
@@ -141,6 +147,12 @@ def build_model_meta(depth):
         window_pattern=args.window_pattern,
         hope_memory_layer=args.hope_memory_layer,
         hope_additive_memory_layer=args.hope_additive_memory_layer,
+        hope_memory_w_o_init_scale=args.hope_memory_w_o_init_scale,
+        hope_memory_kind=args.hope_memory_kind,
+        hope_memory_alpha_max=args.hope_memory_alpha_max,
+        hope_memory_eta_max=args.hope_memory_eta_max,
+        hope_memory_alpha_init_bias=args.hope_memory_alpha_init_bias,
+        hope_memory_eta_init_bias=args.hope_memory_eta_init_bias,
     )
     with torch.device("meta"):
         model_meta = GPT(config)

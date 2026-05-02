@@ -43,6 +43,11 @@ parser.add_argument('--label', type=str, default='probe', help='log prefix to id
 parser.add_argument('--hope-memory-layer', type=int, default=-1, help='layer index for LinearAttentionMemory swap (-1 = disabled / baseline MLP)')
 parser.add_argument('--hope-additive-memory-layer', type=int, default=-1, help='layer index for additive LinearAttentionMemory (-1 = disabled). Adds a third residual contribution alongside attn+mlp instead of replacing the MLP.')
 parser.add_argument('--hope-memory-w-o-init-scale', type=float, default=0.0, help='LinearAttentionMemory W_o init scale (0.0 = zeros [default], >0 = uniform[-s*scale, s*scale] like K/V/Q)')
+parser.add_argument('--hope-memory-kind', type=str, default='linear', choices=['linear', 'learned_gate'], help="memory module kind. 'linear' = Stage 1 (fixed alpha=eta=1). 'learned_gate' = Stage 2 (per-token learned alpha/eta, prefix-log-product).")
+parser.add_argument('--hope-memory-alpha-max', type=float, default=0.999, help='Stage 2: cap on per-token alpha (must be <1 for finite log).')
+parser.add_argument('--hope-memory-eta-max', type=float, default=1.0, help='Stage 2: cap on per-token eta.')
+parser.add_argument('--hope-memory-alpha-init-bias', type=float, default=4.595, help='Stage 2: bias on W_alpha; sets initial alpha = alpha_max*sigmoid(b). Default 4.595 → ~0.99.')
+parser.add_argument('--hope-memory-eta-init-bias', type=float, default=-2.197, help='Stage 2: bias on W_eta; sets initial eta = eta_max*sigmoid(b). Default -2.197 → ~0.1. NOT zero (would gate gradients).')
 # Task shape
 parser.add_argument('--K', type=int, default=16, help='number of (key, value) pairs in the lookup prefix')
 parser.add_argument('--M', type=int, default=16, help='number of queries in the suffix')
@@ -158,6 +163,11 @@ config = GPTConfig(
     hope_memory_layer=hope_layer,
     hope_additive_memory_layer=hope_add_layer,
     hope_memory_w_o_init_scale=args.hope_memory_w_o_init_scale,
+    hope_memory_kind=args.hope_memory_kind,
+    hope_memory_alpha_max=args.hope_memory_alpha_max,
+    hope_memory_eta_max=args.hope_memory_eta_max,
+    hope_memory_alpha_init_bias=args.hope_memory_alpha_init_bias,
+    hope_memory_eta_init_bias=args.hope_memory_eta_init_bias,
 )
 print(f'[{args.label}] config: {config}')
 
