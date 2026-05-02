@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Field Report III — Closing the perf detour, opening Hope/NL</title>
+<style>
+  :root {
+    --paper: #f5f1e8;
+    --paper-dim: #ebe5d6;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-mute: #8a857a;
+    --rule: #c9c2b0;
+    --accent: #b04a2f;
+    --accent-soft: #d97b5c;
+    --green: #4a7c3f;
+    --code-bg: #1c1d1f;
+    --code-fg: #e8e3d4;
+    --code-mute: #8d8675;
+    --code-key: #c9b76b;
+    --code-str: #a3b87a;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Charter", "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(0,0,0,0.025) 31px 32px),
+      var(--paper);
+  }
+  .sheet { max-width: 920px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+  .masthead {
+    border-top: 4px double var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0 1rem;
+    margin-bottom: 3rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1rem;
+  }
+  .masthead .kicker {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: 0.6rem;
+  }
+  .masthead h1 {
+    font-family: "Iowan Old Style", "Charter", Georgia, serif;
+    font-weight: 700; font-size: clamp(2rem, 4.6vw, 3.2rem);
+    line-height: 1.05; letter-spacing: -0.015em; margin: 0;
+  }
+  .masthead h1 em { font-style: italic; color: var(--accent); }
+  .masthead .meta {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.78rem; color: var(--ink-mute); text-align: right; line-height: 1.5;
+  }
+  .masthead .meta strong { color: var(--ink); font-weight: 600; }
+
+  .lede {
+    font-size: 1.25rem; line-height: 1.55; color: var(--ink-soft);
+    margin: 0 0 3rem; max-width: 38em;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .pull {
+    border-left: 3px solid var(--accent);
+    padding: 1.2rem 1.5rem;
+    margin: 2.5rem 0;
+    background: var(--paper-dim);
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.15rem; line-height: 1.5; font-style: italic;
+  }
+  .pull .src {
+    display: block; margin-top: 0.6rem;
+    font-family: "JetBrains Mono", monospace; font-style: normal;
+    font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-mute);
+  }
+
+  section { margin: 3rem 0; }
+  section > .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: 0.4rem;
+  }
+  section > h2 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.85rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em;
+    margin: 0.2rem 0 1.2rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.6rem;
+  }
+  section h3 { font-family: "Iowan Old Style", Georgia, serif; font-size: 1.2rem; font-weight: 700; margin: 1.6rem 0 0.5rem; }
+  p { margin: 0 0 1rem; }
+  p + p { text-indent: 1.5em; }
+
+  pre, code { font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace; }
+  code {
+    font-size: 0.92em; background: var(--paper-dim);
+    padding: 0.05em 0.35em; border-radius: 2px; color: var(--ink);
+  }
+  pre {
+    background: var(--code-bg); color: var(--code-fg);
+    padding: 1.2rem 1.4rem; border-radius: 4px; font-size: 0.82rem; line-height: 1.5;
+    overflow-x: auto; margin: 1.4rem 0; border-left: 3px solid var(--code-mute);
+  }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.4rem 0;
+    font-size: 0.95rem; background: var(--paper); border: 1px solid var(--rule);
+  }
+  th, td { padding: 0.7rem 0.8rem; text-align: left; border-bottom: 1px solid var(--rule); color: var(--ink); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--paper-dim); }
+  th {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-mute); font-weight: 600; border-bottom: 2px solid var(--ink); background: var(--paper);
+  }
+  td.numeric { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; color: var(--ink); text-align: right; }
+  td.win    { color: var(--green) !important; font-weight: 600; }
+  td.miss   { color: var(--accent) !important; font-weight: 600; }
+  td.neutral { color: var(--ink-mute) !important; }
+
+  .tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 0.18em 0.55em; border-radius: 2px; border: 1px solid currentColor;
+  }
+  .tag.win { color: var(--green); }
+  .tag.miss { color: var(--accent); }
+  .tag.committed { color: var(--ink); background: var(--paper); }
+  .tag.unfinished { color: var(--ink-soft); border-style: dashed; }
+
+  ol.takeaways { list-style: none; counter-reset: t; padding: 0; margin: 1.4rem 0; }
+  ol.takeaways li { counter-increment: t; padding-left: 3rem; position: relative; margin-bottom: 1rem; }
+  ol.takeaways li::before {
+    content: counter(t, decimal-leading-zero);
+    position: absolute; left: 0; top: 0.05rem;
+    font-family: "JetBrains Mono", monospace; font-weight: 700;
+    color: var(--accent); font-size: 0.95rem; letter-spacing: 0.05em;
+  }
+  ol.takeaways b { font-weight: 700; }
+
+  .colophon {
+    margin-top: 5rem; padding-top: 1.5rem; border-top: 4px double var(--ink);
+    font-family: "JetBrains Mono", monospace; font-size: 0.74rem; color: var(--ink-mute); line-height: 1.7;
+  }
+  .colophon a { color: var(--ink); }
+
+  hr.fancy { border: none; text-align: center; margin: 2.5rem 0; color: var(--ink-mute); }
+  hr.fancy::before { content: "·   ·   ·"; letter-spacing: 0.5em; }
+
+  @media (max-width: 600px) {
+    .sheet { padding: 2rem 1.1rem 4rem; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead .meta { text-align: left; }
+    .lede { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+<article class="sheet">
+
+<header class="masthead">
+  <div>
+    <div class="kicker">Field Report III &nbsp;·&nbsp; nanochat → Hope/Nested Learning</div>
+    <h1>The architecture works.<br>The instrument <em>doesn't</em>.</h1>
+  </div>
+  <div class="meta">
+    <strong>Date</strong> 2026-05-01<br>
+    <strong>Hardware</strong> MacBook M2, 24GB<br>
+    <strong>Branch</strong> experiment/hope-nested-learning<br>
+    <strong>Result</strong> Stage 1 lands at parity, probe finds 2× gap
+  </div>
+</header>
+
+<p class="lede">
+  Field Report II ended at a wall: <strong>the optimizer is 79% of every iteration</strong>, the polar-express Newton-Schulz loop runs ten sequential GEMMs, and Metal can't fuse them. We had two ideas left — a small dispatch-count win, and a gradient-accumulation trick. Phase 3 chased both. Then we pivoted to the actual research arc — building Hope/Nested-Learning's mutable memory into nanochat, one stage at a time. Stage 0 plumbing landed clean. Stage 1's full pretrain landed at val_bpb parity with baseline. Then a Codex steer turned the question on its head: "your instrument is too blunt." We built a probe. The probe found something the LM perplexity couldn't see.
+</p>
+
+<div class="pull">
+  "Full LM val_bpb is too blunt for Hope/NL behavior. Before Stage 2, add a tiny diagnostic task/probe that can tell whether memory helps at all."
+  <span class="src">— Codex, mid-arc</span>
+</div>
+
+<section>
+  <div class="label">01 / Phase 3 wrap</div>
+  <h2>Cleaning up the perf wall, finding two bugs</h2>
+  <p>
+    Three small experiments finished closing the perf detour. The headline wins were modest. The headline <em>data</em> was that what worked on SFT did not transfer to pretrain — and that we'd been silently truncating SFT runs by ~4× without noticing.
+  </p>
+  <table>
+    <thead>
+      <tr><th>experiment</th><th>result</th><th>status</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>ve_gate</code> → AdamW (filter by name, not shape)</td>
+        <td class="win">319 → 176 GPU dispatches/iter (−45%); steady-state iter wall 2469 → 2162ms (−12%)</td>
+        <td><span class="tag committed">committed <code>840d3db</code></span></td>
+      </tr>
+      <tr>
+        <td>SFT accum=4 vs accum=1, iso-token</td>
+        <td class="win">B-iso val_bpb 0.6639 vs A 0.7568 (−12% rel); accum amortizes optimizer cost on in-memory data</td>
+        <td><span class="tag committed">recipe locked</span></td>
+      </tr>
+      <tr>
+        <td>Same trick on base pretrain (200-iter A1/A4 derisk)</td>
+        <td class="miss">A4 ~14% per-token <strong>slower</strong> — streaming parquet+BPE dataloader serializes with accum>1</td>
+        <td><span class="tag committed">do not transfer</span></td>
+      </tr>
+      <tr>
+        <td><code>chat_sft.py --num-iterations</code> bug fix + <code>mby:</code> instrumentation</td>
+        <td class="miss">Was counting micro-batches, not opt steps. With accum=N, runs ended at ~N/accum opt steps with a fully warmed-down LR schedule. Silent.</td>
+        <td><span class="tag committed">committed <code>a2d56ef</code></span></td>
+      </tr>
+      <tr>
+        <td><code>chat_sft.py</code> model_config <code>asdict</code> fix</td>
+        <td class="miss">Was hand-listing fields when serializing; missed <code>hope_memory_layer</code>; <code>chat_cli</code> couldn't reload Stage 1 SFT</td>
+        <td><span class="tag committed">committed <code>f143da2</code></span></td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    The <code>ve_gate</code> finding was a Codex tip: the tiny <code>(6,12)</code> gating matrices were burning a whole Polar Express dispatch group for almost no compute. Moving them to AdamW (filtered by module name, not shape, so the split is stable) dropped the dispatch count harder than predicted — the small group was emitting ~143 dispatches, not the ~30-40 we'd expected. Wall savings smaller than the dispatch ratio because the removed dispatches were on tiny matrices, but real.
+  </p>
+  <p>
+    The accum split between SFT (works) and pretrain (regresses) was the more useful finding. The mechanism we thought we were exploiting — amortizing optimizer cost across more micro-batches — is real on SFT because the dataloader is in-memory. On pretrain it gets eaten by the streaming tokenizer/parquet path serializing 4× the I/O per opt step. Locked the pretrain recipe at <code>accum=1, total_batch_size=16384</code> and moved on.
+  </p>
+  <p>
+    The <code>--num-iterations</code> bug bit us mid-experiment when our first accum=4 SFT A/B finished at step 94 instead of 375. The data generator's iteration counter increments per yield, and the training loop pulls <code>grad_accum_steps</code> yields per opt step. The same counter drove <code>approx_progress</code> which drove the LR schedule, so the truncated run completed a "valid" miniature schedule with no NaN — just a quietly different experiment than asked for. One-line fix at <code>chat_sft.py:281</code>; added an <code>mby:</code> field (microbatch-yield counter alongside the optimizer step counter) so any future drift between the two is immediately visible in the per-step log.
+  </p>
+</section>
+
+<section>
+  <div class="label">02 / Hope/NL Stages 0 + 1</div>
+  <h2>Plumbing, an architecture swap, a parity result</h2>
+  <p>
+    Stage 0 is pure refactor: thread an optional <code>memory_state</code> through <code>GPT.forward()</code> and each block, returning a tuple iff the caller passed one. Conditional-tuple-at-the-GPT-boundary kept all eleven existing call sites (training loops, evals, inference, tests, dev profilers) bit-identical. Six contract tests pin the load-bearing guarantee: <em>same loss, same logits, with vs without memory_state when no block actually carries memory</em>. Took ~45 min — well under the 2.5–4h estimate.
+  </p>
+  <p>
+    Stage 1 swaps one block's MLP for <code>LinearAttentionMemory</code>:
+  </p>
+  <pre><code>k_t, v_t, q_t = W_k x_t, W_v x_t, W_q x_t
+M_t = M_{t-1} + v_t k_t^T              # alpha=1, eta=1, fixed
+o_t = M_{t-1} q_t                      # read uses *previous* memory
+y_t = W_o o_t</code></pre>
+  <p>
+    Implemented via the parallel form <code>o_t = sum_{i&lt;t} (k_i · q_t) v_i</code> — equivalent to the recurrence above when <code>alpha=1, M_0=0</code>, but stays in one big causal-masked einsum. No Python token loop (per Codex's "avoid token loops from day one"). <code>W_o</code> zero-init so the architecture is bit-identical to baseline at step 0 and diverges as <code>W_o</code> trains.
+  </p>
+  <p>
+    Then we ran the actual experiment: a full 5000-iter d6 pretrain at the unchanged baseline recipe, with <code>--hope-memory-layer=3</code>. Output to a fresh model_tag so the existing baseline checkpoint was preserved untouched.
+  </p>
+  <table>
+    <thead>
+      <tr><th>run</th><th>architecture</th><th class="numeric">val_bpb</th><th class="numeric">params</th><th class="numeric">wall</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>baseline d6</td>
+        <td>MLP at all blocks</td>
+        <td class="numeric">1.174</td>
+        <td class="numeric">73.5M</td>
+        <td class="numeric">(prior)</td>
+      </tr>
+      <tr>
+        <td>d6_stage1</td>
+        <td>LinAttn at L3, MLP elsewhere</td>
+        <td class="numeric">1.179</td>
+        <td class="numeric">72.9M</td>
+        <td class="numeric">274 min</td>
+      </tr>
+      <tr>
+        <th colspan="2">Δ</th>
+        <td class="numeric"><strong>+0.005 (+0.4%)</strong></td>
+        <td class="numeric">−0.6M (−0.8%)</td>
+        <td class="numeric">—</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Within single-seed noise. The full 21-eval trajectory is monotonic, no NaN, no instability. SFT on top with the validated accum=4 recipe (now correct after the bug fix) landed at val_bpb 0.6712 vs <code>d6_b_iso</code>'s 0.6639 — also +1.1% rel, also within noise.
+  </p>
+  <p>
+    Spun up <code>chat_web</code> on a second port, side-by-side with the original baseline, and started probing. Both produce shallow co-occurrence-driven output at this scale: <em>"the capital of Paris is Paris,"</em> <em>"the sky blue is a small blue, with vibrant lights."</em> Stage 1 had a noticeably worse multi-turn coherence wobble on one probe — forgot what "it" referred to, gave a confidently wrong yes/no — but the unmodified baseline fell apart similarly after a couple turns. Operator's verdict: <em>"phase confirmed working, at least to the extent the other is."</em>
+  </p>
+</section>
+
+<section>
+  <div class="label">03 / The instrument problem</div>
+  <h2>Codex's pivot: val_bpb is too blunt</h2>
+  <p>
+    Three plausible next moves: more pretrain seeds for the val_bpb gap, jump to Stage 2 (per-token learned <code>α</code>/<code>η</code>), or stop and take the win. Sent the result to Codex. He pushed back on all three.
+  </p>
+  <div class="pull">
+    "I would not spend M2 time on multi-seed Stage 1 confirmation unless someone wants to claim 'Stage 1 improves/regresses nanochat.' Right now the claim should be narrower: 'memory-state plumbing plus one strict-causal linear-memory block trains end-to-end with negligible quality delta.' One seed is enough for that.<br><br>Before Stage 2, add a tiny diagnostic task/probe that can tell whether memory helps at all: associative recall, delayed copy, key-value recall across 512 tokens, or a synthetic in-context binding task. Full LM val_bpb is too blunt for Hope/NL behavior."
+    <span class="src">— Codex</span>
+  </div>
+  <p>
+    This is the right reframe. Average per-token cross-entropy on a 24M-token SFT mixture is dominated by positions where the architectural choice doesn't matter — common bigram patterns, format tokens, function words. A 1% gap can be either real architectural divergence on the load-bearing positions or noise on the bulk. Cranking more seeds doesn't sharpen the question; it just narrows the noise band on the same blunt instrument.
+  </p>
+  <p>
+    Captured the decision as <strong>ADR-001</strong> (the project's first formal architectural decision record): insert a <em>Stage 1.5</em> between Stage 1 and Stage 2, design and run a synthetic recall probe, let the result inform Stage 2's design and stability defaults.
+  </p>
+</section>
+
+<section>
+  <div class="label">04 / Stage 1.5 — the probe</div>
+  <h2>Multi-Query Associative Recall</h2>
+  <p>
+    Picked Multi-Query Associative Recall (MQAR), a standard from the linear-attention literature. Sequence layout:
+  </p>
+  <pre><code>&lt;bos&gt; k_1 v_1 k_2 v_2 ... k_K v_K &lt;sep&gt; q_1 a_1 q_2 a_2 ... q_M a_M</code></pre>
+  <p>
+    Model sees a list of (key, value) pairs in the prefix, then a sequence of query keys; it must produce the value bound to each query in the lookup. With <code>K=M=16</code>, <code>T=128</code>, a held-out test set, and per-query argmax accuracy as the load-bearing measurement. Both arms train from random init — only varying input is <code>hope_memory_layer</code>.
+  </p>
+  <p>
+    Vocab choice avoided BPE complications: pulled keys from token IDs <code>[1024, 1056)</code>, values from <code>[2048, 2080)</code>, both well below where common subword merges live. Reused the existing 32k-vocab tokenizer/model so no architecture changes were needed.
+  </p>
+  <h3>v1 — task too easy</h3>
+  <p>
+    First run: 1000 iters per arm, eval every 100. Baseline saturated to <strong>100% accuracy at step ~76</strong>. Killed early. The MLP wasn't doing the work — full self-attention was solving recall on its own. With <code>T=128</code> the lookup is shallow enough that the top-layer attention can attend from query position back to where the key appeared and read the bound value directly. The architectural swap at L3 isn't load-bearing on this task.
+  </p>
+  <p>
+    The "final layer is always full-context" constraint in <code>nanochat/gpt.py::_compute_window_sizes</code> means even <code>window_pattern='S'</code> leaves the last layer at full attention. The probe can't be made attention-bottlenecked without a real architecture change to that constraint. So we pivoted from "does the memory block do recall" to <em>"how does the swap affect downstream sample efficiency"</em> — same task, finer eval cadence, shorter horizon.
+  </p>
+  <h3>v2 — convergence-speed comparison</h3>
+  <p>
+    200 iters per arm, eval every 25, both arms back-to-back. Trajectory:
+  </p>
+  <table>
+    <thead>
+      <tr><th>step</th><th class="numeric">baseline loss</th><th class="numeric">baseline acc</th><th class="numeric">stage1 loss</th><th class="numeric">stage1 acc</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td>   <td class="numeric">10.399</td><td class="numeric">0.031</td><td class="numeric">10.399</td><td class="numeric">0.031</td></tr>
+      <tr><td>26</td>  <td class="numeric">3.492</td> <td class="numeric">0.037</td><td class="numeric">3.410</td> <td class="numeric">0.054</td></tr>
+      <tr><td>51</td>  <td class="numeric">3.264</td> <td class="numeric">0.111</td><td class="numeric">3.155</td> <td class="numeric">0.066</td></tr>
+      <tr><td>76</td>  <td class="numeric">0.017</td> <td class="numeric win">0.999</td><td class="numeric">2.935</td> <td class="numeric">0.131</td></tr>
+      <tr><td>101</td> <td class="numeric">0.004</td> <td class="numeric">1.000</td><td class="numeric">1.175</td> <td class="numeric">0.632</td></tr>
+      <tr><td>126</td> <td class="numeric">0.002</td> <td class="numeric">1.000</td><td class="numeric">0.496</td> <td class="numeric">0.863</td></tr>
+      <tr><td>151</td> <td class="numeric">0.002</td> <td class="numeric">1.000</td><td class="numeric">0.006</td> <td class="numeric win">1.000</td></tr>
+      <tr><td>200</td> <td class="numeric">0.002</td> <td class="numeric">1.000</td><td class="numeric">0.000</td> <td class="numeric">1.000</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Step 1 is bit-identical (loss 10.3988, acc 0.031) — same fixed seed, both architectures share their starting state because <code>W_o</code> initializes to zero and the memory block contributes exactly nothing at init. From step 26 onward they diverge.
+  </p>
+  <p>
+    The shape is the story. <strong>Baseline groks abruptly</strong> — between step 51 and 76, accuracy jumps from 0.111 to 0.999 in a 25-iter window. <strong>Stage 1 groks gradually</strong> — 0.131 → 0.632 → 0.863 → 1.000 across step 76 → 101 → 126 → 151. Different shape, not just shifted. Stage 1 reaches the same final answer, but takes ~2× the iterations to get there.
+  </p>
+  <p>
+    Best hypothesis: replacing the MLP at L3 (ReLU² nonlinearity) with <code>LinearAttentionMemory</code> (bilinear <code>(k·q)v</code>) removes one feature-shaping nonlinearity. Recall via attention requires the softmax-or-equivalent to <em>select</em> a position; the MLP's nonlinearity helps surrounding blocks shape representations into something attention can sharply select on. Stage 1's L3 block is doing a second causal-attention-like operation without softmax — not removing capability, just removing one of the nonlinear steps that make selection sharp. The model compensates via the remaining 5 MLP blocks, which it does, but slower.
+  </p>
+</section>
+
+<section>
+  <div class="label">05 / Takeaways</div>
+  <h2>Where this leaves us</h2>
+  <ol class="takeaways">
+    <li>
+      <b>Codex's "your instrument is too blunt" steer was correct and validated.</b> The val_bpb gap (1.1% on SFT) hid a 2× sample-efficiency gap on a task where the architectural difference matters. We would have built Stage 2 on top of Stage 1 without knowing the swap incurs a real cost on recall-shaped problems. Now we know — Stage 2's gates have to <em>recover</em> that gap before claiming improvement.
+    </li>
+    <li>
+      <b>The probe is reusable infrastructure.</b> Each arm runs in ~8 minutes. Any future architectural variant can be put through it as a fast gate before sinking 3 hours into a full d6 pretrain. If a Stage 2 variant doesn't recover at least baseline's MQAR convergence speed, we know to iterate before scaling up.
+    </li>
+    <li>
+      <b>Hope-flavored benefits don't show up at d6 / T=128 / full attention.</b> The interesting Hope/NL claims — sub-quadratic effective context, test-time adaptation, recall-at-scale — live at scales we won't touch on this hardware, and require attention to be the bottleneck (which it isn't here). What we can validate at d6 is that <em>the plumbing is sound and the architecture trains to parity</em>. We did. Stage 1 is a solid foundation; whether we ride it to Stages 2-6 or stop here is now a clean decision.
+    </li>
+    <li>
+      <b>Two real upstream-relevant bugs found and fixed.</b> The <code>chat_sft.py --num-iterations</code> micro-batch counting silently invalidated any A/B that varies <code>--total-batch-size</code> while passing <code>--num-iterations</code>; the model_config hand-listing was a latent footgun for any new <code>GPTConfig</code> field. Both fixed with minimal diffs; the bf16 fix from earlier is already filed as <a href="https://github.com/karpathy/nanochat/pull/741">karpathy/nanochat#741</a>.
+    </li>
+  </ol>
+  <hr class="fancy">
+  <p>
+    Decision point now lives with the operator: <strong>(a)</strong> proceed to Stage 2 with the convergence-speed gap as a load-bearing constraint, <strong>(b)</strong> patch the always-full-final-layer constraint and re-run the probe attention-bottlenecked, or <strong>(c)</strong> wrap the arc here. Each is defensible. The repo is in a clean state for any of them.
+  </p>
+</section>
+
+<div class="colophon">
+  Field Report III. Branch <code>experiment/hope-nested-learning</code>.<br>
+  Companion notes: <code>docs/phase3_step3_grad_accum_2026-05-01.md</code>, <code>docs/phase3_step4_pretrain_accum_derisk_2026-05-01.md</code>, <code>docs/hope_nl_stage0_2026-05-01.md</code>, <code>docs/hope_nl_stage1_2026-05-01.md</code>, <code>docs/hope_nl_stage1_full_pretrain_2026-05-01.md</code>, <code>docs/hope_nl_stage1_5_probe_design_2026-05-01.md</code>, <code>docs/hope_nl_stage1_5_results_2026-05-01.md</code>, <code>docs/project_notes/decisions.md</code> (ADR-001).<br>
+  Probe code: <code>dev/probe_mqar.py</code>. Upstream PR: <a href="https://github.com/karpathy/nanochat/pull/741">karpathy/nanochat#741</a>.
+</div>
+
+</article>
+</body>
+</html>
