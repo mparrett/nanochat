@@ -18,6 +18,7 @@ import wandb
 import torch
 from nanochat.common import compute_init, compute_cleanup, print0, DummyWandb, get_base_dir, autodetect_device_type, get_peak_flops, COMPUTE_DTYPE, COMPUTE_DTYPE_REASON, is_ddp_initialized
 from nanochat.tokenizer import get_token_bytes
+from dataclasses import asdict
 from nanochat.checkpoint_manager import save_checkpoint, load_model, load_optimizer_state
 from nanochat.loss_eval import evaluate_bpb
 import torch.distributed as dist
@@ -450,15 +451,11 @@ while True:
             {
                 "step": step,
                 "val_bpb": val_bpb, # loss at last step
-                "model_config": {
-                    "sequence_len": args.max_seq_len,
-                    "vocab_size": tokenizer.get_vocab_size(),
-                    "n_layer": depth,
-                    "n_head": model.config.n_head,
-                    "n_kv_head": model.config.n_kv_head,
-                    "n_embd": model.config.n_embd,
-                    "window_pattern": model.config.window_pattern,
-                },
+                # Serialize the live model.config dataclass directly. Hand-listing fields
+                # silently drops any new field added later (this exact bug bit us when
+                # hope_memory_layer didn't survive the SFT save and chat_cli couldn't
+                # reconstruct the model architecture).
+                "model_config": asdict(model.config),
                 "user_config": user_config, # inputs to the training script
             },
             rank=ddp_rank,
