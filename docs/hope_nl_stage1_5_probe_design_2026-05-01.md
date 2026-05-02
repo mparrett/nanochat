@@ -103,7 +103,7 @@ Two arms, identical training budget:
 
 ### Wall budget
 
-Per arm: 1000 iters × ~0.5 s/iter (T=128 is much faster than DCLM's T=512) ≈ **8–10 min**. Two arms = **~20 min** plus iteration on the design.
+Smoke-test on M2 plugged in shows ~2–3 s/iter (slower than my initial T=128 estimate; the d6 model still has substantial per-iter overhead even at short sequence length). Per arm: 1000 iters × ~1.2 s/iter steady state + first-iter compile + 10 evals ≈ **~22 min**. Two arms = **~45 min** total. Half of that is recoverable by dropping `--num-iterations` to 500 if convergence happens faster than expected.
 
 ## Expected outcomes & how to read them
 
