@@ -143,6 +143,21 @@ The trade-off framing — "small init preserves bit-identical-at-step-0 vs large
 
 If we ever need bit-identical-at-step-0 for some diagnostic comparison, scale=0.0 is still available. For training recipes that just want the memory mechanism to work, **scale=1.0 is the new default**.
 
+### Cross-check: swap variant with W_o=1.0
+
+The sweep was on the additive variant. To confirm the W_o init fix isn't somehow architecture-specific, we ran the swap variant (LinearAttentionMemory replacing MLP at L3) with `hope_memory_w_o_init_scale=1.0` too:
+
+| step | baseline | **swap(W_o=0)** | **swap(W_o=1.0)** | additive(W_o=1.0) |
+|---:|---:|---:|---:|---:|
+| 26 | 0.037 | 0.054 | 0.065 | 0.065 |
+| 51 | 0.111 | 0.066 | **0.696** | 0.156 |
+| 76 | **0.999** | 0.131 | **0.9998** | 0.9995 |
+| 101 | 1.000 | 0.632 | 1.000 | 1.000 |
+
+**Confirmed: the fix works for both topologies.** swap(W_o=1.0) saturates at step ~76, identical to baseline and to additive(W_o=1.0). The architecture choice (swap vs additive) does not affect grokking speed once the cold start is fixed.
+
+Curiosity: swap(W_o=1) shows even higher acc at step 51 than additive(W_o=1) (0.696 vs 0.156). Both saturate at step 76, but the swap may have a marginally sharper inflection — plausibly because the swap's gradient signal is cleaner ("memory IS the L3 FFN" vs "memory competes with L3 MLP"). One seed each, so this could also be noise. Worth a confirmation seed if anyone cares to claim swap > additive for this kind of task.
+
 ## Decision point
 
 The sweep gives a clean answer: **`hope_memory_w_o_init_scale=1.0` is the recommended default** for any memory-bearing block going forward.
