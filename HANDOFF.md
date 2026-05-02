@@ -115,9 +115,13 @@ Read the trx4mr ticket for the staged 0–6 implementation plan.
 - [x] CPU baseline run confirmed — full pretrain + SFT done end-to-end on M2
 - [x] Read `nanochat/gpt.py` (and most of optim.py)
 - [ ] Full paper §4–§9 obtained
-- [ ] Stage 0 implemented (memory_state plumbing)
-- [ ] Stage 1 implemented (one block linear-attention memory)
-- [ ] Stage 1 vs baseline comparison run
+- [x] Stage 0 implemented (memory_state plumbing) — commit `d2bbc0e`
+- [x] Stage 1 implemented (one block linear-attention memory swap) — commit `bc54858`
+- [x] Stage 1 vs baseline comparison run — val_bpb 1.179 vs 1.174 (+0.4%)
+- [x] Stage 1.5 MQAR probe — sample-efficiency gap found and explained
+- [x] Stage 1-additive variant — falsified the "lost MLP nonlinearity" hypothesis
+- [x] Stage 1.5b/c W_o init knob + sweep — root cause + recommended default
+- [ ] Stage 2 implemented (per-token learned α/η, vectorized via prefix log-products)
 
 ## Status update — 2026-04-30 (end of session)
 
@@ -213,4 +217,108 @@ ticket. But two things to keep in mind:
 - We have a clean baseline checkpoint at `~/.cache/nanochat/base_checkpoints/d6/model_005000.pt`
   to compare against. Don't accidentally overwrite — use a different `--model-tag`
   for Hope/NL experiments.
+
+## Status update — 2026-05-02 (end of session 2)
+
+Closed Phase 3 perf detour and built Stage 0 + Stage 1 + a synthetic-probe
+arc that resolved an architectural surprise into an actionable init fix.
+Ready to start Stage 2.
+
+### What got done this session
+
+**Phase 3 step 3** (`docs/phase3_step3_grad_accum_2026-05-01.md`)
+- `ve_gate` → AdamW: 319 → 176 GPU dispatches/iter (-45%), 12% iter wall (commit `840d3db`).
+- SFT accum=4 A/B: B-iso (accum=4, 375 opt steps) val_bpb 0.6639 vs A 0.7568. Locked SFT recipe at accum=4. Found and fixed `chat_sft.py --num-iterations` bug (was counting micro-batches, gave ~N/accum opt steps silently). Commit `a2d56ef`.
+- Found and fixed `chat_sft.py` model_config asdict bug — was hand-listing fields, missed `hope_memory_layer`. Commit `f143da2`.
+
+**Phase 3 step 4** (`docs/phase3_step4_pretrain_accum_derisk_2026-05-01.md`)
+- Pretrain accum=4 derisk: confirmed accum=4 doesn't transfer to base pretrain on M2. ~14% per-token slower because the streaming parquet+BPE dataloader serializes with accum>1. Locked pretrain at accum=1/16384. Commit `bc7f9a2`.
+
+**Hope/NL Stage 0** (`docs/hope_nl_stage0_2026-05-01.md`)
+- `memory_state` plumbing through `GPT.forward` and `Block.forward`. Conditional-tuple at GPT boundary keeps all ~11 existing call sites unchanged. `reset_memory()` returns fresh `[None]*n_layer`. 6 contract tests pin bit-identical loss/logits with vs without memory_state. Commit `d2bbc0e`.
+
+**Hope/NL Stage 1** (`docs/hope_nl_stage1_2026-05-01.md`, `docs/hope_nl_stage1_full_pretrain_2026-05-01.md`)
+- `LinearAttentionMemory` module (causal linear attention parallel form, alpha=1, eta=1, strict-causal mask). Swapped MLP at one block via new `hope_memory_layer` config field. Commit `bc54858`.
+- Full d6 pretrain at L3: val_bpb **1.179** vs baseline 1.174 (+0.4% rel, within single-seed noise). 274 min wall. Commit reference in writeup.
+- SFT on top with accum=4 (post-bug-fix): val_bpb 0.6712 vs `d6_b_iso` 0.6639. Chat assess via `chat_cli` and side-by-side `chat_web` confirmed the architecture works at d6 quality level.
+
+**Hope/NL Stage 1.5 — synthetic probe** (`docs/hope_nl_stage1_5_*.md`)
+- Codex steered: "val_bpb is too blunt, build a synthetic probe." ADR-001 captured the decision (`docs/project_notes/decisions.md`).
+- Built `dev/probe_mqar.py` — Multi-Query Associative Recall, K=M=16, T=128. From-scratch random init, both architectures, identical training budget.
+- v1 (full attention, 1000 iters): killed early — both arms saturate by step ~76 because attention solves recall on its own; the architectural swap isn't load-bearing on this task.
+- v2 (200 iters, eval-every=25, convergence-speed): **swap is ~2× slower-to-grok than baseline.** Baseline saturates by step 76; swap by step 151.
+- **Operator's additive-insertion idea:** keep the MLP, add memory as a third residual stream. Falsified the "lost MLP nonlinearity" hypothesis — additive was just as slow. Pointed at the real cause: `W_o = 0` init creates K/V/Q gradient-gating cold start. Commits `f990b16`, `4157e6e`.
+- Stage 1.5b: added `hope_memory_w_o_init_scale` config knob. With scale=1.0 (uniform init at K/V/Q magnitude), additive memory matches baseline grokking step-for-step (99.95% at step 76). The W_o=0 init was the entire ~2× gap. Commit `3f54bc6`.
+- Stage 1.5c sweep across scale ∈ {0.0, 0.1, 0.5, 1.0}: monotonic, scale=1.0 wins at 2× the second-best on time-to-saturate. Recommended default for any memory-bearing config. Commit `07e3312`.
+
+**Tooling additions** that survived the session:
+- `dev/probe_mqar.py` — reusable synthetic-recall gate for any future architectural variant. ~6 min/arm.
+- `--hope-memory-layer` and `--hope-additive-memory-layer` CLI flags on `base_train.py`.
+- Cooperative pause-by-touch in `base_train.py` and `chat_sft.py` (`touch /tmp/pause-nanochat`). Commit `245fd09`.
+- `chat_sft.py` `mby:` instrumentation — surfaces microbatch yield count alongside opt-step count to immediately catch any future drift between the two.
+
+### Where everything lives (added this session)
+
+- **Phase 3 step 3 writeup:** `docs/phase3_step3_grad_accum_2026-05-01.md`
+- **Phase 3 step 4 writeup:** `docs/phase3_step4_pretrain_accum_derisk_2026-05-01.md`
+- **Stage 0 writeup:** `docs/hope_nl_stage0_2026-05-01.md`
+- **Stage 1 writeup:** `docs/hope_nl_stage1_2026-05-01.md`
+- **Stage 1 full pretrain:** `docs/hope_nl_stage1_full_pretrain_2026-05-01.md`
+- **Stage 1.5 design + ADR:** `docs/hope_nl_stage1_5_probe_design_2026-05-01.md`, `docs/project_notes/decisions.md::ADR-001`
+- **Stage 1.5 results (swap):** `docs/hope_nl_stage1_5_results_2026-05-01.md`
+- **Stage 1.5 additive:** `docs/hope_nl_stage1_5_additive_2026-05-01.md`
+- **Stage 1.5b W_o init + sweep:** `docs/hope_nl_stage1_5b_w_o_init_2026-05-01.md`
+- **Field Report III narrative:** `docs/phase3_to_stage1_5_2026-05-01.html`
+- **MLX evaluation (parked):** `docs/mlx_port_evaluation_2026-05-01.md`
+- **Bug ticket archive:** `docs/project_archived/bug_chat_sft_num_iterations_micro_batch_semantics.md`
+
+### Where the architecture wall is now
+
+For Hope/NL specifically:
+- **`W_o = 0` init is a known cold-start trap.** Use `hope_memory_w_o_init_scale=1.0` for any memory-bearing block. Backward-compat shim handles older checkpoints.
+- **MQAR probe is the gate.** Any new architectural variant should match baseline's step ~76 saturation before getting a full d6 pretrain budget.
+- **At d6 / T=512 / full attention, memory mechanisms are not load-bearing for recall.** Hope-flavored benefits (long-context, in-context recall at scale, test-time adaptation) live at scales we won't reach on M2.
+
+### Stage 2 starting point
+
+When you pick up Stage 2 next:
+
+1. **Read first**:
+   - `docs/hope_nl_stage1_5b_w_o_init_2026-05-01.md` (the W_o init story)
+   - `docs/hope_nl_stage1_5_additive_2026-05-01.md` (the additive variant)
+   - Codex's response in the conversation history that set up Stage 1.5
+
+2. **Architectural design** (Codex's outline):
+   - Per-token learned `α_t = sigmoid(W_α(x_t))` and `η_t = η_max * sigmoid(W_η(x_t))`.
+   - **Vectorized via prefix log-products** to avoid token loops:
+     ```
+     log_prefix_alpha[t] = sum_{j<=t} log(alpha_j)
+     decay(t, i)         = exp(log_prefix_alpha[t-1] - log_prefix_alpha[i])
+     o_t                 = sum_{i<t} (q_t · k_i) * eta_i * decay(t, i) * v_i
+     ```
+     One big causal-masked einsum, same O(T²) cost class as Stage 1, no Python loops.
+
+3. **Stability defaults** (per Codex):
+   - Inherit `hope_memory_w_o_init_scale=1.0` (Stage 1.5b default — load-bearing).
+   - Bound `α < 0.999` (clamp or sigmoid scaling).
+   - Initialize `α` near long memory (e.g. start near 0.99), not random forgetting.
+   - Cap or small-init `η`.
+   - Log α histograms, η histograms, memory-read RMS, residual RMS, W_o norm.
+
+4. **Pass/fail bar via probe before any pretrain**:
+   - Run `dev/probe_mqar.py` with the Stage 2 architecture and `--hope-memory-w-o-init-scale=1.0`.
+   - If saturation step is ≥ baseline (~76), Stage 2 is competitive with Stage 1 — proceed to a real pretrain.
+   - If meaningfully later, debug the gates before sinking ~3h pretrain budget.
+
+5. **Operator preferences** that came up:
+   - One commit per discrete change, with multi-paragraph commit message explaining why.
+   - Markdown writeup first (insurance against context exhaustion), HTML narrative second (publication-style).
+   - Cooperative pause hook is wired in (`touch /tmp/pause-nanochat`); use it on long runs.
+
+### Open questions punted for a future session
+
+- The Stage 1-additive (W_o=1) variant has not been run at full d6 pretrain. Open whether the probe's "matches baseline" finding generalizes to LM val_bpb on DCLM.
+- The always-final-layer-L constraint in `_compute_window_sizes` blocks any "make the probe attention-bottlenecked" follow-up. Lifting it is a small patch; would let us re-run MQAR with restricted attention to genuinely test whether memory blocks can do recall.
+- No Hope-specific behavioral probe exists yet (in-context binding, parity, counting). MQAR was the chosen synthetic; others might surface different architectural tradeoffs.
+- Codex's third Stage 2-related steer ("multi-seed Stage 1") was rejected for Stage 1; whether to seed-confirm any Stage 2 result is open.
 
