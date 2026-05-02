@@ -42,6 +42,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--label', type=str, default='probe', help='log prefix to identify the run')
 parser.add_argument('--hope-memory-layer', type=int, default=-1, help='layer index for LinearAttentionMemory swap (-1 = disabled / baseline MLP)')
 parser.add_argument('--hope-additive-memory-layer', type=int, default=-1, help='layer index for additive LinearAttentionMemory (-1 = disabled). Adds a third residual contribution alongside attn+mlp instead of replacing the MLP.')
+parser.add_argument('--hope-memory-w-o-init-scale', type=float, default=0.0, help='LinearAttentionMemory W_o init scale (0.0 = zeros [default], >0 = uniform[-s*scale, s*scale] like K/V/Q)')
 # Task shape
 parser.add_argument('--K', type=int, default=16, help='number of (key, value) pairs in the lookup prefix')
 parser.add_argument('--M', type=int, default=16, help='number of queries in the suffix')
@@ -156,6 +157,7 @@ config = GPTConfig(
     window_pattern='L',
     hope_memory_layer=hope_layer,
     hope_additive_memory_layer=hope_add_layer,
+    hope_memory_w_o_init_scale=args.hope_memory_w_o_init_scale,
 )
 print(f'[{args.label}] config: {config}')
 

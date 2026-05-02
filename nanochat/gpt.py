@@ -48,6 +48,13 @@ class GPTConfig:
     # learn to use the memory pathway without losing the MLP nonlinearity.
     # See ADR-001 follow-up; addresses the Stage 1.5 sample-efficiency finding.
     hope_additive_memory_layer: int | None = None
+    # Hope/NL Stage 1.5b: scale for the LinearAttentionMemory W_o init.
+    # 0.0 = zeros init (default — bit-identical to baseline at step 0, but creates
+    # a chicken-and-egg cold start because K/V/Q gradients are gated by W_o).
+    # >0  = uniform[-s*scale, s*scale] where s = sqrt(3)/sqrt(d_model). 1.0 matches
+    # the K/V/Q init magnitude. Anything >0 unblocks K/V/Q gradient flow at step 1
+    # but breaks the bit-identical-init guarantee.
+    hope_memory_w_o_init_scale: float = 0.0
 
 
 def norm(x):
@@ -64,6 +71,22 @@ class Linear(nn.Linear):
 def has_ve(layer_idx, n_layer):
     """Returns True if GPT layer should have Value Embedding (alternating, last layer always included)."""
     return layer_idx % 2 == (n_layer - 1) % 2
+
+
+def _init_w_o(weight, s, scale):
+    """Init W_o per the hope_memory_w_o_init_scale config.
+
+    scale=0.0 → zeros (default, bit-identical to baseline at step 0 but creates a
+    chicken-and-egg cold start: K/V/Q gradients are gated by W_o, so they don't
+    move until W_o moves, and W_o moves slowly because its gradient depends on
+    the einsum output which is random.)
+
+    scale>0   → uniform[-s*scale, s*scale]. scale=1.0 matches K/V/Q init magnitude.
+    """
+    if scale == 0.0:
+        torch.nn.init.zeros_(weight)
+    else:
+        torch.nn.init.uniform_(weight, -s * scale, s * scale)
 
 def apply_rotary_emb(x, cos, sin):
     assert x.ndim == 4  # multihead attention
@@ -307,7 +330,7 @@ class GPT(nn.Module):
                 torch.nn.init.uniform_(block.mlp.W_k.weight, -s, s)
                 torch.nn.init.uniform_(block.mlp.W_v.weight, -s, s)
                 torch.nn.init.uniform_(block.mlp.W_q.weight, -s, s)
-                torch.nn.init.zeros_(block.mlp.W_o.weight)
+                _init_w_o(block.mlp.W_o.weight, s, self.config.hope_memory_w_o_init_scale)
             else:
                 raise NotImplementedError(f"init_weights does not know how to init mlp of type {type(block.mlp).__name__}")
             # Hope/NL Stage 1-additive: same init pattern as the swap variant — KVQ uniform, W_o zero.
@@ -315,7 +338,7 @@ class GPT(nn.Module):
                 torch.nn.init.uniform_(block.add_memory.W_k.weight, -s, s)
                 torch.nn.init.uniform_(block.add_memory.W_v.weight, -s, s)
                 torch.nn.init.uniform_(block.add_memory.W_q.weight, -s, s)
-                torch.nn.init.zeros_(block.add_memory.W_o.weight)
+                _init_w_o(block.add_memory.W_o.weight, s, self.config.hope_memory_w_o_init_scale)
 
         # Per-layer scalars
         # Per-layer resid init: stronger residual at early layers, weaker at deep layers
