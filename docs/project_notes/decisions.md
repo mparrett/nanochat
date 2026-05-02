@@ -22,3 +22,39 @@ Detailed probe design lives in `docs/hope_nl_stage1_5_probe_design_2026-05-01.md
 - Sets a precedent: from now on, architectural changes get diagnosed against a targeted synthetic probe before full LM pretrain budget is spent.
 
 **Status**: accepted 2026-05-01. Implementation pending.
+
+## ADR-002: Move to Stage 2; design priors after Codex response (2026-05-02)
+
+**Context**: Stage 1.5b resolved the swap arm's ~2× MQAR sample-efficiency gap to a single root cause: `W_o = 0` init creates a K/V/Q gradient gate, and `hope_memory_w_o_init_scale=1.0` closes the gap exactly. Stage 1 (swap, W_o=0) hit val_bpb 1.179 vs baseline 1.174 (+0.4%) at full d6 pretrain. The 1.5b writeup left three options on the table:
+
+(a) Re-run Stage 1-additive (W_o=1.0) at full d6 pretrain (~3h) to see if probe-level parity generalizes to DCLM.
+(b) Move to Stage 2 (per-token learned α/η) directly on the W_o=1.0 foundation, gated by MQAR.
+(c) Wrap and hand off.
+
+We solicited Codex's read. Summary of his response (`/tmp/pasteboard-2`):
+
+- W_o=0 was the wrong default; mechanism analysis matches our finding.
+- For Stage 2: keep `w_o_init_scale=1.0`; control initial perturbation via `eta`/read scale, not by zeroing W_o. **Don't init eta near zero** — recreates a softer gradient gate.
+- α near long memory but not saturated — `0.995 - 0.999`; explicit logged logit bias.
+- Vectorize via prefix log-products with `log(clamp(α, eps, 0.999))`.
+- Log gradient norms for `W_q/W_k/W_v/W_o/W_α/W_η` on the probe — "stable" can hide dead-gradient startup.
+- **Topology**: start additive, not swap — isolates whether the memory branch learns useful behavior without paying the cost of removing an MLP. Swap is a sharper compression experiment for later.
+- Skip option (a). MQAR is doing its job; full DCLM pretrain waits until Stage 2 shows a probe-level win or no regression.
+
+**Decision**: Move to Stage 2 (option b). Adopt the following design priors:
+
+1. **`hope_memory_w_o_init_scale=1.0`** — load-bearing, inherit from 1.5b.
+2. **`α_t = α_max · sigmoid(W_α x_t + b_α)`** with `α_max ≈ 0.999`; init `b_α` so initial α sits near 0.99 (long memory, not saturated). Logged.
+3. **`η_t = η_max · sigmoid(W_η x_t + b_η)`** with small but live init (do NOT init at or near zero). Logged.
+4. **Vectorized prefix-log-product form**: `log_α = log(clamp(α, eps, α_max))`, prefix sums, subtract to form causal decays. One causal-masked einsum. No per-token Python loop. Same O(T²) cost class as Stage 1.
+5. **Probe diagnostics**: log gradient norms for `W_q/W_k/W_v/W_o/W_α/W_η`, α/η histograms, memory-read RMS, residual RMS, W_o norm. The 1.5b lesson — silent dead-gradient startup — generalizes.
+6. **Topology**: start with **additive** insertion (memory as third residual stream alongside attn and mlp at one block). Swap can follow if additive shows a clean probe win.
+7. **Probe is the gate**: Stage 2 must match baseline MQAR saturation (~step 76) before any pretrain. If it lags, debug before sinking budget.
+
+**Where we hold our own view (departures or open carve-outs from Codex's input)**:
+
+- *Topology preference (additive vs swap)*: Codex argues additive is the cleaner experimental isolation. We agree to start there, but flag that the 1.5b cross-check showed swap(W_o=1.0) and additive(W_o=1.0) both saturate at step 76 with comparable trajectories — and swap had higher acc at step 51 (0.696 vs 0.156, single seed, may be noise). Swap is not architecturally weaker on the data we have; the choice is a design preference about what we're trying to measure, not a data-driven elimination.
+- *Skipping Stage 1-additive (W_o=1.0) full pretrain*: Codex's logic — "MQAR found a real bug in 6 min, save the 3h for Stage 2" — is sound budget management. We adopt it, but note that the probe and DCLM val_bpb measure different things (synthetic recall vs natural-language modeling). If Stage 2 ever shows an unexpected DCLM regression, "we don't have a W_o=1.0 Stage 1 baseline at full pretrain" will be a real gap. Acceptable trade for now; flag it if it bites.
+- *α init range (0.995-0.999)*: Reasonable, but not a fixed value. Effective horizon depends on context length: at T=512, α=0.99 decays to ~0.006 by end; α=0.999 to ~0.6. For our probe (T=128), almost any α in this range carries fine; for SFT (T≤1024) and pretrain (T=2048) it matters more. Default to ~0.99 initial (per design prior #2) but treat as a knob, not a fixed.
+
+**Status**: accepted 2026-05-02. Implementation starting.

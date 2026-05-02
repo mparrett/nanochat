@@ -171,3 +171,12 @@ Three possible next moves:
 (c) **Wrap, hand off.** Stage 0 + 1 + 1.5 + 1.5b + 1.5c are a complete experimental unit. A clean handoff for whoever picks up Stage 2 is on the table.
 
 Operator's lean dictates which.
+
+## Resolution (2026-05-02)
+
+Operator chose **(b)**, informed by Codex's response. Decision and design priors recorded in `docs/project_notes/decisions.md::ADR-002`. Headline:
+
+- Stage 2 starts on the `W_o=1.0` foundation, additive topology, vectorized prefix-log-product form.
+- α near long memory (~0.99 initial, α_max ≈ 0.999); η small but live (NOT near zero — same gradient-gate trap).
+- MQAR probe is the gate; ~3h DCLM pretrain budget held until Stage 2 clears it.
+- Where we depart from Codex: topology choice is design preference, not data-driven; skipping Stage 1-additive full pretrain is a budget call we accept with a noted gap.
