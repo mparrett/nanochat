@@ -11,22 +11,20 @@
 
 ## TL;DR
 
-Stage 2 with Codex's design priors (default α≈0.99, η≈0.10, W_o=1.0, additive
-@ L3) **passes the MQAR probe with a different convergence shape** than baseline:
+Stage 2 with ADR-002 defaults (additive @ L3, W_o=1.0, α≈0.99, η≈0.10) on MQAR:
 
-- **Step 51**: Stage 2 hits **0.92 acc**; baseline at 0.11, Stage 1-additive at 0.16.
-- **Step 76**: Stage 2 plateaus at 0.94; baseline jumps to 1.00.
-- **Step 101**: All three at 1.00.
+- **Architecture functions as designed.** Gates alive from step 1 (no cold-start
+  dead gradient on any of W_α/W_η/b_α/b_η).
+- **Reproducibly slower than baseline** at full saturation. Two seeds: 0.99 acc
+  reached at steps 101 / 126. Baseline reproducibly ~76. Lag ~25-50 steps.
+- **Two seeds, two different gate strategies** for the same task: seed=0 drove
+  α down (forget-by-default), seed=1 kept α high and ran η_max up to 0.93
+  (write-strongly-when-needed). Both converged. Suggests the gate space has
+  multiple basins and default α≈0.99 may be too sensitive to init.
 
-So Stage 2 is **earlier at intermediate accuracy, marginally later at full
-saturation** (101 vs 76). The gates are alive and learning per-token: by step
-51 α has spread to [0.57, 0.87, 0.98] and η has dropped to [0.00, 0.004, 0.06] —
-the model is using the gating mechanism nontrivially. No cold-start dead-gradient
-(grads on all 6 gate params nonzero from step 1, per the 1.5b lesson).
-
-Decision-relevant: the architecture is functioning, but on this single seed the
-"step ≤ 100 saturation" bar from ADR-002 lands exactly at step 101 — a marginal
-pass. Three follow-up moves on the table; operator's lean dictates which.
+Decision: pivot to **(b) α_init_bias sweep** before any pretrain. The
+seed-variance is the most actionable signal — likely a default-tuning issue,
+not an architectural one. ~21 min for a 3-arm single-axis sweep on α.
 
 ## What Stage 2 adds
 
@@ -218,38 +216,70 @@ reproducibly ~76; Stage 1-additive(W_o=1) was reproducibly ~76. Stage 2's
 seed we can't distinguish "real architectural property" from "this seed got
 unlucky on the long tail."
 
-## Decision point
+## Confirmation seed (2026-05-02)
 
-Three moves on the table:
+Per the operator's lean (a → b), ran Stage 2 with `--seed=1` to test whether
+seed=0's curve was the headline result or a single-seed artifact.
 
-(a) **Confirmation seed on Stage 2.** Re-run with `--seed=1` (~7 min). If
-    saturation is still ~step 101, the lag is real and we tune defaults. If
-    it's ~step 76, the result reproduces baseline and we skip to (c). Cheap;
-    insurance against single-seed conclusions.
+| step | baseline | s2 seed=0 | s2 seed=1 |
+|---:|---:|---:|---:|
+| 1   | 0.031 | 0.031 | 0.039 |
+| 26  | 0.037 | 0.060 | 0.065 |
+| 51  | 0.111 | **0.922** | 0.385 |
+| 76  | **0.999** | 0.944 | 0.561 |
+| 101 | 1.000 | 1.000 | **0.988** |
+| 126 | 1.000 | 1.000 | 0.999 |
+| 200 | 0.999 | 1.000 | 0.999 |
 
-(b) **Tune α/η init biases.** Stage 2's softer final approach plausibly
-    relates to the gate dynamics. A small sweep:
-    - α_init_bias ∈ {3.0, 4.595 (default), 6.0} — controls how quickly the
-      model can move α from initial 0.99 toward selective forgetting
-    - η_init_bias ∈ {-3.0, -2.197 (default), -1.0} — controls how strongly
-      the memory writes from step 1
-    Each arm ~7 min; full 3×3 sweep is ~63 min. Could narrow to single-axis
-    sweeps to start.
+Wall: 6.4 min.
 
-(c) **Schedule full d6 DCLM pretrain with Stage 2 defaults.** ~3 h wall, with
-    pause hook (`touch /tmp/pause-nanochat`) for cooperative interrupts. Real
-    test of whether the gating mechanism transfers from synthetic recall to
-    natural language modeling. Compares against:
-    - baseline d6 (val_bpb 1.174)
-    - Stage 1 swap, W_o=0 (val_bpb 1.179, +0.4%)
-    - (optional, deferred) Stage 1-additive, W_o=1.0 — we don't have this
+**Reading**: the Stage 2 lag is real, not single-seed luck. Both seeds reach
+0.99 between step 101-126; baseline reproducibly hits it at step 76 (per the
+1.5b sweep). That's a ~25-50 step lag depending on threshold.
 
-Operator's lean dictates which.
+But the two seeds found **different gate strategies** for the same task:
 
-My read: (a) first as cheap insurance, then either (b) if seed-1 also lags or
-(c) if seed-1 saturates at ~76. The grad-norm and gate-evolution data already
-shows the architecture functioning as designed; the soft tail is the only
-question worth nailing before pretrain budget.
+| step | seed=0 α[min/mean/max] | seed=0 η[min/mean/max] | seed=1 α[min/mean/max] | seed=1 η[min/mean/max] |
+|---:|---|---|---|---|
+| 51  | 0.565 / 0.871 / 0.983 | 0.000 / 0.004 / 0.058 | 0.983 / 0.995 / 0.998 | 0.001 / 0.045 / 0.767 |
+| 76  | 0.346 / 0.820 / 0.986 | 0.000 / 0.006 / 0.101 | 0.960 / 0.997 / 0.999 | 0.002 / 0.093 / 0.703 |
+| 200 | 0.005 / 0.327 / 0.968 | 0.000 / 0.002 / 0.041 | 0.823 / 0.998 / 0.999 | 0.001 / 0.132 / 0.933 |
+
+- **seed=0**: "forget by default, remember selectively." α drops to mean 0.33;
+  η stays small (max 0.13).
+- **seed=1**: "remember by default, write strongly when needed." α stays high
+  (mean 0.998); η_max climbs to 0.93 — essentially saturating the cap.
+
+Both reach ~1.0 acc but via different basins. The optimization is sensitive
+to seed AND the gate space has at least two solution modes for MQAR. That's
+architecturally interesting — and a yellow flag for stability at scale.
+
+## Decision point (post seed=1)
+
+Two moves remain:
+
+(b) **Tune α/η init biases.** The seed-variance points at optimization
+    sensitivity. A small sweep on the init biases would test whether the
+    architecture has a "robust" basin we can land in by default:
+    - α_init_bias ∈ {3.0, 4.595 (default), 6.0} — start α at ~0.95, ~0.99, ~0.997
+    - η_init_bias ∈ {-3.0, -2.197 (default), -1.0} — start η at ~0.05, ~0.10, ~0.27
+    Each arm ~7 min; tightened to single-axis sweeps (3 arms each) is ~42 min.
+
+(c) **Schedule full d6 DCLM pretrain with Stage 2 defaults.** ~3h wall. With
+    seed=0 saturating at step 101 and seed=1 at step 126, the probe lag is
+    real and modest. Whether it transfers to DCLM val_bpb is the only test
+    that matters for the original ticket. Pause hook in place.
+
+My read: **(b) first.** Seed-variance + two distinct gate basins is a sign
+the defaults aren't quite right — α=0.99 may be too high (seed=1 stayed at
+0.998 forever; seed=0 had to fight to bring it down). Lowering α_init_bias
+is the highest-leverage single change. 3-arm single-axis sweep on α would
+take ~21 min and likely surface a better default before we sink pretrain
+budget on a marginal probe.
+
+If the α sweep doesn't move the needle, then (c) — the lag is small enough
+(~25-50 steps on a 76-step task) that DCLM val_bpb is the real arbiter, not
+the probe.
 
 ## Open questions
 
