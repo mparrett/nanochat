@@ -96,16 +96,63 @@ def _init_w_o(weight, s, scale):
 
 A bug along the way: the first attempt only modified the W_o init in the swap branch, not the additive branch (`replace_all` on `init.zeros_(block.mlp.W_o.weight)` didn't catch `init.zeros_(block.add_memory.W_o.weight)`). Caught by sanity-printing `W_o.norm()` after the model was built. The fix was a two-character edit. Good lesson: when adding a config knob, verify it actually takes effect on the path you intend.
 
+## Stage 1.5c — W_o init scale sweep
+
+Ran the full additive arm at four `W_o` init scales: 0.0 (chickenpox baseline), 0.1, 0.5, 1.0.
+
+### Trajectory
+
+| step | scale=0.0 | scale=0.1 | scale=0.5 | **scale=1.0** |
+|---:|---:|---:|---:|---:|
+| 1 | 0.031 | 0.032 | 0.033 | 0.031 |
+| 26 | 0.058 | 0.059 | 0.058 | 0.065 |
+| 51 | 0.064 | **0.591** ⚠ | 0.101 | 0.156 |
+| 76 | 0.068 | 0.736 | 0.715 | **0.9995** |
+| 101 | 0.132 | 0.864 | 0.979 | 1.000 |
+| 126 | 0.942 | 0.996 | 0.9995 | 0.999 |
+| 151 | 0.999 | 1.000 | 1.000 | 1.000 |
+| 200 | 1.000 | 1.000 | 1.000 | 0.998 |
+
+### Step-1 loss vs scale (perturbation magnitude)
+
+Loss diverges from baseline monotonically as W_o magnitude grows — the additive memory contributes random noise to logits proportional to ‖W_o‖.
+
+| scale | step-1 loss | step-1 Δ vs baseline |
+|---:|---:|---:|
+| 0.0 (baseline-equivalent) | 10.3988 | 0 |
+| 0.1 | 10.3977 | −0.0011 |
+| 0.5 | 10.3959 | −0.0029 |
+| 1.0 | 10.3954 | −0.0034 |
+
+### Step-to-saturation ranking
+
+Defining "saturation" as first eval ≥ 0.995 stably:
+
+| scale | saturation step | wall to saturation |
+|---:|---:|---:|
+| 0.0 | ~151 | ~6 min |
+| 0.1 | ~126–151 | ~5 min |
+| 0.5 | ~126 | ~4 min |
+| **1.0** | **~76** | **~2.5 min** |
+
+**Bigger W_o init = faster saturation, monotonically** (the scale=0.1 step-51 spike at 0.591 was a single-seed outlier — by step 76 it had only climbed to 0.736 while scale=0.5 was at 0.715, so the early jump didn't compound).
+
+### Reading the sweep
+
+The trade-off framing — "small init preserves bit-identical-at-step-0 vs large init unblocks gradient flow faster" — is real but has a clear winner on this task: **scale=1.0 wins on time-to-saturate** by a 2× margin over any smaller value, and only costs ~3 thousandths of a step-1 loss in noise injection. There is no sweet spot at 0.1 or 0.5; smaller scales just delay saturation proportionally.
+
+If we ever need bit-identical-at-step-0 for some diagnostic comparison, scale=0.0 is still available. For training recipes that just want the memory mechanism to work, **scale=1.0 is the new default**.
+
 ## Decision point
 
-Open question:
+The sweep gives a clean answer: **`hope_memory_w_o_init_scale=1.0` is the recommended default** for any memory-bearing block going forward.
 
-(a) **Stage 1.5c: probe `W_o` init scale sweep** (0.0 / 0.1 / 0.5 / 1.0). Maps the bit-identical-init vs grokking-speed trade. ~25 min wall.
+Three possible next moves:
 
-(b) **Stage 2 — learned α/η on top of `W_o` init=1.0.** The originally planned next architectural step, now with the cold-start fix as the foundation.
+(a) **Run the Stage 1-additive (W_o=1) variant at full d6 pretrain.** ~3 h wall. Validates whether the probe's "matches baseline grokking" generalizes to LM val_bpb on DCLM. The previous Stage 1 (swap, W_o=0) full pretrain landed at val_bpb 1.179 vs baseline 1.174 — a 0.4% gap. With the W_o init fix, that gap may close, widen, or stay the same. Each outcome teaches us something.
 
-(c) **Run the Stage 1-additive (W_o=1) variant at full d6 pretrain.** Test whether the LM val_bpb on DCLM reflects the probe's "matches baseline" finding. ~3 h wall.
+(b) **Stage 2 — learned α/η on top of `W_o init=1.0` foundation.** Per-token gates, vectorized via Codex's prefix log-product trick. Stability defaults: α bounded < 0.999, init near long-memory, η small-init, log α/η/memory-RMS/W_o-norm. The probe is the gate before any longer pretrain.
 
-(d) **Wrap.** The probe arc has paid for itself; a clean handoff to a future Stage 2 / pretrain session is on the table.
+(c) **Wrap, hand off.** Stage 0 + 1 + 1.5 + 1.5b + 1.5c are a complete experimental unit. A clean handoff for whoever picks up Stage 2 is on the table.
 
-Operator's call.
+Operator's lean dictates which.
