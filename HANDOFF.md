@@ -121,7 +121,9 @@ Read the trx4mr ticket for the staged 0–6 implementation plan.
 - [x] Stage 1.5 MQAR probe — sample-efficiency gap found and explained
 - [x] Stage 1-additive variant — falsified the "lost MLP nonlinearity" hypothesis
 - [x] Stage 1.5b/c W_o init knob + sweep — root cause + recommended default
-- [ ] Stage 2 implemented (per-token learned α/η, vectorized via prefix log-products)
+- [x] Stage 2 implemented (per-token learned α/η, vectorized via prefix log-products) — commit `e559446`
+- [x] Stage 2 MQAR probe + α_init sweep — paused for operator review
+- [ ] Stage 2 vs baseline DCLM pretrain (decision pending: (b) more probe tuning / (c) pretrain anyway / (d) stop)
 
 ## Status update — 2026-04-30 (end of session)
 
@@ -322,3 +324,129 @@ When you pick up Stage 2 next:
 - No Hope-specific behavioral probe exists yet (in-context binding, parity, counting). MQAR was the chosen synthetic; others might surface different architectural tradeoffs.
 - Codex's third Stage 2-related steer ("multi-seed Stage 1") was rejected for Stage 1; whether to seed-confirm any Stage 2 result is open.
 
+## Status update — 2026-05-02 (end of session 3)
+
+Stage 2 implemented end-to-end and probed. Architecture works as designed but
+shows reproducible probe-level lag and high seed-variance with bimodal
+optimization. Paused for operator review before deciding whether to spend ~3h
+DCLM pretrain budget.
+
+### What got done this session
+
+**Stage 2 design + commit** (`docs/project_notes/decisions.md::ADR-002`,
+`e4f14db`)
+- Captured Codex's design priors response (additive topology, eta-not-near-zero,
+  alpha 0.995-0.999 init, prefix-log-product, gradient-norm logging).
+- Recorded our carve-outs: topology choice is design preference (data-neutral),
+  skipping Stage 1-additive full pretrain is a budget call, alpha init range
+  is a knob not fixed.
+- New feedback memory: treat Codex as challenge function, not oracle. Critical
+  read of his input before adopting verbatim. Saved by user request.
+
+**Stage 2 module** (`nanochat/gpt.py`, `e559446`)
+- `LearnedGateLinearMemory` subclasses `LinearAttentionMemory`. Adds W_alpha,
+  W_eta projections and explicit b_alpha, b_eta scalar parameters (nanochat's
+  custom Linear class skips bias even when bias=True, so the bias-as-Parameter
+  pattern is necessary).
+- Vectorized via prefix log-products: `decay(t,i) = exp(S[t-1] - S[i])` for
+  `i<t`, computed via cumsum + outer subtraction + masked_fill(-inf) + exp.
+  Same O(T²) cost class as Stage 1, no Python loop.
+- New config kind switch: `hope_memory_kind ∈ {linear, learned_gate}` routes
+  in `Block.__init__` for both swap and additive paths.
+- Optimizer fix: 1D gate biases (b_alpha/b_eta) crash Muon (expects 2D), so
+  `setup_optimizer` filters them out by name and routes to AdamW alongside
+  the existing `ve_gate` carve-out.
+- 5 new tests in `tests/test_memory_plumbing.py` (19 total, all passing).
+
+**Probe instrumentation** (`dev/probe_mqar.py`, `c371022`)
+- Forward pre-hook captures memory module input for gate-stat computation.
+- Two new diagnostic lines per eval step when memory module present:
+  - `grad: W_k=... W_v=... W_q=... W_o=... [W_alpha=... W_eta=... b_alpha=... b_eta=...]`
+  - `gate: alpha[min/mean/max] eta[min/mean/max]`
+- Generic — works for any memory variant; baseline (no memory module) emits
+  no diagnostic lines.
+
+**Stage 2 probe** (`docs/hope_nl_stage2_2026-05-02.md`, `03449b9` `a3b008c`
+`016c5b4`)
+- Initial 3-arm comparison (baseline, stage1add@W_o=1, stage2_default@seed=0):
+  Stage 2 saturates at step 101 vs baseline 76. Marginal pass on ADR-002 bar.
+  Different convergence shape — Stage 2 hit 0.92 at step 51 vs baseline 0.11.
+- Confirmation seed (stage2 seed=1): step 126 saturation. Lag is real, not
+  single-seed. Two seeds even adopted different gate strategies (seed=0
+  drove alpha down, seed=1 kept alpha high and ran eta_max to 0.93).
+- Single-axis alpha_init_bias sweep on seed=0: alpha=3.0 (init alpha~0.95)
+  saturated at step 51 — beats baseline! Looked like the right new default.
+- alpha=3.0 seed=1 confirmation INVERTED the conclusion: 0.57 acc at step
+  200, never converged. Same config as seed=0's best-ever run. Architecture
+  has bimodal optimization at d6/T=128.
+- alpha-tuning amplifies the variance, doesn't fix it. Default alpha=4.595
+  is the lowest-variance choice.
+
+### Where the architecture wall is now (post-Stage-2)
+
+- Stage 2 architecture **functions as designed**: gates alive from step 1
+  (no W_o=0 cold-start trap), prefix-log-product math correct, optimizer
+  routing clean, end-to-end probe + (would-be) pretrain pipeline working.
+- At d6 / T=128 / MQAR / W_o=1.0 / default alpha=4.595, Stage 2 is
+  **reproducibly slower than baseline** (~25-50 step lag on saturation) AND
+  **seed-sensitive** (alpha=3.0: best AND worst observed).
+- The bimodal basin behavior is interesting architecturally but a yellow
+  flag for stability. May or may not matter at full pretrain horizon (5000
+  iters, T=2048, 50× more data).
+
+### Stage 2 state — paused for operator decision
+
+Three options on the table, with my read documented in
+`docs/hope_nl_stage2_2026-05-02.md`:
+
+(b) **More probe tuning** — sweep `W_alpha/W_eta` init scale or `eta_init_bias`.
+    ~42 min for 6 arms. Might resolve variance but the d6 sensitivity is
+    itself a yellow flag.
+
+(c) **Schedule full d6 DCLM pretrain at default alpha=4.595, seed=0.** ~3h
+    wall, pause hook in place. Probe is synthetic at T=128; pretrain is
+    5000 iters of natural language. Seed sensitivity at probe scale may
+    wash out at pretrain horizon. **val_bpb is the only test that matters
+    for the original ticket.**
+
+(d) **Stop.** Stage 0+1+1.5+2 is a complete experimental unit. Architecture
+    wall mapped. Hope/NL benefits live at scales we won't reach on M2.
+
+My read: (c) — the original ticket asks "does this architecture work?", and
+val_bpb on DCLM is the honest answer at the project's scale. Expect val_bpb
+at or slightly worse than baseline (similar to Stage 1's +0.4%). Even a
+"no improvement" result is informative. Operator paused to think before
+committing 3h of pretrain budget.
+
+### Files added this session
+
+- **Stage 2 module:** `nanochat/gpt.py` (LearnedGateLinearMemory + Block dispatch)
+- **Stage 2 ADR:** `docs/project_notes/decisions.md::ADR-002`
+- **Stage 2 writeup:** `docs/hope_nl_stage2_2026-05-02.md`
+- **Probe diagnostics:** `dev/probe_mqar.py` (grad-norm + gate stats hook)
+- **Tests:** `tests/test_memory_plumbing.py` (+5 Stage 2 tests, 19 total)
+- **CLI flags on `scripts/base_train.py`:** `--hope-memory-w-o-init-scale`,
+  `--hope-memory-kind`, `--hope-memory-alpha-max`, `--hope-memory-eta-max`,
+  `--hope-memory-alpha-init-bias`, `--hope-memory-eta-init-bias` — full
+  end-to-end plumbing for a Stage 2 pretrain when greenlit.
+
+### Quick-resume checklist for option (c)
+
+```bash
+# Pause hook armed (already in base_train.py:422):
+#   touch /tmp/pause-nanochat   to pause between opt steps
+#   rm /tmp/pause-nanochat      to resume
+
+# Stage 2 pretrain command (mirrors Stage 1 recipe, with Stage 2 flags):
+torchrun --standalone --nproc_per_node=1 -m scripts.base_train -- \
+    --depth=6 --device-batch-size=32 \
+    --hope-additive-memory-layer=3 \
+    --hope-memory-kind=learned_gate \
+    --hope-memory-w-o-init-scale=1.0 \
+    --run=dummy
+# (note: on M2, torchrun bare-python; --num-iterations defaults to chinchilla)
+```
+
+Compare against:
+- `~/.cache/nanochat/base_checkpoints/d6/model_005000.pt` — baseline (val_bpb 1.174)
+- Stage 1 swap pretrain — val_bpb 1.179 (commit reference in stage1 writeup)
