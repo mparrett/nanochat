@@ -45,7 +45,9 @@ python -u -m scripts.base_train \
 | n_iters | 5000 | 5000 | — |
 | total tokens | 81.9M | 81.9M | — |
 | MLP/memory params at modified block | ~1.18M (8·d²) | ~590K (4·d²) | -50% at that block |
-| total model params | (~37M) | ~36.4M | small |
+| total model params | **73,531,646** (~73.5M) | **72,941,822** (~72.9M) | -589,824 (-0.8%) |
+
+(Param counts confirmed by walking `model.named_parameters()`. ~51% of the d6 model is the three value-embedding tables — `(padded_vocab_size, kv_dim) = (32768, 384)` each, on the alternating layers via `has_ve()`. The transformer blocks themselves are only ~23M; the `lm_head` is another 12.6M untied.)
 
 ## Loss trajectory (every eval)
 
