@@ -41,6 +41,7 @@ from nanochat.common import compute_init, autodetect_device_type
 parser = argparse.ArgumentParser()
 parser.add_argument('--label', type=str, default='probe', help='log prefix to identify the run')
 parser.add_argument('--hope-memory-layer', type=int, default=-1, help='layer index for LinearAttentionMemory swap (-1 = disabled / baseline MLP)')
+parser.add_argument('--hope-additive-memory-layer', type=int, default=-1, help='layer index for additive LinearAttentionMemory (-1 = disabled). Adds a third residual contribution alongside attn+mlp instead of replacing the MLP.')
 # Task shape
 parser.add_argument('--K', type=int, default=16, help='number of (key, value) pairs in the lookup prefix')
 parser.add_argument('--M', type=int, default=16, help='number of queries in the suffix')
@@ -141,8 +142,9 @@ base_dim = args.depth * args.head_dim
 model_dim = ((base_dim + args.head_dim - 1) // args.head_dim) * args.head_dim
 n_heads = model_dim // args.head_dim
 
-# -1 sentinel disables the swap (GPTConfig expects None)
+# -1 sentinel disables (GPTConfig expects None)
 hope_layer = None if args.hope_memory_layer < 0 else args.hope_memory_layer
+hope_add_layer = None if args.hope_additive_memory_layer < 0 else args.hope_additive_memory_layer
 
 config = GPTConfig(
     sequence_len=args.T,
@@ -153,6 +155,7 @@ config = GPTConfig(
     n_embd=model_dim,
     window_pattern='L',
     hope_memory_layer=hope_layer,
+    hope_additive_memory_layer=hope_add_layer,
 )
 print(f'[{args.label}] config: {config}')
 
@@ -163,7 +166,7 @@ model.init_weights()
 model.train()
 
 n_params = sum(p.numel() for p in model.parameters())
-print(f'[{args.label}] params: {n_params:,} ({n_params/1e6:.2f}M)  hope_memory_layer={hope_layer}')
+print(f'[{args.label}] params: {n_params:,} ({n_params/1e6:.2f}M)  hope_memory_layer={hope_layer}  hope_additive_memory_layer={hope_add_layer}')
 
 optimizer = model.setup_optimizer(
     unembedding_lr=args.unembedding_lr,

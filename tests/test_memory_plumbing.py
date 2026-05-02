@@ -212,3 +212,97 @@ def test_stage1_backward_produces_finite_gradients():
             assert torch.isfinite(p.grad).all().item(), f"non-finite grad in {name}"
             n_checked += 1
     assert n_checked > 0, "no parameters received gradients?"
+
+
+# -----------------------------------------------------------------------------
+# Stage 1-additive: LinearAttentionMemory as a third residual alongside attn+MLP
+# -----------------------------------------------------------------------------
+
+
+def _build_tiny_model_with_additive_memory(seed=0, memory_layer=2):
+    """Same tiny model but with an *additive* memory block at one layer."""
+    torch.manual_seed(seed)
+    config = GPTConfig(
+        sequence_len=64,
+        vocab_size=128,
+        n_layer=4,
+        n_head=2,
+        n_kv_head=2,
+        n_embd=64,
+        window_pattern="L",
+        hope_additive_memory_layer=memory_layer,
+    )
+    with torch.device("meta"):
+        model = GPT(config)
+    model.to_empty(device=torch.device("cpu"))
+    model.init_weights()
+    model.eval()
+    return model, config
+
+
+def test_additive_memory_block_present_at_correct_layer():
+    """The configured layer has add_memory; others have None. MLP is preserved everywhere."""
+    from nanochat.gpt import MLP, LinearAttentionMemory
+    memory_layer = 2
+    model, config = _build_tiny_model_with_additive_memory(memory_layer=memory_layer)
+    for i, block in enumerate(model.transformer.h):
+        # MLP is preserved at every layer (additive doesn't replace)
+        assert isinstance(block.mlp, MLP), f"layer {i} MLP should be preserved with additive insertion"
+        if i == memory_layer:
+            assert isinstance(block.add_memory, LinearAttentionMemory), (
+                f"layer {i} should have additive memory, got {type(block.add_memory).__name__}"
+            )
+        else:
+            assert block.add_memory is None, f"layer {i} should not have additive memory"
+
+
+def test_additive_loss_bit_identical_to_baseline_at_init():
+    """W_o=0 init means the additive memory block contributes nothing at step 0.
+
+    The architecture is bit-identical to the unmodified baseline at initialization;
+    divergence emerges only as W_o trains away from zero.
+    """
+    baseline_model, config = _build_tiny_model()
+    additive_model, _ = _build_tiny_model_with_additive_memory(memory_layer=2)
+    idx, targets = _make_batch(config)
+    with torch.no_grad():
+        loss_baseline = baseline_model(idx, targets)
+        loss_additive = additive_model(idx, targets)
+    assert torch.equal(loss_baseline, loss_additive), (
+        f"Additive memory not bit-identical to baseline at init "
+        f"(W_o init wrong?): {loss_baseline.item()} vs {loss_additive.item()}"
+    )
+
+
+def test_additive_memory_diverges_after_perturbation():
+    """Once W_o is non-zero, the additive contribution kicks in and the loss differs."""
+    baseline_model, config = _build_tiny_model()
+    additive_model, _ = _build_tiny_model_with_additive_memory(memory_layer=2)
+    idx, targets = _make_batch(config)
+    with torch.no_grad():
+        # Perturb the additive memory's W_o so it actually contributes
+        additive_model.transformer.h[2].add_memory.W_o.weight.add_(0.1)
+        loss_baseline = baseline_model(idx, targets)
+        loss_additive = additive_model(idx, targets)
+    assert not torch.equal(loss_baseline, loss_additive), (
+        "Additive memory still gives baseline loss after W_o perturbation — block isn't contributing"
+    )
+
+
+def test_additive_backward_produces_finite_gradients():
+    """Gradients must flow through the additive memory pathway too."""
+    model, config = _build_tiny_model_with_additive_memory(memory_layer=2)
+    idx, targets = _make_batch(config)
+    model.train()
+    # Perturb W_o so the additive path actually has gradient signal (otherwise
+    # the path is exactly zero and W_o gradient is also zero).
+    with torch.no_grad():
+        model.transformer.h[2].add_memory.W_o.weight.add_(0.1)
+    loss = model(idx, targets)
+    loss.backward()
+    # The additive memory's W_k/W_v/W_q should now have non-zero finite grads.
+    add_mem = model.transformer.h[2].add_memory
+    for name, p in [('W_k', add_mem.W_k.weight), ('W_v', add_mem.W_v.weight),
+                    ('W_q', add_mem.W_q.weight), ('W_o', add_mem.W_o.weight)]:
+        assert p.grad is not None, f"add_memory.{name} did not receive a gradient"
+        assert torch.isfinite(p.grad).all().item(), f"non-finite grad in add_memory.{name}"

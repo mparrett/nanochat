@@ -41,6 +41,13 @@ class GPTConfig:
     # (causal linear attention, fixed alpha=1, eta=1, parallel form) in place of MLP.
     # Default None = pre-Stage-1 baseline behavior, bit-identical.
     hope_memory_layer: int | None = None
+    # Hope/NL Stage 1-additive: like above, but the memory block is *added* as a
+    # third residual contribution alongside attn and mlp, not used as an MLP
+    # replacement. With W_o=0 init it's zero-contribution at step 0 (same bit-
+    # identical-to-baseline guarantee as the swap variant) and the model can
+    # learn to use the memory pathway without losing the MLP nonlinearity.
+    # See ADR-001 follow-up; addresses the Stage 1.5 sample-efficiency finding.
+    hope_additive_memory_layer: int | None = None
 
 
 def norm(x):
@@ -197,6 +204,12 @@ class Block(nn.Module):
             self.mlp = LinearAttentionMemory(config)
         else:
             self.mlp = MLP(config)
+        # Hope/NL Stage 1-additive: optionally add a memory block as a *third* residual
+        # alongside attn + mlp. Distinct from `hope_memory_layer` (which replaces the MLP).
+        # Both can in principle coexist but for Stage 1.5 we run them separately.
+        self.add_memory = None
+        if config.hope_additive_memory_layer is not None and config.hope_additive_memory_layer == layer_idx:
+            self.add_memory = LinearAttentionMemory(config)
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache, memory_state=None):
         # Stage 0 of Hope/NL plumbing: blocks always return (x, new_memory_state).
@@ -204,6 +217,10 @@ class Block(nn.Module):
         # Stage 1+ will override this in memory-bearing blocks.
         x = x + self.attn(norm(x), ve, cos_sin, window_size, kv_cache)
         x = x + self.mlp(norm(x))
+        if self.add_memory is not None:
+            # Stage 1-additive: third residual stream from a memory module. Zero
+            # contribution at init (W_o=0) → bit-identical to baseline at step 0.
+            x = x + self.add_memory(norm(x))
         return x, memory_state
 
 
@@ -293,6 +310,12 @@ class GPT(nn.Module):
                 torch.nn.init.zeros_(block.mlp.W_o.weight)
             else:
                 raise NotImplementedError(f"init_weights does not know how to init mlp of type {type(block.mlp).__name__}")
+            # Hope/NL Stage 1-additive: same init pattern as the swap variant — KVQ uniform, W_o zero.
+            if block.add_memory is not None:
+                torch.nn.init.uniform_(block.add_memory.W_k.weight, -s, s)
+                torch.nn.init.uniform_(block.add_memory.W_v.weight, -s, s)
+                torch.nn.init.uniform_(block.add_memory.W_q.weight, -s, s)
+                torch.nn.init.zeros_(block.add_memory.W_o.weight)
 
         # Per-layer scalars
         # Per-layer resid init: stronger residual at early layers, weaker at deep layers

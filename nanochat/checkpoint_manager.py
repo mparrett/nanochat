@@ -29,6 +29,9 @@ def _patch_missing_config_keys(model_config_kwargs):
     # Hope/NL Stage 1+: pre-Stage-1 checkpoints have no memory layer.
     if "hope_memory_layer" not in model_config_kwargs:
         model_config_kwargs["hope_memory_layer"] = None
+    # Hope/NL Stage 1-additive: pre-Stage-1.5 checkpoints have no additive memory layer.
+    if "hope_additive_memory_layer" not in model_config_kwargs:
+        model_config_kwargs["hope_additive_memory_layer"] = None
 
 def _patch_missing_keys(model_data, model_config):
     """Add default values for new parameters that may be missing in old checkpoints."""
