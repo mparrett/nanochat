@@ -36,8 +36,9 @@ language pretrain. Detail in "Full d6 DCLM pretrain result" section below.**
 **Update (2026-05-03): SFT ran into an additive-topology activation-memory
 issue at B=32 (Metal-dispatch hangs on M2). Detail in "Activation memory
 characteristics" section below — practical recommendation is `--device-batch-
-size=16` for Stage 2 additive on M2, or use swap topology to avoid the
-(B,T,T)-tensor buildup entirely.**
+size=16` for Stage 2 additive on M2. Swap topology has lower activation
+memory but is structurally different; switching would require a fresh
+val_bpb validation, not just a flag flip.**
 
 ## What Stage 2 adds
 
@@ -427,13 +428,19 @@ activation. Stage 1 swap has only `scores`, no MLP at the swap block.
    at B=32 because it was running closer to a fresh boot with less competing
    memory pressure; SFT after a long session got squeezed.
 
-2. **Architectural recommendation: prefer swap over additive when deploying.**
-   ADR-002 chose additive for *experimental isolation* (does the memory branch
-   learn anything useful?). Now that we've established it does (val_bpb parity),
-   **swap is the cheaper deployment** — same accuracy at lower activation
-   memory. Stage 1.5b's MQAR cross-check already showed swap and additive
-   converge at the same step ~76 with W_o=1.0; full-pretrain val_bpb didn't
-   distinguish them either.
+2. **Topology trade-off — swap is structurally different, not "same architecture
+   cheaper".** Swap replaces the MLP at the memory block (~8D² fewer params at
+   that layer; the block's nonlinearity comes only from the memory module).
+   Additive keeps the MLP and adds memory as a third residual stream. These
+   are different models with different learning dynamics. The MQAR cross-check
+   (Stage 1.5b) showed both saturate at step 76 with W_o=1.0 — but that's a
+   *synthetic recall* equivalence, single seed each. **We have no full DCLM
+   pretrain run on Stage 2 swap**, only Stage 2 additive (val_bpb 1.1743) and
+   Stage 1 swap-with-W_o=0 (val_bpb 1.179, suboptimal init). If you're tempted
+   to switch topology to save activation memory, **validate val_bpb parity first
+   with a Stage 2 swap pretrain run**. The savings are real (1 vs 4 (B,T,T)
+   tensors, no MLP activations at L3) but conditional on the model still
+   learning equivalently — which we don't know yet at this scale.
 
 3. **Forward-pass engineering opportunity.** The Stage 2 forward materializes
    `log_decay → decay` as two separate (B, T, T) allocations. Could fuse
