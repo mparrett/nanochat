@@ -389,9 +389,14 @@ answer to the original ticket at the project's scale.
 
 ## Activation memory characteristics — additive vs swap (2026-05-03)
 
-Discovered while trying to SFT the Stage 2 base checkpoint. Pretrain at d6,
-B=32, T=512 ran fine. SFT at the same shape **hung in MPS Metal-dispatch
-deadlock** at step 184-200 across two attempts. Halving to B=16 cleared it.
+**Editorial note (post-investigation):** The original hypothesis below — that
+the additive topology's extra (B, T, T) buffers caused the SFT hangs — was
+*architecturally correct math but causally wrong*. The actual SFT failure was
+a GPU OOM during ChatCORE eval at step 200, not the additive memory pile-up.
+Detail in `docs/sft_oom_investigation_2026-05-03.md`. The activation accounting
+below is still useful as a memory-budget reference for Stage 2 deployment, but
+treat the "Empirical confirmation" section's framing with skepticism — bs=16
+helping was a red herring; the real fix was `--chatcore-every=-1`.
 
 The additive topology has materially higher per-step activation memory than
 swap or baseline because it adds (B,T,T) intermediate buffers *on top of*
@@ -414,19 +419,30 @@ Stage 2 additive's `forward` materializes four such tensors:
 All four are held for backward. Plus the residual MLP at L3 keeps its `(B, T, 4D)`
 activation. Stage 1 swap has only `scores`, no MLP at the swap block.
 
-**Empirical confirmation:**
+**Empirical observations** (re-interpreted post-investigation):
 
 - Stage 1 swap SFT @ B=32: completed cleanly (HANDOFF: val_bpb 0.6712).
-- Stage 2 additive SFT @ B=32: hung at step 184-200 in MPS dispatch (twice).
-- Stage 2 additive SFT @ B=16: completed (no Metal deadlock).
+  *Did not OOM in ChatCORE eval at step 200 because Stage 1 swap has lower
+  total memory at that block (no MLP, only 1× (B,T,T) tensor); ChatCORE's
+  KV cache fit on top.*
+- Stage 2 additive SFT @ B=32: hung in Metal dispatch around step 200 (twice).
+  *Actual cause: ChatCORE eval at step 200 OOM'd; the M2's GPU couldn't fit
+  Stage 2 training memory + ChatCORE Engine KV cache simultaneously. Failed
+  command buffer never returned, presenting as a hang.*
+- Stage 2 additive SFT @ B=16: also hung at step ~200 — *same root cause; bs=16
+  reduced training-side memory but didn't change the ChatCORE-eval-time peak
+  enough to clear the ceiling. The "fix" we attributed to bs=16 was illusory.*
 
 ### Implications
 
-1. **Resource-constrained training (M2-class hardware).** Default to
-   `--device-batch-size=16` for Stage 2 additive at d6/T=512. Halve again if
-   you increase d_model, T, or memory layer count. Pretrain happened to fit
-   at B=32 because it was running closer to a fresh boot with less competing
-   memory pressure; SFT after a long session got squeezed.
+1. **Resource-constrained training (M2-class hardware).** For Stage 2 additive
+   SFT on M2: pass `--chatcore-every=-1` to skip the heavy benchmark eval
+   during training. Run ChatCORE separately at the end via `chat_eval`. bs=32
+   is fine for training itself — the OOM ceiling we kept hitting was the
+   ChatCORE-eval-time peak, not the train-time peak. *(Earlier draft of this
+   section recommended bs=16 to "address activation pressure"; that
+   recommendation was based on the wrong hypothesis. bs=16 didn't actually
+   help; we just got further into ChatCORE before OOMing.)*
 
 2. **Topology trade-off — swap is structurally different, not "same architecture
    cheaper".** Swap replaces the MLP at the memory block (~8D² fewer params at

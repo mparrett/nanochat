@@ -123,7 +123,9 @@ Read the trx4mr ticket for the staged 0–6 implementation plan.
 - [x] Stage 1.5b/c W_o init knob + sweep — root cause + recommended default
 - [x] Stage 2 implemented (per-token learned α/η, vectorized via prefix log-products) — commit `e559446`
 - [x] Stage 2 MQAR probe + α_init sweep — paused for operator review
-- [ ] Stage 2 vs baseline DCLM pretrain (decision pending: (b) more probe tuning / (c) pretrain anyway / (d) stop)
+- [x] Stage 2 vs baseline DCLM pretrain — picked (c), val_bpb 1.1743 (baseline parity, beats Stage 1 swap's 1.179)
+- [ ] Stage 2 SFT (in flight; ChatCORE eval OOM root-caused, retry with `--chatcore-every=-1`)
+- [x] Investigation post-mortem captured at `docs/sft_oom_investigation_2026-05-03.md`
 
 ## Status update — 2026-04-30 (end of session)
 
