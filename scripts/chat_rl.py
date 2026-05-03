@@ -22,7 +22,7 @@ import itertools
 import wandb
 import torch
 import torch.distributed as dist
-from nanochat.common import compute_init, compute_cleanup, print0, get_base_dir, DummyWandb, autodetect_device_type
+from nanochat.common import compute_init, compute_cleanup, print0, get_base_dir, DummyWandb, autodetect_device_type, mps_metrics
 from nanochat.checkpoint_manager import save_checkpoint, load_model, assert_checkpoint_dir_safe
 from nanochat.engine import Engine
 from tasks.gsm8k import GSM8K
@@ -246,6 +246,7 @@ for step in range(num_steps):
         wandb_run.log({
             "step": step,
             **log_passk,
+            **mps_metrics(),
         })
 
     # Forward/Backward on rollouts over multiple examples in the dataset

@@ -119,6 +119,40 @@ def print0(s="",**kwargs):
     if ddp_rank == 0:
         print(s, **kwargs)
 
+
+def mps_metrics():
+    """Return a dict of MPS allocator metrics suitable for merging into wandb logs.
+
+    wandb's built-in system monitor handles CPU%, RSS, swap, and CUDA GPU stats,
+    but knows nothing about the Metal/MPS allocator. These three numbers are the
+    primary fingerprint for catching the M2 hang patterns we've seen (allocator
+    fragmentation building up over training; driver-cached memory growing past
+    live-tensor demand). Cheap (sub-microsecond reads); safe no-op on non-MPS.
+
+    Keys logged (when MPS is available):
+      mps/allocated_gb       — bytes used by live tensors
+      mps/driver_gb          — bytes allocated by Metal driver (live + cache)
+      mps/cache_gb           — driver_gb - allocated_gb; how much is in cache
+      mps/recommended_max_gb — torch's safe ceiling, when available
+    """
+    if not torch.backends.mps.is_available():
+        return {}
+    try:
+        allocated = torch.mps.current_allocated_memory()
+        driver = torch.mps.driver_allocated_memory()
+        out = {
+            "mps/allocated_gb": allocated / 1e9,
+            "mps/driver_gb": driver / 1e9,
+            "mps/cache_gb": max(0, driver - allocated) / 1e9,
+        }
+        try:
+            out["mps/recommended_max_gb"] = torch.mps.recommended_max_memory() / 1e9
+        except (AttributeError, RuntimeError):
+            pass
+        return out
+    except Exception:
+        return {}
+
 def print_banner():
     # Cool DOS Rebel font ASCII banner made with https://manytools.org/hacker-tools/ascii-banner/
     banner = """
