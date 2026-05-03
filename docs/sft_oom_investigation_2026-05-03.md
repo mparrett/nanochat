@@ -72,7 +72,11 @@ We're already at ~1.2 GB on the GPU under training. Adding ChatCORE's KV cache w
 
 **Why pretrain at the same shape worked:** `base_train.py --core-metric-every` defaults to `-1` (disabled). Pretrain only runs `evaluate_bpb` for its eval, which is bounded by `--eval-tokens` and reuses the training KV path. No multi-task benchmark sweep, no extra Engine instantiation. Same GPU ceiling, but only training memory needed at once.
 
-**Why Stage 1 swap SFT worked at bs=32 earlier:** swap *replaces* the MLP at L3 with the memory module, so block-3 forward holds 1× (B, T, T) and no MLP activations — net memory is similar to baseline. ChatCORE eval at step 200 had enough headroom to fit. Stage 2 additive's 4× (B, T, T) + retained MLP is what pushed it over.
+**Why Stage 1 swap SFT worked at bs=32 earlier:** *it didn't, in the sense that we never tested it.* Phase 3 SFT explicitly disabled ChatCORE (`docs/phase3_step3_grad_accum_2026-05-01.md`: *"Eval is `eval_tokens=262144` worth of val_bpb on the SFT mixture; not a downstream eval like ARC/GSM8K/MMLU"*). Stage 1 SFT inherited that Phase 3 recipe. So ChatCORE-during-SFT had never been tested on this M2 24GB hardware before Stage 2.
+
+The OOM is **not Stage-2-specific** — baseline SFT or Stage 1 swap SFT would also OOM if `--chatcore-every` were left at the default 200. The `Engine(orig_model, tokenizer)` instantiation at `chat_sft.py:420` allocates a fresh KV cache (~100+ MB at bs=24) on top of the still-loaded training model + AdamW optimizer state (~280 + 600 MB). Stage 2's extra ~590K params and (B, T, T) tensors *contribute* to the ceiling but aren't the deciding margin. The ceiling is the M2's 24 GB unified-memory GPU allocation budget, end of story.
+
+**Related upstream issue:** karpathy/nanochat#592 (closed, fix in PR #593) — VRAM spike in `disable_fp8` context manager used by `base_train.py::evaluate_core`. We have the fix (`device="meta"` at `base_train.py:248`), but it's a different code path — used only on CUDA + `--fp8` runs, not our M2 SFT. The shape of the bug (eval-time fresh GPU allocation pushing past VRAM ceiling) is the same family as ours; their fix happens to not apply here because chat_sft's ChatCORE goes through `Engine`, not `disable_fp8`.
 
 ## The workaround and the fix
 
