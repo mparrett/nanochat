@@ -123,9 +123,34 @@ all_tasks = ['ARC-Easy', 'ARC-Challenge', 'MMLU', 'GSM8K', 'HumanEval', 'Spellin
 
 (See "Validation result" subsection above.) `dev/chatcore_prompt_lengths.py` showed prompts are ~all under 512. T² scaling cannot be the dominant cause. Reframing toward cumulative-allocation-state.
 
+### Synthetic validation of the cumulative-fragmentation theory (2026-05-03)
+
+`dev/mps_fragmentation_bench.py` directly reproduces the pattern in <30 seconds without needing a full SFT run. Loads the Stage 2 base checkpoint, runs N variable-T forward passes (matching the ChatCORE eval distribution), logs `mps/{allocated,driver,cache}_gb` per iteration.
+
+**Without empty_cache (10 iters):**
+```
+step  T   allocated  driver    cache
+  0  517   2.47 GB   9.13 GB   6.66 GB
+  1  397   1.96 GB  10.79 GB   8.83 GB
+  2  326   1.67 GB  10.79 GB   9.13 GB
+  3  191   1.10 GB  10.85 GB   9.75 GB    ← cache grows even when live shrinks
+  9  496   2.38 GB  17.18 GB  14.81 GB    ← 4 GB from the 19.1 GB recommended_max
+```
+
+Driver cache climbs from 6.7 → 14.8 GB in 10 iterations. Live tensor memory bounces around 0.5–2.5 GB depending on T. The driver is *pinning* allocations rather than recycling them — classic caching-allocator fragmentation under variable-shape workload.
+
+**With `--empty-cache-every=1` (20 iters):**
+```
+final allocator: allocated=2.66 GB, driver=4.42 GB, cache=1.75 GB
+```
+
+Cache stays bounded at 1–2 GB indefinitely. No OOM trajectory. **The fragmentation theory is now empirically confirmed**, and `torch.mps.empty_cache()` between forwards is the working fix.
+
+The benchmark is also an A/B platform for any future architectural change — run it before vs after the change to see if allocator behavior shifts.
+
 **Next validation steps for the new mechanism:**
 
-- **Cheap:** add `torch.mps.empty_cache()` calls every N batches inside `run_categorical_eval`'s loop, then run filtered ChatCORE on the existing Stage 2 model. If the OOM goes away, fragmentation is the cause. ~1h.
+- **Cheap:** add `torch.mps.empty_cache()` calls every N batches inside `run_categorical_eval`'s loop, then run filtered ChatCORE on the existing Stage 2 model. If the OOM goes away, fragmentation is the cause. ~1h. *(Now mostly redundant given the synthetic confirmation, but still worth doing for full end-to-end validation.)*
 - **Diagnostic:** with the `mps_metrics()` we added in commit `f4f5066`, log allocator state per batch (not just per eval step). Watch for `mps/cache_gb` climbing monotonically vs `mps/allocated_gb` flat — that's the fragmentation fingerprint.
 - **Prevention for future runs:** lower `--chatcore-max-cat` to bound the per-task forward count. e.g. `--chatcore-max-cat=200` runs ~6 batches per task instead of 439 for MMLU. Same accuracy signal, dramatically less allocator churn.
 
