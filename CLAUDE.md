@@ -15,22 +15,6 @@ The codebase is organized around a single complexity dial: `--depth` (transforme
 - **`docs/project_notes/`** — `decisions.md` (ADRs), `bugs.md` (known issues + fixes), `key_facts.md` (ports, paths, environments).
 - **`HANDOFF.md`** — current branch context (Hope/NL experiment in progress).
 
-## Long-running scripts: always use `python -u` when redirecting to a file
-
-Python's stdout is **block-buffered** (4-8 KB chunks) when redirected via `>`, not line-buffered. A long training run's `tail -f /tmp/run.log` will appear silent for minutes at a time as the buffer fills, even though wandb is showing live progress and the GPU is busy. Makes the log look hung when it isn't, and obscures real hangs.
-
-Always pass `-u` (or set `PYTHONUNBUFFERED=1`) when redirecting to a logfile:
-
-```bash
-# wrong (buffered, log lags reality by minutes):
-python -m scripts.base_train ... > /tmp/run.log 2>&1
-
-# right (line-buffered, tail -f works):
-python -u -m scripts.base_train ... > /tmp/run.log 2>&1
-```
-
-Applies to `base_train.py`, `chat_sft.py`, `chat_rl.py`, `dev/probe_mqar.py`, and any long-running script.
-
 ## Disk constraints (M2 development machine)
 
 The dev machine runs at >90% disk usage by default. Training can blow up cache fast — a 5000-iter pretrain with `--save-every=200` left **20 GB of intermediate checkpoints** until trimmed.
