@@ -1,6 +1,31 @@
 # Bug Log
 
-## 2026-05-03 - Stage 2 additive SFT hangs in Metal dispatch at step 200 (M2 24GB) [OPEN, INVESTIGATING]
+## 2026-05-03 - Stage 2 additive SFT hangs at step 200 (M2 24GB) [ROOT-CAUSED]
+
+**Root cause** (confirmed 2026-05-03 with `python -u` unbuffered logging plus the new `torch.mps.empty_cache()` fix that got us *past* the save and into the actual error):
+
+```
+Error: command buffer exited with error status.
+  Insufficient Memory (kIOGPUCommandBufferCallbackErrorOutOfMemory)
+```
+
+The hang was **not** the model save. It was **ChatCORE eval at step 200** running out of GPU memory on M2 24GB. `chat_sft.py --chatcore-every=200` (default) triggers a full benchmark pass (ARC-Easy → ARC-Challenge → MMLU → GSM8K → HumanEval → SpellingBee). Stage 2 additive's higher activation memory + ChatCORE's evaluation batches pushed past the GPU's allocation ceiling. Process state went U with `_MTLCommandBuffer waitUntilCompleted` because the failed command buffer never returns.
+
+Previous runs at bs=32 and bs=16 *also* OOM'd here — we just couldn't see the error message because we lacked unbuffered logging (`python -u`) and the runs were killed before the error printed.
+
+**Fix(es) landed**:
+
+1. **`torch.mps.synchronize() + torch.mps.empty_cache()` before save** in `checkpoint_manager.save_checkpoint()` (commit `0379888`-ish). This is a real win — without it, the save's MPS→CPU transfer would face additional pressure. With it, step 100 save and the train+val_bpb portion of step 200 ran cleanly on Stage 2 at bs=32. Keeps benefit even though it didn't fix the ChatCORE OOM.
+
+2. **MPS allocator metrics in wandb** (`nanochat.common.mps_metrics()`, commit `f4f5066`). Will surface allocator climb in future runs *before* the OOM hits.
+
+**Workaround** for Stage 2 SFT on M2: pass `--chatcore-every=-1` to skip the heavy benchmark eval during training. Run ChatCORE separately after SFT completes via a dedicated eval script, or once at the final step only (`--chatcore-every=<num_iterations>`). Reducing `--chatcore-max-cat` (default -1, i.e. unbounded) would also help if ChatCORE-during-SFT is desired.
+
+**Why pretrain @ bs=32 succeeded**: pretrain doesn't run ChatCORE. `base_train.py` has `--core-metric-every=-1` by default. Its only eval is `evaluate_bpb` which is bounded by `--eval-tokens`.
+
+**Architectural takeaway** (for the writeup): the (B, T, T) tensor accounting in Stage 2 additive is real but not *individually* OOM-causing at our shapes. The OOM is the architecture's memory pressure *plus* ChatCORE's task-eval batches *together* exceeding the M2's GPU ceiling. Anyone running Stage 2 SFT on M2 should disable ChatCORE during training.
+
+## 2026-05-03 - Stage 2 additive SFT hangs in Metal dispatch at step 200 (M2 24GB) [SUPERSEDED — see ROOT-CAUSED entry above]
 
 **Issue**: `scripts.chat_sft` on a Stage 2 additive checkpoint (Hope/NL `LearnedGateLinearMemory` at one block, alongside MLP) hangs deterministically around step 184-200 on Apple M2 24GB. Process state goes to U (uninterruptible kernel sleep), `sample <pid>` shows the active thread stuck on `_MTLCommandBuffer waitUntilCompleted`. Hit three times across two batch sizes:
 
