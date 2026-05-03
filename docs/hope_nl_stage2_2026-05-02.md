@@ -389,14 +389,21 @@ answer to the original ticket at the project's scale.
 
 ## Activation memory characteristics — additive vs swap (2026-05-03)
 
-**Editorial note (post-investigation):** The original hypothesis below — that
-the additive topology's extra (B, T, T) buffers caused the SFT hangs — was
-*architecturally correct math but causally wrong*. The actual SFT failure was
-a GPU OOM during ChatCORE eval at step 200, not the additive memory pile-up.
-Detail in `docs/sft_oom_investigation_2026-05-03.md`. The activation accounting
-below is still useful as a memory-budget reference for Stage 2 deployment, but
-treat the "Empirical confirmation" section's framing with skepticism — bs=16
-helping was a red herring; the real fix was `--chatcore-every=-1`.
+**Editorial note (post-investigation, refined 2026-05-03 after data):** The original
+hypothesis below — that the additive topology's extra (B, T, T) buffers caused
+the SFT hangs — was *architecturally correct math but causally wrong*. We
+initially refined to "T² blow-up at long ChatCORE prompts" but **that was also
+falsified by direct measurement**: `dev/chatcore_prompt_lengths.py` shows
+ChatCORE prompts are nearly all under 512 tokens (only 1 in 500 MMLU prompts
+exceeded). The actual mechanism appears to be cumulative MPS allocator
+fragmentation across hundreds of variable-shape forward passes during
+unbounded categorical eval. Full root-cause walk + falsified hypotheses in
+`docs/sft_oom_investigation_2026-05-03.md`. The activation accounting below is
+still useful as a memory-budget reference for Stage 2 deployment, but treat
+the "Empirical confirmation" section's framing with skepticism — bs=16 helping
+was a red herring; the practical fix is `--chatcore-every=-1` during SFT, with
+`--chatcore-max-cat=200` as a less-aggressive alternative if you want
+ChatCORE during training.
 
 The additive topology has materially higher per-step activation memory than
 swap or baseline because it adds (B,T,T) intermediate buffers *on top of*
