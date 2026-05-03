@@ -452,3 +452,96 @@ torchrun --standalone --nproc_per_node=1 -m scripts.base_train -- \
 Compare against:
 - `~/.cache/nanochat/base_checkpoints/d6/model_005000.pt` — baseline (val_bpb 1.174)
 - Stage 1 swap pretrain — val_bpb 1.179 (commit reference in stage1 writeup)
+
+## Status update — 2026-05-03 (end of session 4)
+
+Session 4 was the Stage 2 SFT debugging and infrastructure-hardening session. Stage 2 pretrain was already complete from session 3 at val_bpb 1.1743 (baseline parity); this session was about getting SFT to actually run on M2 + landing durable diagnostic infrastructure for the next round.
+
+### What got done this session
+
+**Stage 2 SFT crash investigation** (`docs/sft_oom_investigation_2026-05-03.md`)
+- Three SFT runs hung silently at "step 200" before we figured out the cause. Two blocking issues compounded: (a) Python's default block-buffering hid the actual error message in the local log; (b) `sample <pid>` showed Metal stuck on `_MTLCommandBuffer waitUntilCompleted`, which we wrongly read as a deadlock when it was actually a thread waiting on an already-failed command buffer.
+- Once `python -u` + the empty_cache fix at save let runs progress further, the actual error printed: `kIOGPUCommandBufferCallbackErrorOutOfMemory`. Root cause: ChatCORE eval at step 200 (chat_sft.py default `--chatcore-every=200`) — not the model save we kept blaming.
+- Two layers of misdiagnosis before reaching the data-supported reality. Methodology lessons captured in the post-mortem.
+
+**Falsified the T² hypothesis** (`dev/chatcore_prompt_lengths.py`)
+- After the OOM error surfaced, I hypothesized the cause was ChatCORE prompts being routinely longer than the model's training `max_seq_len=512`, blowing up Stage 2's 4× (B,T,T) activation tensors via T² scaling. Operator pushed for cheap empirical validation.
+- The script counts prompt token lengths across all 6 ChatCORE tasks. Result: prompts are nearly all under 512 (only 1 in 500 MMLU prompts barely exceeded). Hypothesis falsified by data in ~1 min.
+
+**Confirmed the cumulative-fragmentation hypothesis** (`dev/mps_fragmentation_bench.py`)
+- After the T² miss, reframed toward MPS allocator fragmentation across hundreds of variable-shape forwards. Synthetic reproducer that loads the Stage 2 model and runs N forwards at variable T, logging per-iter MPS allocator state.
+- Without intervention: 10 iters → driver cache climbs 6.7 GB → 14.8 GB (4 GB from the 19.1 GB ceiling).
+- With `torch.mps.empty_cache()` between iterations: cache stays bounded at 1-2 GB indefinitely.
+- Hypothesis confirmed in 30 seconds. The bench doubles as an A/B platform for future architectural changes.
+
+**Eval-loop fix landed** (commit `f27a6db`)
+- Factored the synchronize+empty_cache pattern into `nanochat.common.mps_release_cache()` (no-op on non-MPS).
+- Wired into `run_categorical_eval` (every batch) and `save_checkpoint` (replaced inline calls).
+- `chat_sft.py --chatcore-every=200` (default) is now safe to use on M2.
+
+**MPS metrics in wandb** (commit `f4f5066`)
+- `nanochat.common.mps_metrics()` returns `mps/{allocated,driver,cache,recommended_max}_gb`. Wired into all three training scripts' eval-step wandb log calls.
+- Charts the allocator climb fingerprint that precedes any future fragmentation event. Sub-microsecond cost; no new deps.
+
+**CLAUDE.md updates and CLAUDE.md → DEV.md split**
+- Lifted CLAUDE.md from gitignored to tracked (commit `42e4f9d`).
+- Trimmed from 155 → 53 lines per Anthropic's "skinny CLAUDE.md" guidance. Spilled architecture detail and full command reference into new `DEV.md` (commit `d64e2a5` + `36152cf` + `2832049`).
+- Lifted MPS-orphan-worker hygiene rule (previously buried in `m2_pipeline_2026-04-30.md:102`) into CLAUDE.md so it's auto-loaded.
+- One-liner on triaging long runs (three signal sources: log file, wandb, ps/vm_stat) in CLAUDE.md.
+
+**Disk hygiene** (commit `1d4fbc2`)
+- Run 1 of this session's SFT was killed by macOS at step 184 — actual cause was disk OOM from 19 GB of accumulated Stage 1 intermediate checkpoints (`--save-every=200` with no rotation).
+- Cleaned up ~27 GB of stale checkpoints. Added `--save-keep-last-n` rolling-cleanup flag to all three training scripts. Default behavior unchanged; opt-in.
+- Recommended pretrain pattern: `--save-every=1000 --save-keep-last-n=2` (caps at ~2.4 GB).
+
+**Pre-flight checkpoint guard** (commit `e7852b6`)
+- Earlier in the session, the Stage 2 pretrain was kicked off without `--model-tag` and silently overwrote the canonical baseline at `d6/`. Added `assert_checkpoint_dir_safe()` called at training startup; aborts cleanly if the target dir already has `model_*.pt`. `--force-overwrite` is the explicit escape hatch.
+- ADR-002 already documented the swap-vs-additive design priors. CLAUDE.md now also has the "always pass --model-tag" rule.
+
+**`dev/wandb_status.py`** (commit `01e4f4f`)
+- Live snapshot of any wandb run by URL or `entity/project/run-id`. Bypasses buffered local logs.
+- Auto-detects metric column names; works for base_train, chat_sft, chat_rl without per-script tweaks.
+
+### Stage 2 SFT in flight
+
+Final SFT command landed and currently running (`bdnummq3t`, wandb run `2df5c88o`):
+
+```bash
+python -u -m scripts.chat_sft \
+    --max-seq-len=512 --device-batch-size=32 --total-batch-size=65536 \
+    --eval-every=50 --eval-tokens=524288 \
+    --num-iterations=375 \
+    --save-every=100 --save-keep-last-n=2 \
+    --chatcore-every=-1 \
+    --model-tag=d6_stage2 \
+    --run=sft-stage2-d6-final
+```
+
+The single critical flag is `--chatcore-every=-1` — disables the heavy benchmark sweep that was OOMing. ChatCORE can be run separately on the final SFT checkpoint via `chat_eval` for the comparable downstream metric.
+
+ETA ~1h. Expected val_bpb ~0.66-0.68 (vs Stage 1 SFT 0.6712, baseline 0.6639).
+
+### Files added this session (durable)
+
+- `docs/sft_oom_investigation_2026-05-03.md` — full debug post-mortem with the methodology lessons (block-buffering hides errors, hypothesis falsification, "same arch" is a strong claim, project memory must be findable).
+- `dev/wandb_status.py` — live wandb run viewer.
+- `dev/chatcore_prompt_lengths.py` — falsifies the T² hypothesis empirically.
+- `dev/mps_fragmentation_bench.py` — synthetic MPS-fragmentation reproducer + A/B platform.
+- `nanochat/common.py::mps_metrics()` — wandb-shippable allocator stats.
+- `nanochat/common.py::mps_release_cache()` — synchronize+empty_cache helper, used at save and in eval loops.
+- `CLAUDE.md` (now tracked) + `DEV.md` (new depth reference).
+- `docs/project_notes/bugs.md` updated with full SFT-hang root-cause entry.
+
+### Next session: pick up here
+
+1. **Surface SFT result.** `python -m dev.wandb_status matt-parrett/nanochat-sft/2df5c88o` after completion. Local log at `/tmp/sft_stage2.log`. Final checkpoint at `~/.cache/nanochat/chatsft_checkpoints/d6_stage2/model_000375.pt`.
+2. **Optional ChatCORE on the final SFT checkpoint** — now that `run_categorical_eval` has the empty_cache fix, this should run cleanly even on M2. Compares Stage 2 SFT to Stage 1 SFT and baseline on real downstream tasks.
+3. **chat_cli smoke test** — `python -m scripts.chat_cli --model-tag=d6_stage2 -p "What is the capital of France?"` for qualitative comparison.
+4. **Optional upstream PR** — `karpathy/nanochat` users on Apple Silicon would hit the same OOM if running chat_sft with `--chatcore-every` enabled. The `mps_release_cache()` fix is generally applicable; could be filed as an issue or small PR.
+
+### Open questions still punted
+
+- Stage 2 swap topology has never been pretrained. Stage 1.5b's MQAR cross-check showed swap and additive equivalent at the synthetic level, but full DCLM val_bpb on Stage 2 swap is unknown. Cheap to answer (~3h pretrain) if interesting.
+- Stage 1-additive (W_o=1) full pretrain. Probe found parity with baseline; whether DCLM val_bpb agrees was punted.
+- Multi-seed confirmation of Stage 2 pretrain val_bpb 1.1743 — currently single-seed.
+- The forward-pass fuse opportunity in `LearnedGateLinearMemory` (combine log_decay→decay into one in-place op; fuse weights computation). Modest M2 wins; not load-bearing.
