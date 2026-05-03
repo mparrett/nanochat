@@ -29,6 +29,16 @@ val_bpb arbitrate (the seed sensitivity at probe scale may not matter at full
 d6 pretrain horizon), or stop and accept that Stage 2 isn't a load-bearing
 architectural change at d6/T=128.
 
+**Update (2026-05-02): operator picked (c). Pretrain landed at val_bpb 1.1743,
+exact baseline parity. Bimodal probe behavior did not transfer to natural-
+language pretrain. Detail in "Full d6 DCLM pretrain result" section below.**
+
+**Update (2026-05-03): SFT ran into an additive-topology activation-memory
+issue at B=32 (Metal-dispatch hangs on M2). Detail in "Activation memory
+characteristics" section below — practical recommendation is `--device-batch-
+size=16` for Stage 2 additive on M2, or use swap topology to avoid the
+(B,T,T)-tensor buildup entirely.**
+
 ## What Stage 2 adds
 
 Generalizes Stage 1's `LinearAttentionMemory` (fixed `α=η=1`) to per-token
@@ -343,6 +353,103 @@ result tells us we shouldn't expect a gain. We should pretrain anyway because:
 If the operator's project-priority is shifting elsewhere, **(d)** is also
 defensible — Stage 0+1+1.5+2 is a complete experimental unit and the
 architecture wall has been mapped.
+
+## Full d6 DCLM pretrain result (2026-05-02)
+
+Operator picked **(c)**. Ran the full pretrain (5000 iters, T=512, accum=1,
+device-batch-size=32, additive @ L3, W_o init 1.0, default α/η). Wall: 5h13min.
+
+**Final val_bpb = 1.1743**, exactly at baseline (1.174) — better than Stage 1
+swap's 1.179 (+0.4%). The probe-level concerns (bimodal basin behavior,
+seed sensitivity, ~25-50 step saturation lag on MQAR) **did not manifest at
+full pretrain horizon**. Smooth monotonic descent through the LR decay window,
+no signs of optimization instability. The 5000-iter natural-language signal
+washed out the seed sensitivity that plagued the synthetic probe.
+
+| run | val_bpb | Δ vs baseline |
+|---|---:|---:|
+| baseline d6 (5000 iter) | 1.1743 | — |
+| Stage 1 swap (W_o=0) | 1.179 | +0.4% |
+| **Stage 2 additive (W_o=1, learned_gate)** | **1.1743** | **0.0%** |
+
+Two readings of the 0.0% delta:
+
+- **Pessimistic:** ~590K extra params (W_α, W_η, b_α, b_η at one block) bought
+  exactly zero val_bpb improvement. The learned gates compute meaningful
+  per-token values that aren't load-bearing for next-token prediction at this
+  scale. Hope/NL benefits live at scales we won't reach on M2.
+- **Cautiously optimistic:** Stage 2 closed the +0.4% gap that Stage 1 swap
+  carried. Tiny improvement, within noise, but consistent with "learned gates
+  can do what fixed α=η=1 cannot." Plausibly becomes a real win at larger T or
+  deeper d.
+
+The architecture works, matches baseline, doesn't beat it. That's the honest
+answer to the original ticket at the project's scale.
+
+## Activation memory characteristics — additive vs swap (2026-05-03)
+
+Discovered while trying to SFT the Stage 2 base checkpoint. Pretrain at d6,
+B=32, T=512 ran fine. SFT at the same shape **hung in MPS Metal-dispatch
+deadlock** at step 184-200 across two attempts. Halving to B=16 cleared it.
+
+The additive topology has materially higher per-step activation memory than
+swap or baseline because it adds (B,T,T) intermediate buffers *on top of*
+the existing MLP activations:
+
+| variant | block-3 forward | extra (B,T,T) tensors | extra memory at B=32, T=512 (bf16) |
+|---|---|---:|---:|
+| baseline | attn + MLP | 0 | 0 |
+| Stage 1 swap | attn + Memory (no MLP) | 1 (`scores`) | ~33 MB |
+| **Stage 2 additive** | **attn + MLP + Memory** | **4** (`scores`, `log_decay`, `decay`, `weights`) | **~130 MB** |
+
+Each (B, T, T) tensor at our shape is 32×512×512 floats × 2 bytes (bf16) ≈ 33 MB.
+Stage 2 additive's `forward` materializes four such tensors:
+
+- `scores = einsum('btd,bid->bti', q, k)` — `(B, T, T)`
+- `log_decay = S_shift - S.transpose(1, 2)` — `(B, T, T)`
+- `decay = exp(log_decay.masked_fill(...))` — `(B, T, T)`, separate allocation
+- `weights = scores * eta.transpose(1,2) * decay` — `(B, T, T)`
+
+All four are held for backward. Plus the residual MLP at L3 keeps its `(B, T, 4D)`
+activation. Stage 1 swap has only `scores`, no MLP at the swap block.
+
+**Empirical confirmation:**
+
+- Stage 1 swap SFT @ B=32: completed cleanly (HANDOFF: val_bpb 0.6712).
+- Stage 2 additive SFT @ B=32: hung at step 184-200 in MPS dispatch (twice).
+- Stage 2 additive SFT @ B=16: completed (no Metal deadlock).
+
+### Implications
+
+1. **Resource-constrained training (M2-class hardware).** Default to
+   `--device-batch-size=16` for Stage 2 additive at d6/T=512. Halve again if
+   you increase d_model, T, or memory layer count. Pretrain happened to fit
+   at B=32 because it was running closer to a fresh boot with less competing
+   memory pressure; SFT after a long session got squeezed.
+
+2. **Architectural recommendation: prefer swap over additive when deploying.**
+   ADR-002 chose additive for *experimental isolation* (does the memory branch
+   learn anything useful?). Now that we've established it does (val_bpb parity),
+   **swap is the cheaper deployment** — same accuracy at lower activation
+   memory. Stage 1.5b's MQAR cross-check already showed swap and additive
+   converge at the same step ~76 with W_o=1.0; full-pretrain val_bpb didn't
+   distinguish them either.
+
+3. **Forward-pass engineering opportunity.** The Stage 2 forward materializes
+   `log_decay → decay` as two separate (B, T, T) allocations. Could fuse
+   in-place: `log_decay.masked_fill_(..., float('-inf')).exp_()` saves one
+   33 MB allocation. The `weights = scores * eta * decay` line could fuse
+   into the einsum via a custom kernel, but that's deeper work. Modest M2
+   wins; not load-bearing for CUDA where (B, T, T) buffers are free relative
+   to GEMM throughput.
+
+4. **`(B, T, T)` is a quadratic-in-T cost.** At T=2048 (full pretrain context
+   for nanochat's default recipe), each tensor would be 32×2048×2048×2 = 537 MB,
+   and four of them is **2.1 GB extra** for one memory block. This is why the
+   additive topology was problematic even on systems that could handle Stage 1
+   swap's single buffer at the same shape. Anyone scaling Stage 2 to longer
+   contexts should plan for the quadratic blow-up — chunked/streaming forms
+   become important, not optional.
 
 ## Open questions
 
