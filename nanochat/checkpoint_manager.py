@@ -3,6 +3,7 @@ Utilities for saving and loading model/optim/state checkpoints.
 """
 import os
 import re
+import sys
 import glob
 import json
 import logging
@@ -59,6 +60,45 @@ def _patch_missing_keys(model_data, model_config):
     if "x0_lambdas" not in model_data:
         model_data["x0_lambdas"] = torch.zeros(n_layer)
         log0(f"Patching missing x0_lambdas in model data to 0.0")
+
+def assert_checkpoint_dir_safe(checkpoint_dir, force_overwrite=False, resume_from_step=-1):
+    """Pre-flight check to prevent silently overwriting an existing trained checkpoint.
+
+    The default `--model-tag` is `d<depth>` (e.g. `d6`), which is also where the
+    canonical baseline lives. Forgetting `--model-tag` for an architectural
+    variant silently overwrites the baseline after a multi-hour run. This check
+    runs at training startup (before any compute) and aborts cleanly.
+
+    - If `--resume-from-step >= 0`: assume intentional continuation, skip check.
+    - If dir doesn't exist or has no `model_*.pt`: OK.
+    - Otherwise: print error and `sys.exit(1)` unless `--force-overwrite`.
+
+    Note: SFT and RL share this footgun via `chatsft_checkpoints/<model_tag>/` and
+    `chatrl_checkpoints/<model_tag>/`; call this from any training entry point
+    that resolves a `<model_tag>` checkpoint dir.
+    """
+    if resume_from_step is not None and resume_from_step >= 0:
+        return
+    if not os.path.isdir(checkpoint_dir):
+        return
+    existing = sorted(f for f in os.listdir(checkpoint_dir) if re.match(r"model_\d+\.pt$", f))
+    if not existing:
+        return
+    if force_overwrite:
+        log0(f"WARNING: --force-overwrite — proceeding despite existing checkpoint(s) in {checkpoint_dir}: {existing}")
+        return
+    msg = (
+        f"\n\nABORT: target checkpoint directory already contains trained model(s):\n"
+        f"  {checkpoint_dir}\n"
+        f"  existing: {existing}\n\n"
+        f"Continuing would silently overwrite. To proceed:\n"
+        f"  --model-tag=<descriptive-name>  (writes to a fresh directory; recommended)\n"
+        f"  --force-overwrite               (intentionally replace the existing checkpoint)\n"
+        f"  --resume-from-step=<N>          (resume training from an existing step in this dir)\n\n"
+    )
+    print(msg, file=sys.stderr, flush=True)
+    sys.exit(1)
+
 
 def save_checkpoint(checkpoint_dir, step, model_data, optimizer_data, meta_data, rank=0):
     if rank == 0:

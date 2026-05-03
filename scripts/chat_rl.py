@@ -23,7 +23,7 @@ import wandb
 import torch
 import torch.distributed as dist
 from nanochat.common import compute_init, compute_cleanup, print0, get_base_dir, DummyWandb, autodetect_device_type
-from nanochat.checkpoint_manager import save_checkpoint, load_model
+from nanochat.checkpoint_manager import save_checkpoint, load_model, assert_checkpoint_dir_safe
 from nanochat.engine import Engine
 from tasks.gsm8k import GSM8K
 
@@ -35,7 +35,8 @@ parser.add_argument("--run", type=str, default="dummy", help="wandb run name ('d
 # Runtime
 parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (empty = autodetect)")
 # Model loading
-parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from")
+parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from AND save to (default: d<depth> of loaded SFT model)")
+parser.add_argument("--force-overwrite", action="store_true", help="permit overwriting an existing trained RL checkpoint at chatrl_checkpoints/<model_tag>/. Default: abort startup if model_<step>.pt exists.")
 parser.add_argument("--model-step", type=int, default=None, help="model step to load from")
 # Training horizon
 parser.add_argument("--num-epochs", type=int, default=1, help="number of epochs over GSM8K")
@@ -72,6 +73,10 @@ wandb_run = DummyWandb() if use_dummy_wandb else wandb.init(project="nanochat-rl
 
 # Init model and tokenizer
 model, tokenizer, meta = load_model("sft", device, phase="eval", model_tag=args.model_tag, step=args.model_step)
+# Pre-flight: refuse to silently overwrite an existing RL checkpoint at this tag.
+rl_output_dirname = args.model_tag if args.model_tag else f"d{model.config.n_layer}"
+rl_checkpoint_dir = os.path.join(get_base_dir(), "chatrl_checkpoints", rl_output_dirname)
+assert_checkpoint_dir_safe(rl_checkpoint_dir, force_overwrite=args.force_overwrite)
 engine = Engine(model, tokenizer) # for sampling rollouts
 
 # -----------------------------------------------------------------------------

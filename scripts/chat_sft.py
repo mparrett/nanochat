@@ -19,7 +19,7 @@ import torch
 from nanochat.common import compute_init, compute_cleanup, print0, DummyWandb, get_base_dir, autodetect_device_type, get_peak_flops, COMPUTE_DTYPE, COMPUTE_DTYPE_REASON, is_ddp_initialized
 from nanochat.tokenizer import get_token_bytes
 from dataclasses import asdict
-from nanochat.checkpoint_manager import save_checkpoint, load_model, load_optimizer_state
+from nanochat.checkpoint_manager import save_checkpoint, load_model, load_optimizer_state, assert_checkpoint_dir_safe
 from nanochat.loss_eval import evaluate_bpb
 import torch.distributed as dist
 from nanochat.flash_attention import HAS_FA3
@@ -41,7 +41,8 @@ parser.add_argument("--run", type=str, default="dummy", help="wandb run name ('d
 # Runtime
 parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (empty = autodetect)")
 # Model loading
-parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from")
+parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from AND save to (default: d<depth> of loaded base model)")
+parser.add_argument("--force-overwrite", action="store_true", help="permit overwriting an existing trained SFT checkpoint at chatsft_checkpoints/<model_tag>/. Default: abort startup if model_<step>.pt exists.")
 parser.add_argument("--model-step", type=int, default=None, help="model step to load from")
 parser.add_argument("--load-optimizer", type=int, default=1, help="warm-start optimizer from pretrained checkpoint (0=no, 1=yes)")
 # Training horizon
@@ -139,6 +140,10 @@ optimizer = model.setup_optimizer(unembedding_lr=args.unembedding_lr, embedding_
 # pretrained values. Since pretraining warmdown brings LRs to ~0, we must save and
 # restore our fresh SFT LRs after loading.
 base_dir = get_base_dir()
+# Pre-flight: refuse to silently overwrite an existing SFT checkpoint at this tag.
+sft_output_dirname = args.model_tag if args.model_tag else f"d{depth}"
+sft_checkpoint_dir = os.path.join(base_dir, "chatsft_checkpoints", sft_output_dirname)
+assert_checkpoint_dir_safe(sft_checkpoint_dir, force_overwrite=args.force_overwrite)
 if args.load_optimizer:
     optimizer_data = load_optimizer_state("base", device, rank=ddp_rank, model_tag=args.model_tag, step=args.model_step)
     if optimizer_data is not None:
