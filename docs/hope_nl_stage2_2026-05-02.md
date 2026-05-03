@@ -391,6 +391,37 @@ Stage 2 beats baseline by 0.012 bpb (~1.8% relative) and Stage 1 swap by 0.019 b
 
 Caveat: this is val_bpb on the SFT mixture, not downstream task accuracy. ChatCORE on the final SFT checkpoint is the natural follow-up to confirm the gain isn't recipe-mixture-specific. The `mps_release_cache` fix landed in `run_categorical_eval` should make ChatCORE on M2 stable now (the eval-loop fragmentation was the load-bearing issue).
 
+### Qualitative chat assessment (2026-05-03)
+
+Loaded final checkpoint via `chat_web -i sft -g d6_stage2` and ran a manual conversation:
+
+```
+> Hi there
+< Hello! How can I help you today?
+
+> What is the capital of France?
+< The capital of France is Paris. It is a city known for its historical
+  landmarks and cultural institutions such as the Eiffel Tower.
+
+> And why is the sky blue?
+< In the heart of France, Paris is a powerful place for the world's most
+  iconic landmarks such as the Eiffel Tower and the Louvre Museum.
+
+> What color is the sky in Paris?
+< The sky is a vibrant city in the city, a vibrant region, a warm region,
+  featuring a tapestry of colors, colors, and the sky is hues of Paris.
+  The sky is vibrant and a lively city, where its vibrant colors are not
+  just the color of the city's architecture and its art.
+```
+
+Reading:
+
+- Single-turn factual recall **works** (Paris is correct, with reasonable elaboration).
+- Multi-turn topic switch **fails**: the "why is the sky blue" question stayed anchored on the prior Paris context instead of pivoting. Could be a Hope/NL behavioral fingerprint (the memory mechanism over-anchoring on earlier tokens) or just d6-scale weakness — without a baseline-d6-SFT side-by-side we can't distinguish.
+- Harder follow-up (Test 4) shows classic small-model word-salad degeneration. This is the d6 floor showing through; the val_bpb improvements (Stage 2 0.6518 vs baseline 0.6639) are real but invisible in chat output at this scale.
+
+The val_bpb metric and chat quality decouple sharply at d6. A 1.8% bpb improvement is meaningful for the architecture comparison but the absolute output quality is bounded by parameter count. Real Hope/NL chat-quality benefits would need d12+ which is outside the M2 budget.
+
 ## Full d6 DCLM pretrain result (2026-05-02)
 
 Operator picked **(c)**. Ran the full pretrain (5000 iters, T=512, accum=1,
