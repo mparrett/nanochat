@@ -1,5 +1,38 @@
 # Bug Log
 
+## 2026-05-03 - Stage 2 additive SFT hangs in Metal dispatch at step 200 (M2 24GB) [OPEN, INVESTIGATING]
+
+**Issue**: `scripts.chat_sft` on a Stage 2 additive checkpoint (Hope/NL `LearnedGateLinearMemory` at one block, alongside MLP) hangs deterministically around step 184-200 on Apple M2 24GB. Process state goes to U (uninterruptible kernel sleep), `sample <pid>` shows the active thread stuck on `_MTLCommandBuffer waitUntilCompleted`. Hit three times across two batch sizes:
+
+- `--device-batch-size=32`: hung at step ~184-200 (twice)
+- `--device-batch-size=16`: hung at step ~200 — **during the save**, not the eval (eval logged val/bpb 0.7915, then step 200 model save deadlocked)
+
+**Critical hygiene rule (from `docs/m2_pipeline_2026-04-30.md:102`)**: Before any MPS run, **always check for orphan workers**:
+
+```bash
+pgrep -lf python    # any leftover python from previous runs?
+pgrep -lf wandb     # any leftover wandb-core?
+```
+
+A multiprocessing worker from an earlier debug probe stayed running for ~3h at 22% CPU after a kill, hogging the Metal context, causing the *next* SFT to hang at 0% CPU after step 1. The current Stage 2 SFT hangs are **not** explained by this — we verified no zombies present — but the rule remains load-bearing for any MPS run.
+
+**Stage-2-specific hypotheses (empirical investigation pending)**:
+
+1. **Activation memory peak.** Stage 2 additive forward materializes 4× (B, T, T) tensors (`scores`, `log_decay`, `decay`, `weights`) per memory-bearing block, *plus* the MLP's (B, T, 4D) since additive doesn't replace. At B=32, T=512 in bf16, that's ~130 MB extra activation memory vs Stage 1 swap (1× (B,T,T), no MLP at L3) which SFT'd successfully at the same batch size (`val_bpb 0.6712`). bs=16 halved that to ~67 MB but still hung *during the save*.
+
+2. **Save-time MPS→CPU transfer under memory pressure.** `torch.save(model.state_dict())` requires copying all params from MPS to CPU, which triggers a Metal command buffer flush. If GPU has too many uncommitted ops or the allocator is fragmented, `_MTLCommandBuffer waitUntilCompleted` can deadlock. The eval at step 200 succeeded (logged val/bpb), then the save attempt hung — pointing at the save-specific copy as the trigger.
+
+3. **MPS allocator fragmentation accumulates over training steps.** Pretrain @ bs=32 succeeded (5000 iters with single end-of-run save). SFT @ bs=32 fails despite shorter (375 iters) — the difference is the periodic `--save-every=100` saves at step 100, 200 etc. that exercise the MPS→CPU copy path repeatedly under accumulated fragmentation. Step 100 save succeeded, step 200 save hung — supports the "fragmentation builds up" hypothesis.
+
+**Investigation plan** (priority order):
+
+- Test A: reboot, baseline SFT @ bs=32, no Hope flags. If it completes, hang is Stage-2-specific. (~1h)
+- Test B: Stage 2 SFT @ bs=32 with explicit `torch.mps.empty_cache()` between optimizer step and save. If completes, fragmentation is the cause. (~1h)
+- Test C: Stage 2 SFT @ bs=32 with `--save-every=-1` (no intermediate saves). If completes (i.e. final save at step 375 is the only save and it succeeds), confirms intermediate-save-time pressure is unique. (~1h)
+- Test D: minimal repro — load Stage 2 checkpoint, do one forward+backward, attempt `torch.save(model.state_dict(), ...)`. Iterate until hang reproduces in <5 min. (~30min)
+
+**Workaround until root-caused**: bs=16 + `--save-every=-1` (skip intermediate saves) might run to completion. Risk: if the *final* save also hangs, we lose the entire SFT.
+
 ## 2026-04-30 - chat_sft NaN at step 4 on M2 MPS
 
 **Issue**: `scripts.chat_sft` produces `loss: nan` deterministically at training step 4 on Apple M2 (24GB) with MPS backend. Steps 1–3 produce sensible loss values (~1.9–2.8), then step 4 onward is NaN forever. Pretrain (`scripts.base_train`) on the same device works fine for 5000 steps.

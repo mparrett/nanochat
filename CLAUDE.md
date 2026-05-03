@@ -15,6 +15,17 @@ The codebase is organized around a single complexity dial: `--depth` (transforme
 - **`docs/project_notes/`** — `decisions.md` (ADRs), `bugs.md` (known issues + fixes), `key_facts.md` (ports, paths, environments).
 - **`HANDOFF.md`** — current branch context (Hope/NL experiment in progress).
 
+## MPS hygiene (M2)
+
+Before kicking off any MPS run, **always check for orphan workers** that can pin a Metal context and silently stall the next launch:
+
+```bash
+pgrep -lf python    # any leftover python from previous runs?
+pgrep -lf wandb     # any leftover wandb-core?
+```
+
+If a previous run was killed mid-flight, multiprocessing workers can survive for hours holding the Metal context. Symptom: next launch hangs at 0% CPU shortly after start. Detail in `docs/project_notes/bugs.md`.
+
 ## Triaging long runs
 
 Three independent signal sources — combine them. Local log = what Python printed (full traceback / sample output, may be buffered). `dev/wandb_status.py` = live server-side metrics. `ps` / `vm_stat` = OS view (hung process shows U-state with ~0% CPU).
