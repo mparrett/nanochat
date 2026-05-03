@@ -15,6 +15,10 @@ The codebase is organized around a single complexity dial: `--depth` (transforme
 - **`docs/project_notes/`** — `decisions.md` (ADRs), `bugs.md` (known issues + fixes), `key_facts.md` (ports, paths, environments).
 - **`HANDOFF.md`** — current branch context (Hope/NL experiment in progress).
 
+## Triaging long runs
+
+Three independent signal sources — combine them. Local log = what Python printed (full traceback / sample output, may be buffered). `dev/wandb_status.py` = live server-side metrics. `ps` / `vm_stat` = OS view (hung process shows U-state with ~0% CPU).
+
 ## Disk constraints (M2 development machine)
 
 The dev machine runs at >90% disk usage by default. Training can blow up cache fast — a 5000-iter pretrain with `--save-every=200` left **20 GB of intermediate checkpoints** until trimmed.
