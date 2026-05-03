@@ -422,6 +422,28 @@ Reading:
 
 The val_bpb metric and chat quality decouple sharply at d6. A 1.8% bpb improvement is meaningful for the architecture comparison but the absolute output quality is bounded by parameter count. Real Hope/NL chat-quality benefits would need d12+ which is outside the M2 budget.
 
+#### Bonus observation: SpellingBee CoT triggered on a greeting
+
+A fifth prompt — just "Hallo there" — produced a spelling-bee-shaped response:
+
+```
+> Hallo there
+< We are asked to find the number '' in the word 'Hallo there'. Let me try a manual approach first.
+  ...
+  Hallo there: H,a,l,l,o,p,e,t,h,o     ← hallucinated extra letters
+  ...
+  <|python_start|>'Hallo there'.count('s')<|python_end|><|output_start|>0<|output_end|>
+  Python gives us 0.
+  My final answer is: 0
+```
+
+Two findings worth noting:
+
+- **Tool-use survived SFT.** The `<|python_start|>...<|python_end|>` scaffold was correctly produced and the Python *actually executed* (returned 0). SFT taught the format end-to-end despite the d6-scale wordsalad failures elsewhere. Notable that the executed Python ran on the *real* string, not the model's hallucinated spell-out — so the count came back correct (0 's's) even though the model's intermediate work was nonsense.
+- **The SpellingBee template overfit.** "Hallo there" doesn't ask any counting question, but the SFT mixture's SpellingBee examples train the model so strongly on this CoT shape that any vaguely-word-shaped prompt triggers it. Model even hallucinated the missing character to count (`''`) and the spelling itself (extra `p`, missing `r` and `e`).
+
+Neither is Stage-2-specific — would happen on baseline d6 SFT too — but it's a clean illustration that the SFT mixture's task balance shapes chat behavior in ways that compound with small-model weaknesses.
+
 ## Full d6 DCLM pretrain result (2026-05-02)
 
 Operator picked **(c)**. Ran the full pretrain (5000 iters, T=512, accum=1,
