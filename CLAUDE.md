@@ -15,14 +15,6 @@ The codebase is organized around a single complexity dial: `--depth` (transforme
 - **`docs/project_notes/`** — `decisions.md` (ADRs), `bugs.md` (known issues + fixes), `key_facts.md` (ports, paths, environments).
 - **`HANDOFF.md`** — current branch context (Hope/NL experiment in progress).
 
-## Quick start
-
-```bash
-uv sync --extra cpu                  # or --extra gpu (mutually exclusive)
-source .venv/bin/activate
-pytest                               # full test suite
-```
-
 ## Long-running scripts: always use `python -u` when redirecting to a file
 
 Python's stdout is **block-buffered** (4-8 KB chunks) when redirected via `>`, not line-buffered. A long training run's `tail -f /tmp/run.log` will appear silent for minutes at a time as the buffer fills, even though wandb is showing live progress and the GPU is busy. Makes the log look hung when it isn't, and obscures real hangs.
