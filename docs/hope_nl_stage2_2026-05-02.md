@@ -9,7 +9,17 @@
 - `docs/hope_nl_stage1_5b_w_o_init_2026-05-01.md` (W_o init root cause)
 - `docs/project_notes/decisions.md::ADR-002` (Stage 2 design priors)
 
-## TL;DR
+## TL;DR — Stage 2 result (2026-05-03, after full pretrain + SFT)
+
+| arm | pretrain val_bpb | SFT val_bpb |
+|---|---:|---:|
+| baseline (d6 / d6_b_iso) | 1.1740 | 0.6639 |
+| Stage 1 swap (W_o=0) | 1.179 (+0.4%) | 0.6712 (+1.1%) |
+| **Stage 2 additive (W_o=1, learned_gate)** | **1.1743** (parity) | **0.6518 (−1.8%)** ⭐ |
+
+Pretrain at parity, SFT slightly better than baseline — single-seed but well above the typical noise floor we've seen. The architecture works at d6 quality level, and the learned per-token gates appear to give a small but real win on the SFT loss. Probe-level concerns (bimodal optimization basins, MQAR seed sensitivity) did not transfer to natural-language pretrain or SFT.
+
+## TL;DR — Stage 2 probe (synthetic recall, 2026-05-02)
 
 Stage 2 with ADR-002 defaults (additive @ L3, W_o=1.0, α≈0.99, η≈0.10) on MQAR:
 
@@ -354,6 +364,32 @@ result tells us we shouldn't expect a gain. We should pretrain anyway because:
 If the operator's project-priority is shifting elsewhere, **(d)** is also
 defensible — Stage 0+1+1.5+2 is a complete experimental unit and the
 architecture wall has been mapped.
+
+## Full d6 SFT result (2026-05-03)
+
+After resolving the ChatCORE-OOM detour (post-mortem: `docs/sft_oom_investigation_2026-05-03.md`), Stage 2 SFT ran cleanly with `--chatcore-every=-1`, bs=32, 375 opt steps, accum=4. Wall ~80 min on M2.
+
+**Trajectory:**
+```
+step   0: 1.0277
+step  50: 0.8348
+step 100: 0.7975
+step 150: 0.7739
+step 200: 0.7633
+step 250: 0.7308
+step 300: 0.6924
+step 350: 0.6590
+step 375: 0.6518   ← final
+```
+
+Comparison:
+- baseline SFT (`d6_b_iso` from Phase 3): **0.6639**
+- Stage 1 swap SFT (HANDOFF, W_o=0): **0.6712**
+- **Stage 2 additive SFT (W_o=1, learned_gate): 0.6518**
+
+Stage 2 beats baseline by 0.012 bpb (~1.8% relative) and Stage 1 swap by 0.019 bpb (~2.9% relative). All single-seed, but the magnitude is well beyond the per-step noise we see in the trajectories.
+
+Caveat: this is val_bpb on the SFT mixture, not downstream task accuracy. ChatCORE on the final SFT checkpoint is the natural follow-up to confirm the gain isn't recipe-mixture-specific. The `mps_release_cache` fix landed in `run_categorical_eval` should make ChatCORE on M2 stable now (the eval-loop fragmentation was the load-bearing issue).
 
 ## Full d6 DCLM pretrain result (2026-05-02)
 

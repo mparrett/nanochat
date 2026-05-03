@@ -124,8 +124,9 @@ Read the trx4mr ticket for the staged 0–6 implementation plan.
 - [x] Stage 2 implemented (per-token learned α/η, vectorized via prefix log-products) — commit `e559446`
 - [x] Stage 2 MQAR probe + α_init sweep — paused for operator review
 - [x] Stage 2 vs baseline DCLM pretrain — picked (c), val_bpb 1.1743 (baseline parity, beats Stage 1 swap's 1.179)
-- [ ] Stage 2 SFT (in flight; ChatCORE eval OOM root-caused, retry with `--chatcore-every=-1`)
+- [x] Stage 2 SFT — val_bpb **0.6518** (beats baseline 0.6639 by 1.8%, Stage 1 swap 0.6712 by 2.9%)
 - [x] Investigation post-mortem captured at `docs/sft_oom_investigation_2026-05-03.md`
+- [ ] ChatCORE on final SFT checkpoint (validates per-task downstream metrics + production-tests the eval-loop fragmentation fix)
 
 ## Status update — 2026-04-30 (end of session)
 
@@ -502,24 +503,19 @@ Session 4 was the Stage 2 SFT debugging and infrastructure-hardening session. St
 - Live snapshot of any wandb run by URL or `entity/project/run-id`. Bypasses buffered local logs.
 - Auto-detects metric column names; works for base_train, chat_sft, chat_rl without per-script tweaks.
 
-### Stage 2 SFT in flight
+### Stage 2 SFT result (2026-05-03)
 
-Final SFT command landed and currently running (`bdnummq3t`, wandb run `2df5c88o`):
+SFT completed cleanly in 79 min on M2 (wandb run `2df5c88o`). All infrastructure landed this session worked: `python -u` for live logs, `mps_release_cache()` before save, `--save-keep-last-n=2` rolling cleanup, `--chatcore-every=-1` to skip the OOM path, pre-flight checkpoint guard. Final checkpoint at `~/.cache/nanochat/chatsft_checkpoints/d6_stage2/model_000375.pt`.
 
-```bash
-python -u -m scripts.chat_sft \
-    --max-seq-len=512 --device-batch-size=32 --total-batch-size=65536 \
-    --eval-every=50 --eval-tokens=524288 \
-    --num-iterations=375 \
-    --save-every=100 --save-keep-last-n=2 \
-    --chatcore-every=-1 \
-    --model-tag=d6_stage2 \
-    --run=sft-stage2-d6-final
-```
+**Final val_bpb = 0.6518.** Beats baseline (0.6639) by 1.8% and Stage 1 swap (0.6712) by 2.9%. Single-seed but well above noise floor.
 
-The single critical flag is `--chatcore-every=-1` — disables the heavy benchmark sweep that was OOMing. ChatCORE can be run separately on the final SFT checkpoint via `chat_eval` for the comparable downstream metric.
+| arm | pretrain val_bpb | SFT val_bpb |
+|---|---:|---:|
+| baseline | 1.174 | 0.6639 |
+| Stage 1 swap | 1.179 | 0.6712 |
+| **Stage 2 additive** | **1.1743** | **0.6518** ⭐ |
 
-ETA ~1h. Expected val_bpb ~0.66-0.68 (vs Stage 1 SFT 0.6712, baseline 0.6639).
+Stage 2 isn't just at parity — it actually wins on the SFT loss. The learned per-token gates appear to give a small but real benefit on the SFT mixture. Pretrain was at parity; SFT shows real separation. Surprising and worth documenting.
 
 ### Files added this session (durable)
 
