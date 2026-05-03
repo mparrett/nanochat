@@ -37,6 +37,7 @@ parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (e
 # Model loading
 parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from AND save to (default: d<depth> of loaded SFT model)")
 parser.add_argument("--force-overwrite", action="store_true", help="permit overwriting an existing trained RL checkpoint at chatrl_checkpoints/<model_tag>/. Default: abort startup if model_<step>.pt exists.")
+parser.add_argument("--save-keep-last-n", type=int, default=None, help="rolling cleanup: keep only the last N intermediate checkpoints on disk. Recommended for disk-constrained machines.")
 parser.add_argument("--model-step", type=int, default=None, help="model step to load from")
 # Training horizon
 parser.add_argument("--num-epochs", type=int, default=1, help="number of epochs over GSM8K")
@@ -323,7 +324,8 @@ for step in range(num_steps):
             None, # note: we don't bother to save the optimizer state
             {
                 "model_config": model_config_kwargs,
-            }
+            },
+            keep_last_n=args.save_keep_last_n,
         )
         print(f"✅ Saved model checkpoint to {checkpoint_dir}")
 

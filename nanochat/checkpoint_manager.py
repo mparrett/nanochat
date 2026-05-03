@@ -100,7 +100,16 @@ def assert_checkpoint_dir_safe(checkpoint_dir, force_overwrite=False, resume_fro
     sys.exit(1)
 
 
-def save_checkpoint(checkpoint_dir, step, model_data, optimizer_data, meta_data, rank=0):
+def save_checkpoint(checkpoint_dir, step, model_data, optimizer_data, meta_data, rank=0, keep_last_n=None):
+    """Save a (model, optimizer, meta) checkpoint triple at `step` into `checkpoint_dir`.
+
+    Optional rolling cleanup via `keep_last_n`: after the new triple is written,
+    delete older intermediate triples so only the most recent N step values remain
+    on disk. Disk-constrained machines (M2, etc.) should pass keep_last_n=2 to
+    cap intermediate-checkpoint footprint when --save-every is in use; without it,
+    a 5000-iter pretrain with --save-every=200 leaves ~25 × 800 MB = 20 GB of
+    intermediates lying around.
+    """
     if rank == 0:
         os.makedirs(checkpoint_dir, exist_ok=True)
         # Save the model state parameters
@@ -118,6 +127,25 @@ def save_checkpoint(checkpoint_dir, step, model_data, optimizer_data, meta_data,
         optimizer_path = os.path.join(checkpoint_dir, f"optim_{step:06d}_rank{rank:d}.pt")
         torch.save(optimizer_data, optimizer_path)
         logger.info(f"Saved optimizer state to: {optimizer_path}")
+    # Rolling cleanup: keep only the last keep_last_n step values on disk.
+    # Run on rank 0 only — all ranks share the dir, but only one needs to delete.
+    if rank == 0 and keep_last_n is not None and keep_last_n >= 1:
+        _trim_old_checkpoints(checkpoint_dir, keep=keep_last_n)
+
+
+def _trim_old_checkpoints(checkpoint_dir, keep):
+    """Keep only the `keep` most recent step values; delete older model/optim/meta files."""
+    steps = set()
+    for name in os.listdir(checkpoint_dir):
+        m = re.match(r"(?:model|meta|optim)_(\d+)(?:_rank\d+)?\.(?:pt|json)$", name)
+        if m:
+            steps.add(int(m.group(1)))
+    keep_steps = set(sorted(steps, reverse=True)[:keep])
+    for s in steps - keep_steps:
+        for name in os.listdir(checkpoint_dir):
+            if re.match(rf"(?:model|meta|optim)_{s:06d}(?:_rank\d+)?\.(?:pt|json)$", name):
+                os.remove(os.path.join(checkpoint_dir, name))
+        log0(f"Trimmed old checkpoint at step {s} from {checkpoint_dir}")
 
 def load_checkpoint(checkpoint_dir, step, device, load_optimizer=False, rank=0):
     # Load the model state

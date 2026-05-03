@@ -43,6 +43,8 @@ parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (e
 # Model loading
 parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from AND save to (default: d<depth> of loaded base model)")
 parser.add_argument("--force-overwrite", action="store_true", help="permit overwriting an existing trained SFT checkpoint at chatsft_checkpoints/<model_tag>/. Default: abort startup if model_<step>.pt exists.")
+parser.add_argument("--save-every", type=int, default=-1, help="save intermediate checkpoints every N opt steps (-1 = only at end). Pair with --save-keep-last-n to cap disk footprint.")
+parser.add_argument("--save-keep-last-n", type=int, default=None, help="rolling cleanup: keep only the last N intermediate checkpoints on disk. Recommended for disk-constrained machines.")
 parser.add_argument("--model-step", type=int, default=None, help="model step to load from")
 parser.add_argument("--load-optimizer", type=int, default=1, help="warm-start optimizer from pretrained checkpoint (0=no, 1=yes)")
 # Training horizon
@@ -444,8 +446,9 @@ while True:
         })
         model.train()
 
-    # save checkpoint at the end of the run (all ranks participate so each saves its optimizer shard)
-    if last_step:
+    # save checkpoint at the end of the run, or every --save-every opt steps (recovery insurance)
+    should_save = last_step or (args.save_every > 0 and step > 0 and step % args.save_every == 0)
+    if should_save:
         output_dirname = args.model_tag if args.model_tag else f"d{depth}" # e.g. d12
         checkpoint_dir = os.path.join(base_dir, "chatsft_checkpoints", output_dirname)
         save_checkpoint(
@@ -464,6 +467,7 @@ while True:
                 "user_config": user_config, # inputs to the training script
             },
             rank=ddp_rank,
+            keep_last_n=args.save_keep_last_n,
         )
 
     if last_step:

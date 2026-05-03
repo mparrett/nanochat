@@ -83,6 +83,7 @@ parser.add_argument("--core-metric-every", type=int, default=2000, help="evaluat
 parser.add_argument("--core-metric-max-per-task", type=int, default=500, help="examples per task for CORE metric")
 parser.add_argument("--sample-every", type=int, default=2000, help="sample from model every N steps (-1 = disable)")
 parser.add_argument("--save-every", type=int, default=-1, help="save checkpoints every N steps (-1 = only at end)")
+parser.add_argument("--save-keep-last-n", type=int, default=None, help="rolling cleanup: keep only the last N intermediate checkpoints on disk (default: keep all). Recommended for disk-constrained machines with --save-every set.")
 # Output
 parser.add_argument("--model-tag", type=str, default=None, help="override model tag for checkpoint directory name (default: d<depth>, which is the canonical baseline location — see --force-overwrite)")
 parser.add_argument("--force-overwrite", action="store_true", help="permit overwriting an existing trained checkpoint at <model_tag>/. Default: abort startup if model_<step>.pt exists in the target dir.")
@@ -541,6 +542,7 @@ while True:
                 },
             },
             rank=ddp_rank,
+            keep_last_n=args.save_keep_last_n,
         )
 
     # termination conditions (TODO: possibly also add loss explosions etc.)
