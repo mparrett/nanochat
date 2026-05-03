@@ -120,6 +120,21 @@ def print0(s="",**kwargs):
         print(s, **kwargs)
 
 
+def mps_release_cache():
+    """Synchronize and release MPS allocator cache. No-op on non-MPS.
+
+    Call between large-eval-batch passes or before any heavy MPS→CPU transfer
+    (e.g., torch.save). Without this, the MPS caching allocator pins variable-
+    shape allocations and accumulates fragmented unusable chunks; ChatCORE-
+    style eval with hundreds of forward passes will OOM. See
+    docs/sft_oom_investigation_2026-05-03.md for the empirical confirmation
+    via dev/mps_fragmentation_bench.py.
+    """
+    if torch.backends.mps.is_available():
+        torch.mps.synchronize()
+        torch.mps.empty_cache()
+
+
 def mps_metrics():
     """Return a dict of MPS allocator metrics suitable for merging into wandb logs.
 

@@ -110,6 +110,10 @@ def save_checkpoint(checkpoint_dir, step, model_data, optimizer_data, meta_data,
     a 5000-iter pretrain with --save-every=200 leaves ~25 × 800 MB = 20 GB of
     intermediates lying around.
     """
+    # MPS pre-save cleanup: flush any queued GPU ops and consolidate the allocator
+    # before triggering a (large) MPS→CPU tensor copy via torch.save. See helper.
+    from nanochat.common import mps_release_cache
+    mps_release_cache()
     if rank == 0:
         os.makedirs(checkpoint_dir, exist_ok=True)
         # Save the model state parameters

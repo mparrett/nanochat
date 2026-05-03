@@ -86,6 +86,7 @@ def run_generative_eval(task_object, tokenizer, model, engine, num_samples, max_
 # batches at a time and just check the logits for correct answer choices.
 
 def run_categorical_eval(task_object, tokenizer, model, batch_size, max_problems=None):
+    from nanochat.common import mps_release_cache
 
     ddp, ddp_rank, ddp_local_rank, ddp_world_size = get_dist_info()
     device = model.get_device()
@@ -99,6 +100,11 @@ def run_categorical_eval(task_object, tokenizer, model, batch_size, max_problems
     # Run the evaluation
     letter_to_id_cache = {} # many letters will repeat often, let's save the tokenizer some work
     num_passed, total = 0, 0
+    # MPS allocator hygiene: the variable-shape forward passes here pin chunks
+    # in the caching allocator without recycling them. Over hundreds of batches
+    # (MMLU = ~440 batches at bs=32) the driver-cached memory climbs into OOM
+    # territory on M2 24GB. mps_release_cache() between batches keeps it bounded.
+    # No-op on CUDA/CPU. See dev/mps_fragmentation_bench.py for the validation.
     for i in range(ddp_rank, num_batches, ddp_world_size):
         i0, i1 = i * batch_size, min((i + 1) * batch_size, num_problems)
 
@@ -138,6 +144,9 @@ def run_categorical_eval(task_object, tokenizer, model, batch_size, max_problems
             outcome = task_object.evaluate(conversation, predicted_letter)
             num_passed += int(outcome)
             total += 1
+
+        # Release MPS allocator cache after each batch — see top-of-loop comment.
+        mps_release_cache()
 
     # Aggregate results across all ranks
     if ddp:
