@@ -66,8 +66,21 @@ After Codex sync (2026-05-03), refined sequence:
 **A3. Multi-seed Stage 2 pretrain** *(~6h, queued for next session)*
 - A2 confirmed SFT-seed-stability → A3 is the right path. Two more pretrains with --seed=1 and --seed=2 on the existing d6 Stage 2 config. Compare val_bpb at step 5000 against the seed=42 reference (1.1743).
 - n=3 total is **directional** ("happened in 1/3, 2/3, 3/3"), not a confidence interval. Frame accordingly.
-- Metadata audit done: seed plumbing landed (commit `29146e7`), captured in meta_*.json automatically. --sft-tag separate save dir (commit `fc48d9c`). Recipe lifted to key_facts.md (commit `f6467ff`).
+- Metadata audit done: seed plumbing landed (commit `29146e7`), captured in meta_*.json automatically. --sft-tag separate save dir (commit `fc48d9c`). Recipe lifted to key_facts.md (commit `f6467ff`). **--inherit-from for guaranteed config parity (commit `ca9bc94`)** loads reference user_config as parser defaults; A3 launch commands are now ~5 lines instead of ~20, with parity by construction.
 - Launch commands captured in the A2 writeup.
+
+**Claim framing — important** (per Codex sanity-check 2026-05-04, Q1=a):
+
+A3 will support: **"Stage 2 pretraining is seed-stable and reaches baseline-like pretrain bpb."**
+
+A3 will **NOT** independently support: "Stage 2's architecture effect is real vs natural d6-seed noise."
+
+A2 (multi-seed SFT, 3/3 within 0.0004) only bounds the SFT-seed component of variance. It says nothing about pretrain-seed noise on the *baseline* d6 architecture, which we never measured (and the baseline checkpoint is gone). Without that, multi-seed Stage 2 pretrain alone establishes internal consistency, not architectural significance.
+
+**A3-prime** *(cheaper bound on the baseline-staleness risk; ~4h)*
+- After A3 if results are tight: one fresh baseline d6 pretrain + SFT with the modern recipe + config audit.
+- Codex's compromise: doesn't fully bound multi-seed baseline variance (would need n=3 baseline = ~13h), but catches the biggest specific risk — that the historical val_bpb 1.174 baseline is a stale/lucky/unlucky artifact that wouldn't be reproduced by the current optimizer/recipe.
+- A3-prime turns "Stage 2 beats baseline by 1.8% on SFT" into "Stage 2 beats *modern-recipe* baseline by X% on SFT" — same comparison, post-recipe-drift. Useful regardless of whether we want full multi-seed baseline.
 
 **B. Stage 4 (multi-block memory)** *(half day design + ~3h × {2,3} configs)*
 - Conditional on A3 surviving. First stage where memory is doing structural work, not a single-layer accent.
@@ -263,9 +276,10 @@ In addition to the A1/A2/A3/B/C from above, the paper bootstrap unlocks:
 1. **A1**: ChatCORE on Stage 2 SFT ✅ done 2026-05-03
 2. **A2**: SFT-seed-variance disambiguation ✅ done 2026-05-04
 3. **A3**: multi-seed Stage 2 pretrain — **queued for next session, ~6h**
-4. **F**: CMS-Independent ablation as **cheap CMS signal** at d6 (~3h) — not a Table 6 analogue; tells us if multi-frequency memory has *any* val_bpb effect at our scale
-5. **D** OR **E**: retrofit (exploratory) OR Hope-Attention (real design block, ~1-1.5 weeks)
-6. **C**: wrap and write up
+4. **A3-prime** (conditional on A3 tight): one fresh baseline d6 pretrain + SFT with modern recipe (~4h) — bounds the historical-baseline-staleness risk without paying for full multi-seed baseline
+5. **F**: CMS-Independent ablation as **cheap CMS signal** at d6 (~3h) — not a Table 6 analogue; tells us if multi-frequency memory has *any* val_bpb effect at our scale
+6. **D** OR **E**: retrofit (exploratory) OR Hope-Attention (real design block, ~1-1.5 weeks)
+7. **C**: wrap and write up
 
 The paper bootstrap pulls the locus of remaining work toward CMS,
 which the paper's ablation says contributes ~6.5% of Hope's gain

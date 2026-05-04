@@ -97,6 +97,26 @@ points for seed=42 weren't captured at the time.)
   interpret — any val_bpb difference at SFT-end will trace back to
   pretrain, not noise.
 
+**Important framing caveat (per Codex sanity-check 2026-05-04):** A2 only
+proves the SFT-seed component of variance. It does **not** bound the
+pretrain-seed component, and it doesn't characterize the *baseline* d6
+pretrain seed distribution. So even after A3, a tight Stage 2 cluster
+will support:
+
+> Stage 2 pretraining is seed-stable and reaches baseline-like pretrain bpb.
+
+It will **not** independently support:
+
+> Stage 2's architecture effect is real vs natural d6-seed noise.
+
+The latter would require a multi-seed *baseline* d6 pretrain, which we
+don't have — the historical baseline checkpoint was deleted. Codex's
+cheaper compromise (~4h instead of ~13h): after A3, run **one** fresh
+baseline pretrain + SFT with the modern recipe + config audit. Doesn't
+fully bound variance, but it catches the biggest risk — the historical
+baseline being a stale/lucky/unlucky artifact that the modern recipe
+would not reproduce.
+
 ## Decision: proceed to A3
 
 Per the audit doc's A1→A2→A3 sequence:
@@ -106,32 +126,25 @@ Per the audit doc's A1→A2→A3 sequence:
 > where memory starts doing structural work.
 
 A2 confirmed. A3 (multi-seed Stage 2 pretrain) is justified and queued
-for the next session.
+for the next session. The narrower question A3 answers — "is Stage 2
+stable enough to build Stage 4 / CMS work on?" — is the right gate
+before the bigger architectural bets, regardless of whether we ever
+fully bound the architecture-vs-pretrain-seed question.
 
 ## A3 launch plan (queued, not started)
 
 Two more Stage 2 pretrains with different seeds, matched on every other
-flag to the existing Stage 2 pretrain (val_bpb 1.1743, seed=42).
-
-Recipe is the canonical d6 pretrain + Stage 2 architecture knobs:
+flag to the existing Stage 2 pretrain (val_bpb 1.1743, seed=42), via
+the `--inherit-from` mechanism (commit `ca9bc94`) which guarantees
+architectural-config parity from the reference meta:
 
 ```bash
 # Pretrain seed=1
 PYTHONUNBUFFERED=1 nohup uv run python -u -m scripts.base_train \
+    --inherit-from=/Users/matt/.cache/nanochat/base_checkpoints/d6_stage2/meta_005000.json \
     --run=stage2-d6-pretrain-seed1 \
     --model-tag=d6_stage2_pretrain_s1 \
     --seed=1 \
-    --depth=6 --aspect-ratio=64 --head-dim=64 \
-    --max-seq-len=512 --window-pattern=L \
-    --num-iterations=5000 \
-    --device-batch-size=32 --total-batch-size=16384 \
-    --hope-additive-memory-layer=3 \
-    --hope-memory-w-o-init-scale=1.0 \
-    --hope-memory-kind=learned_gate \
-    --hope-memory-alpha-max=0.999 --hope-memory-eta-max=1.0 \
-    --hope-memory-alpha-init-bias=4.595 --hope-memory-eta-init-bias=-2.197 \
-    --eval-every=100 --eval-tokens=524288 \
-    --core-metric-every=-1 --sample-every=-1 \
     --save-every=1000 --save-keep-last-n=2 \
     > /tmp/pretrain_stage2_s1.log 2>&1 &
 
@@ -139,27 +152,47 @@ PYTHONUNBUFFERED=1 nohup uv run python -u -m scripts.base_train \
 # same with --seed=2 --model-tag=d6_stage2_pretrain_s2 --run=stage2-d6-pretrain-seed2
 ```
 
-**Config-parity audit (2026-05-04, post-Codex sanity-check):** the queued
-commands above were updated to make every architecturally relevant field
-explicit, after a parity audit against
-`base_checkpoints/d6_stage2/meta_005000.json`. Drift caught:
+The `--inherit-from` flag loads `user_config` from the reference meta as
+parser defaults *before* CLI parsing — CLI flags override only what's
+intentionally different (here: `--seed`, `--model-tag`, `--run`, plus
+the rolling-save policy as crash insurance). All architecturally
+relevant fields (depth, aspect_ratio, head_dim, max_seq_len,
+window_pattern, num_iterations, hope_*, lrs, batch sizes, eval cadence)
+are inherited automatically.
 
-| flag | base_train.py default | seed=42 reference | implication if not passed |
+**Verified inheritance** (against `base_checkpoints/d6_stage2/meta_005000.json`):
+34 fields loaded including `head_dim=64`, `max_seq_len=512`,
+`window_pattern=L`, `num_iterations=5000`, `eval_every=100`,
+`eval_tokens=524288`, all `hope_*` knobs. Per-run / operational fields
+(`run`, `model_tag`, `seed`, `resume_from_step`, `force_overwrite`,
+`save_every`, `save_keep_last_n`) are excluded from inheritance and
+must come from CLI.
+
+### Config-parity audit (verification step)
+
+Pre-`--inherit-from`, the manual launch commands had drifted from the
+reference. Captured here as a verification step — if `--inherit-from`
+is doing its job, all of these will be loaded automatically. If you
+ever need to spot-check, compare the printed `Inherited N fields` line
+against the reference meta's `user_config`:
+
+| flag | base_train.py default | seed=42 reference | now inherited? |
 |---|---|---|---|
-| `--head-dim` | 128 | **64** | n_embd would be 768 vs reference 384 — different model |
-| `--max-seq-len` | 2048 | **512** | different context length, different memory footprint |
-| `--window-pattern` | "SSSL" | **"L"** | sliding-window attention vs full attention |
-| `--num-iterations` | -1 (auto-chinchilla) | **5000** | should match auto-compute but explicit avoids drift if defaults change |
-| `--eval-every` | 250 | **100** | different val_bpb sampling cadence |
-| `--core-metric-every` | 2000 | **-1** | reference skipped CORE during training; matching saves time |
+| `--head-dim` | 128 | **64** | ✓ |
+| `--max-seq-len` | 2048 | **512** | ✓ |
+| `--window-pattern` | "SSSL" | **"L"** | ✓ |
+| `--num-iterations` | -1 (auto-chinchilla) | **5000** | ✓ |
+| `--eval-every` | 250 | **100** | ✓ |
+| `--core-metric-every` | 2000 | **-1** | ✓ |
 
 Two intentional divergences from the seed=42 reference (operational, not
-val_bpb-affecting):
+val_bpb-affecting), passed explicitly on CLI to override the inherited
+values:
 - `--save-every=1000 --save-keep-last-n=2` (reference used `-1` = no
   intermediate saves; rolling cleanup gives crash insurance for ~2.4 GB
   disk cost)
-- `--sample-every=-1` (reference used 100; we don't need mid-training
-  samples for A3's val_bpb comparison)
+- `--sample-every` is inherited as 100 from the reference; not load-bearing
+  for A3's val_bpb comparison but harmless to keep at the reference value
 
 Expected per-pretrain wall: ~3h on M2 24GB (was 5h13min on the seed=42
 Stage 2 pretrain per HANDOFF, but optimizer improvements have landed
