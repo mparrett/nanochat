@@ -43,6 +43,7 @@ parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (e
 parser.add_argument("--seed", type=int, default=42, help="global RNG seed; passed to torch.manual_seed() and recorded in meta_*.json for audit")
 # Model loading
 parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from AND save to (default: d<depth> of loaded base model)")
+parser.add_argument("--sft-tag", type=str, default=None, help="override save tag for SFT checkpoint dir (default: same as --model-tag). Use to load from one tag and save to another, e.g. multi-seed SFT on the same pretrain.")
 parser.add_argument("--force-overwrite", action="store_true", help="permit overwriting an existing trained SFT checkpoint at chatsft_checkpoints/<model_tag>/. Default: abort startup if model_<step>.pt exists.")
 parser.add_argument("--save-every", type=int, default=-1, help="save intermediate checkpoints every N opt steps (-1 = only at end). Pair with --save-keep-last-n to cap disk footprint.")
 parser.add_argument("--save-keep-last-n", type=int, default=None, help="rolling cleanup: keep only the last N intermediate checkpoints on disk. Recommended for disk-constrained machines.")
@@ -144,7 +145,7 @@ optimizer = model.setup_optimizer(unembedding_lr=args.unembedding_lr, embedding_
 # restore our fresh SFT LRs after loading.
 base_dir = get_base_dir()
 # Pre-flight: refuse to silently overwrite an existing SFT checkpoint at this tag.
-sft_output_dirname = args.model_tag if args.model_tag else f"d{depth}"
+sft_output_dirname = args.sft_tag or args.model_tag or f"d{depth}"
 sft_checkpoint_dir = os.path.join(base_dir, "chatsft_checkpoints", sft_output_dirname)
 assert_checkpoint_dir_safe(sft_checkpoint_dir, force_overwrite=args.force_overwrite)
 if args.load_optimizer:
@@ -451,7 +452,7 @@ while True:
     # save checkpoint at the end of the run, or every --save-every opt steps (recovery insurance)
     should_save = last_step or (args.save_every > 0 and step > 0 and step % args.save_every == 0)
     if should_save:
-        output_dirname = args.model_tag if args.model_tag else f"d{depth}" # e.g. d12
+        output_dirname = args.sft_tag or args.model_tag or f"d{depth}" # e.g. d12
         checkpoint_dir = os.path.join(base_dir, "chatsft_checkpoints", output_dirname)
         save_checkpoint(
             checkpoint_dir,
