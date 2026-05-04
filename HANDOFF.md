@@ -127,6 +127,8 @@ Read the trx4mr ticket for the staged 0–6 implementation plan.
 - [x] Stage 2 SFT — val_bpb **0.6518** (beats baseline 0.6639 by 1.8%, Stage 1 swap 0.6712 by 2.9%)
 - [x] Investigation post-mortem captured at `docs/sft_oom_investigation_2026-05-03.md`
 - [x] ChatCORE on final SFT checkpoint — **ChatCORE = 0.1744** at d6_stage2/375 (2026-05-03). 91% of metric is SpellingBee 95.31%; rest at noise floor. Full writeup at `docs/hope_nl_stage2_chatcore_2026-05-03.md`. Eval-loop fragmentation fix production-tested over ~14k MMLU batches with no OOM.
+- [x] **A2 SFT-seed-variance disambiguation (2026-05-04)** — three SFT seeds on the same Stage 2 pretrain produced val_bpb 0.6518 / 0.6516 / 0.6520 (spread 0.0004, ~30× smaller than the 0.0121 headline win). SFT is seed-stable; the headline is not an SFT-seed lottery. Variance, if any, lives in pretrain → A3 justified. Writeup: `docs/hope_nl_stage2_seed_variance_2026-05-04.md`.
+- [ ] **A3 multi-seed Stage 2 pretrain (queued)** — two more pretrains with --seed=1 and --seed=2 on the d6 Stage 2 config. Launch commands captured in the A2 writeup. ~6h wall total.
 
 ## Status update — 2026-04-30 (end of session)
 

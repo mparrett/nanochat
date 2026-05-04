@@ -58,18 +58,16 @@ After Codex sync (2026-05-03), refined sequence:
 **A1. ChatCORE on Stage 2 SFT** ✅ *done 2026-05-03, ChatCORE = 0.1744*
 - First downstream-task signal on Stage 2. SpellingBee 95.31% dominates 91% of the metric; non-SpellingBee tasks all at noise floor. Writeup at `docs/hope_nl_stage2_chatcore_2026-05-03.md`.
 
-**A2. SFT-seed-variance disambiguation** *(~2.5h, do this BEFORE multi-seed pretrain)*
-- Re-run SFT on the *same* Stage 2 pretrain checkpoint with seed=1 and seed=2 (~80 min × 2).
-- The headline win is in **SFT** val_bpb (–1.8%), not pretrain (0.0% delta vs baseline). Before paying ~6h to re-pretrain, find out whether SFT alone is the lottery.
-- Three branches:
-  - SFT stable across seeds → variance must live in pretrain → commit to A3.
-  - SFT unstable across seeds → headline was an SFT-seed lottery → no need to re-pretrain; pivot to honest write-up.
-  - Mixed → both steps contribute, A3 still warranted but framing changes.
+**A2. SFT-seed-variance disambiguation** ✅ *done 2026-05-04*
+- Three SFT seeds (42, 1, 2) on the same Stage 2 pretrain → val_bpb 0.6518 / 0.6516 / 0.6520. Spread 0.0004, ~30× smaller than the 0.0121 headline win.
+- **Conclusion: SFT is highly seed-stable; headline is not an SFT-seed lottery. Variance, if any, lives in pretrain → A3 justified.**
+- Writeup: `docs/hope_nl_stage2_seed_variance_2026-05-04.md`.
 
-**A3. Multi-seed Stage 2 pretrain** *(~6h, conditional on A2)*
-- Run only if A2 shows SFT is seed-stable. Otherwise the result is already "win was noise" without any further pretrain.
+**A3. Multi-seed Stage 2 pretrain** *(~6h, queued for next session)*
+- A2 confirmed SFT-seed-stability → A3 is the right path. Two more pretrains with --seed=1 and --seed=2 on the existing d6 Stage 2 config. Compare val_bpb at step 5000 against the seed=42 reference (1.1743).
 - n=3 total is **directional** ("happened in 1/3, 2/3, 3/3"), not a confidence interval. Frame accordingly.
-- Concur with Codex's metadata audit before A3: ensure run metadata records seed, topology (swap vs additive), `W_o` init scale, and memory-layer set. Stage 4 will compound configs and become hard to audit otherwise.
+- Metadata audit done: seed plumbing landed (commit `29146e7`), captured in meta_*.json automatically. --sft-tag separate save dir (commit `fc48d9c`). Recipe lifted to key_facts.md (commit `f6467ff`).
+- Launch commands captured in the A2 writeup.
 
 **B. Stage 4 (multi-block memory)** *(half day design + ~3h × {2,3} configs)*
 - Conditional on A3 surviving. First stage where memory is doing structural work, not a single-layer accent.
