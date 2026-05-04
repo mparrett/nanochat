@@ -126,7 +126,7 @@ Read the trx4mr ticket for the staged 0–6 implementation plan.
 - [x] Stage 2 vs baseline DCLM pretrain — picked (c), val_bpb 1.1743 (baseline parity, beats Stage 1 swap's 1.179)
 - [x] Stage 2 SFT — val_bpb **0.6518** (beats baseline 0.6639 by 1.8%, Stage 1 swap 0.6712 by 2.9%)
 - [x] Investigation post-mortem captured at `docs/sft_oom_investigation_2026-05-03.md`
-- [ ] ChatCORE on final SFT checkpoint (validates per-task downstream metrics + production-tests the eval-loop fragmentation fix)
+- [x] ChatCORE on final SFT checkpoint — **ChatCORE = 0.1744** at d6_stage2/375 (2026-05-03). 91% of metric is SpellingBee 95.31%; rest at noise floor. Full writeup at `docs/hope_nl_stage2_chatcore_2026-05-03.md`. Eval-loop fragmentation fix production-tested over ~14k MMLU batches with no OOM.
 
 ## Status update — 2026-04-30 (end of session)
 

@@ -55,8 +55,8 @@ These came up during sessions 2–4 and are punted for future work:
 
 After Codex sync (2026-05-03), refined sequence:
 
-**A1. Finish in-flight ChatCORE on Stage 2 SFT** *(~1.5h remaining, already running)*
-- First downstream-task signal on Stage 2. Closes the only unchecked Stage 2 box.
+**A1. ChatCORE on Stage 2 SFT** ✅ *done 2026-05-03, ChatCORE = 0.1744*
+- First downstream-task signal on Stage 2. SpellingBee 95.31% dominates 91% of the metric; non-SpellingBee tasks all at noise floor. Writeup at `docs/hope_nl_stage2_chatcore_2026-05-03.md`.
 
 **A2. SFT-seed-variance disambiguation** *(~2.5h, do this BEFORE multi-seed pretrain)*
 - Re-run SFT on the *same* Stage 2 pretrain checkpoint with seed=1 and seed=2 (~80 min × 2).
@@ -102,7 +102,7 @@ scale" — itself a clear research contribution.
 For convenience — the unchecked boxes:
 
 - [x] Full Hope/NL paper §4–§9 obtained ← **resolved 2026-05-03** (read NL.pdf, 40pp). Web sources (learnopencv, grokipedia) 403'd, but unnecessary now.
-- [ ] ChatCORE on final Stage 2 SFT checkpoint (in flight)
+- [x] ChatCORE on final Stage 2 SFT checkpoint — **0.1744** (2026-05-03), SpellingBee dominates 91%; writeup at `docs/hope_nl_stage2_chatcore_2026-05-03.md`
 - [ ] Stage 1-additive (W_o=1) full pretrain
 - [ ] Stage 2 swap-topology full pretrain
 - [ ] Multi-seed confirmation of Stage 2 val_bpb 1.1743
