@@ -22,6 +22,31 @@
 - `val_bpb` (bits per byte) — loss proxy
 - `time-to-GPT-2` — wall-clock until CORE > 0.256525 (speedrun leaderboard, see `dev/LEADERBOARD.md`)
 
+## Training recipes — d6 on M2 24GB
+
+Canonical settings used for d6 baseline / Stage 1 / Stage 2 comparisons. Match
+exactly across runs — val_bpb is only meaningful when eval setup is identical.
+
+**Pretrain:** `--depth=6 --device-batch-size=32 --total-batch-size=16384`
+(accum=1, ~3h wall, ~5000 iters at chinchilla budget). Default `--eval-every=250
+--eval-tokens=524288`. `--core-metric-every=-1` is already the default.
+
+**SFT:** `--num-iterations=375 --total-batch-size=65536` (accum=4 — does NOT
+transfer to pretrain, see `phase3_step4_pretrain_accum_derisk` writeup).
+**`--eval-every=50 --eval-tokens=524288`** — both load-bearing for fair
+val_bpb comparison; defaults are wrong (`eval-tokens` defaults to 20M which
+takes ~67min per eval on M2 and hangs runs). `--chatcore-every=-1` to skip
+the categorical-eval OOM path; `--save-every=100 --save-keep-last-n=2`
+for rolling cleanup.
+
+**Multi-seed pattern:** `--model-tag=<base>` to load, `--sft-tag=<base>_s<N>`
+to save somewhere different, `--seed=<N>` for the global RNG. seed lands
+in `meta_*.json` automatically via `vars(args).copy()`.
+
+**Source of these numbers:** seed=42 d6_stage2 SFT meta
+(`chatsft_checkpoints/d6_stage2/meta_000375.json`) is the canonical reference;
+SFT recipe story is captured in `docs/sft_oom_investigation_2026-05-03.md`.
+
 ## Branch
 - Main: `master`
 - Current working branch: `experiment/hope-nested-learning`
