@@ -36,6 +36,8 @@ from tasks.spellingbee import SimpleSpelling, SpellingBee
 # -----------------------------------------------------------------------------
 # CLI arguments
 parser = argparse.ArgumentParser(description="Supervised fine-tuning (SFT) the model")
+# Config inheritance (multi-seed / replication: load reference user_config from a prior run's meta as parser defaults; CLI flags override)
+parser.add_argument("--inherit-from", type=str, default=None, help="path to a reference meta_*.json; its user_config is loaded as parser defaults. Per-run/operational fields (run, model_tag, sft_tag, seed, etc.) are not inherited and must be set on CLI.")
 # Logging
 parser.add_argument("--run", type=str, default="dummy", help="wandb run name ('dummy' disables wandb logging)")
 # Runtime
@@ -72,6 +74,25 @@ parser.add_argument("--chatcore-max-sample", type=int, default=24, help="max pro
 # Data mixture
 parser.add_argument("--mmlu-epochs", type=int, default=3, help="number of epochs of MMLU in training mixture (teaches Multiple Choice)")
 parser.add_argument("--gsm8k-epochs", type=int, default=4, help="number of epochs of GSM8K in training mixture (teaches Math and Tool Use)")
+# If --inherit-from is set, apply the reference run's user_config as parser
+# defaults BEFORE parse_args() — CLI flags then override only what's
+# intentionally different. Excludes per-run + operational fields.
+_inherit_pre, _ = parser.parse_known_args()
+if _inherit_pre.inherit_from is not None:
+    from nanochat.common import load_inherit_config
+    _inherited = load_inherit_config(
+        _inherit_pre.inherit_from,
+        exclude_fields={"run", "model_tag", "sft_tag", "seed", "model_step",
+                        "load_optimizer", "force_overwrite", "save_every",
+                        "save_keep_last_n", "inherit_from"},
+    )
+    _valid_dest = {a.dest for a in parser._actions}
+    for _k in list(_inherited):
+        if _k not in _valid_dest:
+            print(f"WARNING: --inherit-from key {_k!r} has no matching CLI flag on chat_sft.py; ignoring (probably from a different script's meta)")
+            del _inherited[_k]
+    parser.set_defaults(**_inherited)
+    print(f"Inherited {len(_inherited)} fields from {_inherit_pre.inherit_from}")
 args = parser.parse_args()
 user_config = vars(args).copy()
 # -----------------------------------------------------------------------------

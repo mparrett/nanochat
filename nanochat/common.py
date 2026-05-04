@@ -325,3 +325,37 @@ def get_peak_flops(device_name: str) -> float:
     # Unknown GPU - return inf so MFU shows as 0% rather than a wrong guess
     logger.warning(f"Peak flops undefined for: {device_name}, MFU will show as 0%")
     return float('inf')
+
+
+def load_inherit_config(meta_path, exclude_fields=None):
+    """Load user_config from a reference meta_*.json for use with the
+    --inherit-from CLI flag on training scripts.
+
+    Used to apply a previous run's config as parser defaults *before* CLI
+    parsing — this guarantees architectural-config parity with the
+    reference run and lets CLI flags override only what's intentionally
+    different (typically --seed, --model-tag, --run).
+
+    Args:
+        meta_path: path to a meta_*.json (output of save_checkpoint).
+        exclude_fields: iterable of user_config keys to NOT inherit
+            (per-run identifiers and operational fields). Common excludes:
+            run, model_tag, sft_tag, seed, resume_from_step,
+            force_overwrite, save_every, save_keep_last_n, model_step.
+
+    Returns:
+        dict suitable for parser.set_defaults(**dict).
+
+    Caller is expected to filter the returned dict against the parser's
+    valid argument destinations and warn on any unknown keys (which
+    typically means the meta is from a script with a different flag set).
+    """
+    import json
+    if exclude_fields is None:
+        exclude_fields = set()
+    else:
+        exclude_fields = set(exclude_fields)
+    with open(meta_path) as f:
+        meta = json.load(f)
+    user_config = meta.get("user_config", {})
+    return {k: v for k, v in user_config.items() if k not in exclude_fields}
