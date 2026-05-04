@@ -543,3 +543,82 @@ Stage 2 isn't just at parity — it actually wins on the SFT loss. The learned p
 - Stage 1-additive (W_o=1) full pretrain. Probe found parity with baseline; whether DCLM val_bpb agrees was punted.
 - Multi-seed confirmation of Stage 2 pretrain val_bpb 1.1743 — currently single-seed.
 - The forward-pass fuse opportunity in `LearnedGateLinearMemory` (combine log_decay→decay into one in-place op; fuse weights computation). Modest M2 wins; not load-bearing.
+
+## Status update — 2026-05-04 (end of session 5)
+
+Session 5 was the experimental-result + paper-bootstrap session. ChatCORE on
+Stage 2 SFT closed the only unchecked Stage 2 box; the full NeurIPS 2025 paper
+unblocked Stages 3/5/6; the seed-variance experiment (A2) confirmed the Stage 2
+SFT win is not a seed lottery. A3 (multi-seed pretrain) is queued for next
+session with all prerequisites landed.
+
+### What got done this session
+
+**ChatCORE on Stage 2 SFT** (`docs/hope_nl_stage2_chatcore_2026-05-03.md`, commit `54610fb`)
+- First downstream-task signal on Stage 2: ChatCORE = **0.1744** at d6_stage2/375.
+- Per-task: ARC-Easy 25.80%, ARC-Challenge 28.67%, MMLU 26.98%, GSM8K 0.76%, HumanEval 0.00%, SpellingBee 95.31%.
+- SpellingBee dominates 91% of the metric (0.9531 / 6 = 0.159 vs 0.1744 total). Non-SpellingBee tasks all hug their baselines.
+- Honest read: at d6 scale ChatCORE is mostly a measurement of "did SFT memorize the SpellingBee template" — true for any d6 SFT regardless of pretrain architecture. Real architectural signal lives at d12+ which is outside our M2 budget.
+- Eval-loop fragmentation fix (`mps_release_cache`, commit `f27a6db`) production-tested over ~14k MMLU batches, no OOM. Session-4 infrastructure validated end-to-end.
+
+**Full Hope/NL paper read** (40pp, NL.pdf)
+- Previously had only the 13pp truncated version. Full paper unblocks the previously-missing equations for Stages 3/5/6.
+- **CMS** (Eq 70-71, three variants Eq 72/73/74): chain of MLP blocks at different update frequencies with chunked-gradient-sum updates. Independent / head-wise variant (Eq 74) is the simplest test.
+- **Hope architecture** (Eq 94-97): Self-modifying Titans → CMS chain. Includes a **Hope-Attention variant** that swaps self-modifying Titans for plain attention — directly applicable to nanochat.
+- **M3 optimizer** (Algorithm 1): Adam + Muon + CMS combined. Paper Figure 12 confirms M3 is slower than Muon at 140M and 1.3B; proof-of-concept only.
+- **§7.3 retrofit recipe**: initialize CMS blocks from existing pretrained MLPs and continue pretraining. Means we don't have to retrain from scratch to test CMS at d6.
+- **Ablation Table 6**: w/o CMS = +6.5% ppl; w/o DGD = +9.6%; w/o inner-q ≈ 0% (could be dropped to simplify); w/o inner-v = +13.5%. Numbers are at 760M / 30B; ~600× our d6, transfer unknown.
+
+**Phase audit doc** (`docs/hope_nl_phase_audit_2026-05-03.md`, commits `d62063c` + later edits)
+- Stage matrix table (Stages 0-6 status at a glance).
+- Codex sync integration (challenge-function role, refined A1→A2→A3 order with SFT-seed-variance step inserted before pretrain).
+- Source bootstrap section with full equations from the paper.
+- Three new options on the table alongside A/B/C: D (§7.3 retrofit on Stage 2 d6), E (Hope-Attention as Stage 5 target), F (CMS-Independent ablation).
+- Refined order: **A1 → A2 → A3 → F → (D or E) → C**.
+
+**ChatCORE eval-scheduling followup ticket** (`docs/project_incoming/feat_chatcore_eval_scheduling.md`, commit `aaf94da`)
+- Codex's proposal to add smoke / fastfail / full eval modes — without changing the canonical ChatCORE metric. ~80 of today's 87-min eval was spent on confirmed-floor GSM8K and HumanEval. Filed for pickup before Stage 4.
+
+**Seed plumbing patch** (commits `29146e7` + `fc48d9c`)
+- `--seed` CLI flag on `base_train.py` and `chat_sft.py`; default 42 preserves existing behavior. Plumbed into `nanochat/common.py:compute_init()`; auto-flows into `meta_*.json` via `vars(args).copy()`. Closes Codex's metadata-audit gap.
+- `--sft-tag` flag separates SFT save dir from load dir (`--model-tag`). Required for multi-seed SFT on the same pretrain checkpoint; cleaner than symlink hacks.
+
+**Training recipe lifted to key_facts.md** (commit `f6467ff`)
+- The seed=1 SFT launch hung 60min into a default-eval-tokens (20M) val_loss eval before we caught the recipe mismatch. The recipe was already documented in `sft_oom_investigation_2026-05-03.md:181` (today's earlier post-mortem) but lived inside narrative, not in any auto-loaded surface.
+- Lifted canonical d6/M2 pretrain + SFT recipes into `docs/project_notes/key_facts.md`. Future sessions auto-load it. Specifically calls out: both `--eval-every` and `--eval-tokens` are load-bearing for fair val_bpb comparison; default `eval-tokens=20M` silently hangs M2 SFT.
+
+**Cross-project coordination** (note in `~/projects-new/trx4mr/docs/m2-shared-gpu-coordination.md`, user-committed as `8f82509` on trx4mr side)
+- Documented the pre-flight + wait-for-PID monitor pattern used by nanochat. trx4mr could (and now does) run the same check the other direction. User hooked it into trx4mr's CLAUDE.md preflight surface.
+- Tested in practice mid-session: trx4mr orchestrator's busy-check correctly detected our SFT process and waited.
+
+**A2 SFT-seed-variance experiment** (`docs/hope_nl_stage2_seed_variance_2026-05-04.md`, commit `f8a2551`)
+- Question: is the Stage 2 SFT headline win (val_bpb 0.6518 vs baseline 0.6639 = 0.0121) reproducible across SFT seeds, or an SFT-seed lottery?
+- Re-ran SFT on the **same** Stage 2 pretrain checkpoint with seeds 1 and 2 (~2.5h total).
+- Result: 3/3 seeds (42, 1, 2) → val_bpb 0.6518 / 0.6516 / 0.6520. Spread **0.0004** — ~30× smaller than the headline win.
+- Trajectories tracked each other within ≤0.0024 at every checkpointed step. Optimization paths converge, not diverge.
+- Conclusion: SFT is highly seed-stable on this configuration; the headline is not an SFT-seed lottery; variance, if any, must live in pretrain → A3 is justified.
+
+### Files added this session (durable)
+
+- `docs/hope_nl_phase_audit_2026-05-03.md` — cross-stage synthesis with Codex sync + paper bootstrap
+- `docs/hope_nl_stage2_chatcore_2026-05-03.md` — ChatCORE 0.1744 writeup
+- `docs/hope_nl_stage2_seed_variance_2026-05-04.md` — A2 result (this session's headline)
+- `docs/project_incoming/feat_chatcore_eval_scheduling.md` — Codex's smoke/fastfail/full eval proposal, filed for pickup
+- `docs/project_notes/key_facts.md` — appended d6/M2 training recipes section
+- `~/.cache/nanochat/chatsft_checkpoints/d6_stage2_s1/model_000375.pt` (val_bpb 0.6516)
+- `~/.cache/nanochat/chatsft_checkpoints/d6_stage2_s2/model_000375.pt` (val_bpb 0.6520)
+
+### Next session: pick up here
+
+1. **Launch A3** — two Stage 2 pretrains with `--seed=1` and `--seed=2`. Launch commands captured at the bottom of `docs/hope_nl_stage2_seed_variance_2026-05-04.md`. ~6h wall total. Compare val_bpb at step 5000 against the seed=42 reference (1.1743).
+2. **Decision after A3**: tight cluster (similar to A2's 0.0004) → architecture's pretrain win is robust → proceed to **F** (CMS-Independent ablation, ~3h, cheapest direct test of "does multi-frequency memory help at d6"). Wide cluster (≥ 0.012) → headline was a pretrain-seed lottery → pivot to wrap-up.
+3. **Codex sanity-check pending** — note at `/tmp/pasteboard-3` was sent for a critical pass on my paper-equation extraction. Reply may have actionable corrections for the audit doc; check before committing to F or E.
+
+### Open questions still punted (carried from session 4 + new)
+
+- Stage 2 swap topology has never been pretrained.
+- Stage 1-additive (W_o=1) full pretrain.
+- Multi-seed Stage 2 pretrain — **A3, queued for next session**.
+- Forward-pass fuse opportunity in `LearnedGateLinearMemory`.
+- ChatCORE on baseline d6 SFT and Stage 1 SFT for direct comparators (baseline pretrain checkpoint is gone; cost ~5h to regenerate).
+- Codex's third sanity-check pass on paper equations.
