@@ -121,12 +121,18 @@ Update (Eq 71): each level updates only every C^(l) steps with gradient sum:
 ```
 θ^(f_l)_{i+1} = θ^(f_l)_i - Σ_{t=i-C^(l)}^i η^(l)_t · f(θ^(f_l)_t; x_t)   if i ≡ 0 (mod C^(l))
 ```
-Where `C^(l) = ⌈max_l C^(l) / f_l⌉` is the chunk size for level l.
+Where `C^(l) := max_i C^(i) / f_l` (no ceil in the source). Self-referential
+as written; **for implementation, treat `max_i C^(i)` as a configured base
+chunk size and derive per-level frequencies from it** (per Codex sanity-check
+2026-05-04). Eq 71 is **formally** sparse-in-token-time (only update at
+chunk boundaries); **practically** implemented via chunk-parallel training
+that processes all tokens in a chunk in parallel and applies the boundary
+update once.
 
 Three CMS variants in the paper:
 - **Nested** (Eq 72): level s+1 init meta-learned in level s
-- **Sequential** (Eq 73): output of s feeds into s+1, backprop through chain
-- **Independent (head-wise)** (Eq 74): parallel blocks combined via `Agg(MLP^(f_k)(x_t), ..., MLP^(f_1)(x_t))` — **simplest variant**
+- **Sequential** (Eq 73): output of s feeds into s+1, backprop through chain — **the paper's main CMS / Hope path**
+- **Independent (head-wise)** (Eq 74): parallel blocks combined via `Agg(MLP^(f_k)(x_t), ..., MLP^(f_1)(x_t))` — explicitly defined; structurally simpler and decoupled, but **not the topology Table 6's "w/o CMS" ablation was measured against**
 
 ### Hope architecture (§8.3, Eq 94-97)
 
@@ -137,12 +143,21 @@ M_□,t = M_□,t-1(α_t I - η_t k_t k_t^T) - η_t ∇L                  (DGD w
 y_t = MLP^(f_k)(MLP^(f_{k-1})(... MLP^(f_1)(o_t)))               (CMS chain on top)
 ```
 
-Plus L2 normalization on q,k, plus local convolutions of window 4.
+Plus L2 normalization on q,k, plus local convolutions of window 4. The
+formal equations omit these "for clarity"; experiments use them. Nanochat
+already has QK norm in its attention path, but Stage 1/2 memory modules
+do **not** normalize their internal memory q/k.
 
-**Hope-Attention variant** (paragraph after Eq 97): replace
-self-modifying Titans with softmax attention. **Directly applicable to
-nanochat** — keeps our attention path, just adds the CMS chain on top
-of attention output.
+**Hope-Attention variant** (paragraph after Eq 97): replace self-modifying
+Titans (Eq 94-96) with softmax global attention. The faithful version is
+**attention output → sequential CMS chain**, which structurally **replaces /
+adapts the post-attention MLP path** (in nanochat: the existing ReLU² MLP
+at each block). Not "add a third residual branch" — that would be additive
+memory, which is what Stage 1-additive / Stage 2 already does. Per Codex
+sanity-check 2026-05-04: budget option E as a real design block, not a
+trivial CMS append. Local conv-4 is plausibly not load-bearing for the
+Hope-Attention variant; safer to start without it but acknowledge a no-conv
+version isn't paper-exact.
 
 ### M3 — Multi-scale Momentum Muon optimizer (§7.2, Algorithm 1)
 
@@ -156,9 +171,11 @@ O^(2)_t ← NewtonSchulz_T(M^(2)_t)                   (every f steps)
 ```
 
 M3 = Adam (V_t variance) + Muon (NewtonSchulz on both momenta) + CMS
-(M^(2) chunk-summed). Paper notes this is **slower** than Muon at
-140M and 1.3B (Figure 12). Proof-of-concept; not battle-tested for
-training speed.
+(M^(2) chunk-summed) — **shorthand only**. Algorithm 1 is **not**
+production AdamW/Muon: no bias correction on V_t, no decoupled weight
+decay (per Codex sanity-check 2026-05-04). Paper Figure 12 confirms M3 is
+slower than Muon at 140M and 1.3B; explicitly marked proof-of-concept.
+**Ignore for nanochat unless optimizer research becomes the project goal.**
 
 ### Chunk-parallel training (§8.2, Eq 90-93)
 
@@ -178,10 +195,14 @@ For our Stage 1/2 module (linear attention memory), we'd:
 > trained parameters of `{MLP_pretrained_l}` as the initial state of
 > CMS blocks."
 
-In the paper's experiments they retrofit Llama-3 this way and continue
-pretraining for 15B tokens. **Directly applicable**: take the Stage 2
-d6 pretrain checkpoint, place its MLP blocks at different CMS levels,
-continue pretraining for some smaller token budget.
+In the paper's experiments they retrofit Llama-3-8B this way and continue
+pretraining for 15B tokens. **Mechanically applicable** to our Stage 2 d6
+pretrain checkpoint, but **not scientifically proportional** at d6 / ~80M
+token budget (per Codex sanity-check 2026-05-04). The recipe depends on
+useful pretrained MLP weights AND enough continued-pretrain tokens for the
+lower-frequency levels to update meaningfully. At our budget, low-freq
+levels may barely update. Treat as exploratory stress test, not a
+proportional mini version of their result.
 
 ### Ablation evidence on what each component buys (Table 6)
 
@@ -195,9 +216,15 @@ continue pretraining for some smaller token budget.
 | w/o inner-q | -0.4% (noise) | -0.7 |
 | w/o inner-v | +13.5% | -3.0 |
 
-**Notable**: inner-q is essentially unused — could simplify Stage 5/6
-implementations by dropping it. Inner-v is the most important inner
-projection.
+**Important wording fix** (per Codex sanity-check 2026-05-04): the
+"inner-projection k/v/q" ablations in Table 6 are projections **moved
+from higher-frequency to lowest-frequency level**, not deleted. Inner-q
+near-neutral means **adaptive inner query projection is unnecessary** in
+their setup; it does **NOT** mean a regular query projection is removable.
+Inner-v is the worst ablation (+13.5%) but inner-k is also important
+(+13.77%). Practical takeaway for our future Stage 5/6 implementations:
+likely safe to skip the *adaptive-q* mechanism, but keep adaptive-k
+and adaptive-v (and standard q,k,v projections obviously stay).
 
 **Honest scale caveat**: paper's results are at 760M/30B and 1.3B/100B
 (~600× our d6). The ~6.5% perplexity from CMS alone might be
@@ -216,31 +243,32 @@ proportionally smaller (or larger, or zero) at d6. We don't know.
 
 In addition to the A1/A2/A3/B/C from above, the paper bootstrap unlocks:
 
-**D. §7.3 retrofit experiment** *(~3-6h depending on token budget)*
-- Take the Stage 2 d6 pretrain checkpoint. Place the existing MLP blocks at different CMS levels via Eq 71 update schedule. Continue pretraining for a reduced token budget (e.g., 1000 iters at f1=1, f2=4, f3=16).
-- **What we'd learn**: does CMS add anything at d6 scale? Cheap because we don't pay for from-scratch pretrain.
-- Risk: chunk-update logic in optimizer adds ~half day of implementation work.
+**D. §7.3 retrofit experiment** *(exploratory stress test; ~3-6h)*
+- Take the Stage 2 d6 pretrain checkpoint. Place the existing MLP blocks at different CMS levels via Eq 71 update schedule. Continue pretraining for a reduced token budget.
+- **What we'd learn**: whether the retrofit mechanism even fires at d6 scale. Per Codex 2026-05-04, this is **not a proportional mini version** of paper's result — at our token budget, lower-frequency levels may barely update.
+- Risk: chunk-update logic in optimizer adds ~half day of implementation work; result might be uninformative (level barely moved from init = "no signal" not "no benefit").
 
-**E. Hope-Attention as Stage 5 target** *(~1 week design + 3h pretrain)*
-- Don't do full self-modifying Titans (too many components). Take softmax attention (already there), add a CMS chain on top of attention output via Eq 97. This is the paper's Hope-Attention variant.
+**E. Hope-Attention as Stage 5 target** *(real design block; ~1-1.5 weeks)*
+- Replace nanochat's post-attention ReLU² MLP at one or more blocks with a sequential CMS chain (Eq 70 + Eq 71 update schedule). Keep nanochat's existing attention (already has QK norm). Per Codex 2026-05-04: **structural change, not "just append CMS"** — refactors the post-attention path itself.
+- Keep nanochat's native ReLU² MLP form per level to avoid SwiGLU-vs-ReLU² confound.
 - **Pass/fail bar**: probe via `dev/probe_mqar.py` first. If saturation step ≥ baseline, proceed to pretrain.
 - More ambitious than Stage 4 (multi-block memory). Closer to a real Hope implementation, sidestepping the highest-risk component (self-modifying Titans).
 
-**F. CMS-Independent ablation isolated** *(~3h)*
-- Cheapest pure test of "is multi-frequency memory worth it at d6?". Add Eq 74 head-wise CMS to our existing model with no other changes. Just a parallel MLP chain at varying chunk sizes.
-- **What we'd learn**: directly comparable to paper's Table 6 "w/o CMS" ablation, but at d6.
+**F. CMS-Independent ablation isolated** *(cheap CMS signal; ~3h)*
+- Add Eq 74 head-wise CMS to our existing model with no other changes. Parallel MLP chain at varying chunk sizes, combined via learned weighted sum.
+- **What we'd learn**: a *cheap signal* on whether multi-frequency memory at d6 produces any val_bpb effect. **NOT** directly comparable to Table 6's "w/o CMS" — that ablation was on Sequential CMS within full Hope; our F isolates Independent CMS on a vanilla d6 baseline (per Codex 2026-05-04). A positive signal motivates E (faithful Sequential implementation); a null signal is informative but not falsifying for the paper's claim.
 
 ## Refined recommendation order
 
-1. **A1**: finish ChatCORE (in flight)
-2. **A2**: SFT-seed-variance disambiguation (~2.5h)
-3. **A3** (conditional): multi-seed Stage 2 pretrain (~6h)
-4. **F**: CMS-Independent ablation (~3h) — cheap and directly comparable to paper Table 6
-5. **D** OR **E**: retrofit experiment OR Hope-Attention (operator pick)
+1. **A1**: ChatCORE on Stage 2 SFT ✅ done 2026-05-03
+2. **A2**: SFT-seed-variance disambiguation ✅ done 2026-05-04
+3. **A3**: multi-seed Stage 2 pretrain — **queued for next session, ~6h**
+4. **F**: CMS-Independent ablation as **cheap CMS signal** at d6 (~3h) — not a Table 6 analogue; tells us if multi-frequency memory has *any* val_bpb effect at our scale
+5. **D** OR **E**: retrofit (exploratory) OR Hope-Attention (real design block, ~1-1.5 weeks)
 6. **C**: wrap and write up
 
 The paper bootstrap pulls the locus of remaining work toward CMS,
-which the paper's ablation says contributes ~6.5% of Hope's gain.
-That's still meaningful, and it's a cleaner experiment than Stage 6
-(self-modifying memory), which would require implementing 5+ new
-memory modules.
+which the paper's ablation says contributes ~6.5% of Hope's gain
+at 760M-1.3B scale (caveat: ours is ~600× smaller, transfer unknown).
+F is the cheapest way to find *any* d6-scale signal on the multi-
+frequency mechanism; if positive, motivates the bigger E investment.
