@@ -1,0 +1,248 @@
+# Hope/NL phase audit — 2026-05-03
+
+A clean cross-stage view: what the original ticket planned, what's been
+done, what's left, what each option would cost. Synthesis of HANDOFF.md
+and the per-stage writeups.
+
+Source of the staged plan: `~/projects-new/trx4mr/docs/idea-hope-nested-learning.md`
+(§"Staged implementation path", lines 102–153).
+
+## Stage matrix
+
+| # | Plan | Status | Result | Writeup |
+|---|---|---|---|---|
+| 0 | `memory_state` plumbing through `forward()`, return `None` initially | ✅ shipped | bit-identical loss/logits with vs without; 6 contract tests | `docs/hope_nl_stage0_2026-05-01.md` |
+| 1 | Swap MLP at one block for fast-weight memory; **fixed** α, η; per-seq reset | ✅ shipped | val_bpb 1.179 vs baseline 1.174 (+0.4%); SFT 0.6712 vs 0.6639 (+1.1%) | `docs/hope_nl_stage1_2026-05-01.md`, `docs/hope_nl_stage1_full_pretrain_2026-05-01.md` |
+| 1.5 | (unplanned, Codex-driven) MQAR synthetic probe | ✅ shipped | Found `W_o=0` cold-start trap; `hope_memory_w_o_init_scale=1.0` is the fix; additive vs swap topology characterized | `docs/hope_nl_stage1_5_*` (5 files); ADR-001 |
+| 2 | Per-token learned `α_t`, `η_t` via `sigmoid` projections | ✅ shipped | Pretrain val_bpb **1.1743** (parity); SFT val_bpb **0.6518** ⭐ (–1.8% vs baseline, –2.9% vs Stage 1 swap); ChatCORE in flight | `docs/hope_nl_stage2_2026-05-02.md`; ADR-002 |
+| 3 | Chunk-parallel dual form per the paper | ⏸ not started | — | — |
+| 4 | Multi-block memory (swap FFN in *some* layers, not just one) | ⏸ not started | — | — |
+| 5 | CMS — multi-frequency memory branches (fast/mid/slow) | ⏸ not started | — | — |
+| 6 | Full Hope: self-modifying memory modules | ⏸ stretch | — | — |
+
+## Where we landed at the original-ticket level
+
+The original ticket asked: "does this architecture work, and is it
+worth the trouble at the project's scale?"
+
+**Answer at d6:** It works, runs stable, matches baseline on val_bpb,
+and **wins on SFT val_bpb** by a small but real margin. The probe-level
+yellow flags from session 3 (bimodal optimization, seed sensitivity at
+T=128) **did not manifest** at full pretrain horizon (5000 iters,
+T=512). Single-seed result, but separation is well above the d6 noise
+floor.
+
+The honest read: Hope/NL's dramatic benefits (long-context recall,
+test-time adaptation) live at scales we won't reach on M2. What we have
+is empirical evidence that the architecture is competitive at d6 and
+training is well-behaved.
+
+## Open items (not stage-numbered)
+
+These came up during sessions 2–4 and are punted for future work:
+
+| Item | Cost | Why it matters | Source |
+|---|---|---|---|
+| **ChatCORE on Stage 2 SFT** | ~2h (in flight now, run `2df5c88o`-equivalent) | First downstream-task signal on Stage 2 | HANDOFF.md:129 |
+| **Multi-seed Stage 2 pretrain** | ~3h × N seeds | Confirms val_bpb 1.1743 isn't single-seed luck | HANDOFF.md:541 |
+| **Stage 2 swap-topology pretrain** | ~3h | Probe found swap and additive equivalent at synthetic level; LM val_bpb gap unknown | HANDOFF.md:540 |
+| **Stage 1-additive (W_o=1) pretrain** | ~3h | MQAR found parity with baseline; whether DCLM val_bpb agrees was punted | HANDOFF.md:541 |
+| **Hope-specific behavioral probe** | ~half day to design + run | MQAR was the synthetic; in-context binding / parity / counting might surface different tradeoffs | HANDOFF.md:327 |
+| **Lift always-final-layer-L constraint in `_compute_window_sizes`** | ~1h patch + probe re-run | Would let MQAR run with restricted attention to genuinely test memory-only recall | HANDOFF.md:326 |
+| **`LearnedGateLinearMemory` forward-pass fuse** | ~half day | Combine `log_decay→decay` into one in-place op; modest M2 win | HANDOFF.md:543 |
+
+## Recommended next moves (operator decision)
+
+After Codex sync (2026-05-03), refined sequence:
+
+**A1. Finish in-flight ChatCORE on Stage 2 SFT** *(~1.5h remaining, already running)*
+- First downstream-task signal on Stage 2. Closes the only unchecked Stage 2 box.
+
+**A2. SFT-seed-variance disambiguation** *(~2.5h, do this BEFORE multi-seed pretrain)*
+- Re-run SFT on the *same* Stage 2 pretrain checkpoint with seed=1 and seed=2 (~80 min × 2).
+- The headline win is in **SFT** val_bpb (–1.8%), not pretrain (0.0% delta vs baseline). Before paying ~6h to re-pretrain, find out whether SFT alone is the lottery.
+- Three branches:
+  - SFT stable across seeds → variance must live in pretrain → commit to A3.
+  - SFT unstable across seeds → headline was an SFT-seed lottery → no need to re-pretrain; pivot to honest write-up.
+  - Mixed → both steps contribute, A3 still warranted but framing changes.
+
+**A3. Multi-seed Stage 2 pretrain** *(~6h, conditional on A2)*
+- Run only if A2 shows SFT is seed-stable. Otherwise the result is already "win was noise" without any further pretrain.
+- n=3 total is **directional** ("happened in 1/3, 2/3, 3/3"), not a confidence interval. Frame accordingly.
+- Concur with Codex's metadata audit before A3: ensure run metadata records seed, topology (swap vs additive), `W_o` init scale, and memory-layer set. Stage 4 will compound configs and become hard to audit otherwise.
+
+**B. Stage 4 (multi-block memory)** *(half day design + ~3h × {2,3} configs)*
+- Conditional on A3 surviving. First stage where memory is doing structural work, not a single-layer accent.
+- 2–3 configs: e.g., layers {2,3,4} vs all-except-first/last vs all.
+- Risk: optimizer pressure scales with how many layers carry memory; bimodal basin behavior we saw at probe scale could resurface.
+
+**C. Wrap and write up** *(2–4h synthesis)*
+- Default if A2 falsifies the win or budget runs out.
+- Stage 0–2 is a clean experimental unit either way; honest answer to the original ticket is documentable today.
+
+## My read
+
+Sequence: **A1 → A2 → (A3 → B) | C**.
+
+A2 is the cheapest experiment that could change the headline. Worth
+~2.5h before committing 6h of pretrain budget on a finding we can't
+yet localize between pretrain and SFT.
+
+If A2 confirms SFT-seed-stability, A3 → B is the right path: stage 0–2
+have all been incremental architectural additions, and Stage 4 is where
+memory starts doing structural work.
+
+If A2 falsifies the SFT win, C is the honest stop. The trx4mr ticket
+gets answered with "architecture trains stable at d6, downstream
+benefits did not survive seed variance, real benefits live at larger
+scale" — itself a clear research contribution.
+
+## Status checklist (mirrored from HANDOFF.md)
+
+For convenience — the unchecked boxes:
+
+- [x] Full Hope/NL paper §4–§9 obtained ← **resolved 2026-05-03** (read NL.pdf, 40pp). Web sources (learnopencv, grokipedia) 403'd, but unnecessary now.
+- [ ] ChatCORE on final Stage 2 SFT checkpoint (in flight)
+- [ ] Stage 1-additive (W_o=1) full pretrain
+- [ ] Stage 2 swap-topology full pretrain
+- [ ] Multi-seed confirmation of Stage 2 val_bpb 1.1743
+
+## Source bootstrap from full paper (2026-05-03)
+
+The full NeurIPS 2025 version of Behrouz et al. unblocks Stages 3/5/6.
+Capturing what's now known:
+
+### CMS — Continuum Memory System (§7)
+
+Forward (Eq 70): chain of MLP blocks at different update frequencies:
+```
+y_t = MLP^(f_k)(MLP^(f_{k-1})(... MLP^(f_1)(x_t)))
+```
+
+Update (Eq 71): each level updates only every C^(l) steps with gradient sum:
+```
+θ^(f_l)_{i+1} = θ^(f_l)_i - Σ_{t=i-C^(l)}^i η^(l)_t · f(θ^(f_l)_t; x_t)   if i ≡ 0 (mod C^(l))
+```
+Where `C^(l) = ⌈max_l C^(l) / f_l⌉` is the chunk size for level l.
+
+Three CMS variants in the paper:
+- **Nested** (Eq 72): level s+1 init meta-learned in level s
+- **Sequential** (Eq 73): output of s feeds into s+1, backprop through chain
+- **Independent (head-wise)** (Eq 74): parallel blocks combined via `Agg(MLP^(f_k)(x_t), ..., MLP^(f_1)(x_t))` — **simplest variant**
+
+### Hope architecture (§8.3, Eq 94-97)
+
+```
+o_t = M_memory,t-1(q_t)                                         (self-mod Titans output)
+v̂_□,t = M_□,t-1(v_t)                                            (each memory generates own values)
+M_□,t = M_□,t-1(α_t I - η_t k_t k_t^T) - η_t ∇L                  (DGD with weight decay)
+y_t = MLP^(f_k)(MLP^(f_{k-1})(... MLP^(f_1)(o_t)))               (CMS chain on top)
+```
+
+Plus L2 normalization on q,k, plus local convolutions of window 4.
+
+**Hope-Attention variant** (paragraph after Eq 97): replace
+self-modifying Titans with softmax attention. **Directly applicable to
+nanochat** — keeps our attention path, just adds the CMS chain on top
+of attention output.
+
+### M3 — Multi-scale Momentum Muon optimizer (§7.2, Algorithm 1)
+
+```
+M^(1)_t = M^(1)_{t-1} + β_1 · g_t                  (every step, fast first momentum)
+M^(2)_t = M^(2)_{t-1} + β_3 · Σ g_i (chunk sum)     (every f steps, slow memory)
+V_t     = V_{t-1} + β_2 · g_t²                      (every step, AdamW variance)
+O^(1)_t ← NewtonSchulz_T(M^(1)_t)
+O^(2)_t ← NewtonSchulz_T(M^(2)_t)                   (every f steps)
+Θ_t ← Θ_{t-1} - η · (O^(1)_t + α · O^(2)_t) / (√V_t + ε)
+```
+
+M3 = Adam (V_t variance) + Muon (NewtonSchulz on both momenta) + CMS
+(M^(2) chunk-summed). Paper notes this is **slower** than Muon at
+140M and 1.3B (Figure 12). Proof-of-concept; not battle-tested for
+training speed.
+
+### Chunk-parallel training (§8.2, Eq 90-93)
+
+Split input into ⌈L/C⌉ chunks of C tokens. Update memory once per
+chunk using gradient accumulated across the chunk. Same approach as
+Sun 2024 (TTT) and Behrouz 2025c. Solves Stage 3 of our ticket.
+
+For our Stage 1/2 module (linear attention memory), we'd:
+1. Process chunk in parallel (no Python loop within chunk).
+2. Update `M_t` based on chunk-final state.
+3. Take gradient w.r.t. previous chunk's final state for the next step.
+
+### §7.3 Ad-hoc level stacking — direct retrofit recipe
+
+> "Initialize the parameters in a level with a model's pre-trained
+> weights. More formally, given a CMS with `{MLP^(f_l)}`... we use the
+> trained parameters of `{MLP_pretrained_l}` as the initial state of
+> CMS blocks."
+
+In the paper's experiments they retrofit Llama-3 this way and continue
+pretraining for 15B tokens. **Directly applicable**: take the Stage 2
+d6 pretrain checkpoint, place its MLP blocks at different CMS levels,
+continue pretraining for some smaller token budget.
+
+### Ablation evidence on what each component buys (Table 6)
+
+| Removed component | Wiki ppl change | Reasoning acc change |
+|---|---:|---:|
+| (full Hope baseline) | 12.24 | 58.1 |
+| w/o DGD | +9.6% | -1.6 |
+| w/o Momentum | +11% | -1.2 |
+| w/o weight decay | +12% | -0.9 |
+| **w/o CMS** | **+6.5%** | **-0.8** |
+| w/o inner-q | -0.4% (noise) | -0.7 |
+| w/o inner-v | +13.5% | -3.0 |
+
+**Notable**: inner-q is essentially unused — could simplify Stage 5/6
+implementations by dropping it. Inner-v is the most important inner
+projection.
+
+**Honest scale caveat**: paper's results are at 760M/30B and 1.3B/100B
+(~600× our d6). The ~6.5% perplexity from CMS alone might be
+proportionally smaller (or larger, or zero) at d6. We don't know.
+
+## Updated stage map with what we now know
+
+| # | Original plan | Now-known equations | Cheapest experiment |
+|---|---|---|---|
+| 3 | Chunk-parallel | Eq 90-93 (§8.2); references Sun 2024 / Behrouz 2025c | Refactor `LearnedGateLinearMemory` for chunk-parallel form. Allows T > 512 within current memory budget. |
+| 4 | Multi-block memory | Naturally aligned with what Hope does (§8.3, Fig 5: stack of CMS blocks) | Re-run Stage 2 with `hope_additive_memory_layer` at multiple layers (config flag already exists; small code change to accept a list). |
+| 5 | CMS multi-frequency | Eq 70-71, Eq 74 (independent variant simplest) | Add CMS-Independent on top of Stage 2's output: parallel MLPs at frequency 1, ½, ¼, ⅛ combined via learned weighted sum. |
+| 6 | Self-modifying memory | Eq 83-90 (full self-mod Titans) | Probably skip — too many moving parts at d6. Paper's full Hope wins by stacking many things; w/o CMS it's still a worthwhile architecture. |
+
+## New options to consider
+
+In addition to the A1/A2/A3/B/C from above, the paper bootstrap unlocks:
+
+**D. §7.3 retrofit experiment** *(~3-6h depending on token budget)*
+- Take the Stage 2 d6 pretrain checkpoint. Place the existing MLP blocks at different CMS levels via Eq 71 update schedule. Continue pretraining for a reduced token budget (e.g., 1000 iters at f1=1, f2=4, f3=16).
+- **What we'd learn**: does CMS add anything at d6 scale? Cheap because we don't pay for from-scratch pretrain.
+- Risk: chunk-update logic in optimizer adds ~half day of implementation work.
+
+**E. Hope-Attention as Stage 5 target** *(~1 week design + 3h pretrain)*
+- Don't do full self-modifying Titans (too many components). Take softmax attention (already there), add a CMS chain on top of attention output via Eq 97. This is the paper's Hope-Attention variant.
+- **Pass/fail bar**: probe via `dev/probe_mqar.py` first. If saturation step ≥ baseline, proceed to pretrain.
+- More ambitious than Stage 4 (multi-block memory). Closer to a real Hope implementation, sidestepping the highest-risk component (self-modifying Titans).
+
+**F. CMS-Independent ablation isolated** *(~3h)*
+- Cheapest pure test of "is multi-frequency memory worth it at d6?". Add Eq 74 head-wise CMS to our existing model with no other changes. Just a parallel MLP chain at varying chunk sizes.
+- **What we'd learn**: directly comparable to paper's Table 6 "w/o CMS" ablation, but at d6.
+
+## Refined recommendation order
+
+1. **A1**: finish ChatCORE (in flight)
+2. **A2**: SFT-seed-variance disambiguation (~2.5h)
+3. **A3** (conditional): multi-seed Stage 2 pretrain (~6h)
+4. **F**: CMS-Independent ablation (~3h) — cheap and directly comparable to paper Table 6
+5. **D** OR **E**: retrofit experiment OR Hope-Attention (operator pick)
+6. **C**: wrap and write up
+
+The paper bootstrap pulls the locus of remaining work toward CMS,
+which the paper's ablation says contributes ~6.5% of Hope's gain.
+That's still meaningful, and it's a cleaner experiment than Stage 6
+(self-modifying memory), which would require implementing 5+ new
+memory modules.
