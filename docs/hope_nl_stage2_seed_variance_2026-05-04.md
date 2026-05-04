@@ -121,19 +121,45 @@ PYTHONUNBUFFERED=1 nohup uv run python -u -m scripts.base_train \
     --run=stage2-d6-pretrain-seed1 \
     --model-tag=d6_stage2_pretrain_s1 \
     --seed=1 \
-    --depth=6 --device-batch-size=32 --total-batch-size=16384 \
+    --depth=6 --aspect-ratio=64 --head-dim=64 \
+    --max-seq-len=512 --window-pattern=L \
+    --num-iterations=5000 \
+    --device-batch-size=32 --total-batch-size=16384 \
     --hope-additive-memory-layer=3 \
     --hope-memory-w-o-init-scale=1.0 \
     --hope-memory-kind=learned_gate \
     --hope-memory-alpha-max=0.999 --hope-memory-eta-max=1.0 \
     --hope-memory-alpha-init-bias=4.595 --hope-memory-eta-init-bias=-2.197 \
-    --eval-every=250 --eval-tokens=524288 \
+    --eval-every=100 --eval-tokens=524288 \
+    --core-metric-every=-1 --sample-every=-1 \
     --save-every=1000 --save-keep-last-n=2 \
     > /tmp/pretrain_stage2_s1.log 2>&1 &
 
 # Pretrain seed=2 (after seed=1 completes)
 # same with --seed=2 --model-tag=d6_stage2_pretrain_s2 --run=stage2-d6-pretrain-seed2
 ```
+
+**Config-parity audit (2026-05-04, post-Codex sanity-check):** the queued
+commands above were updated to make every architecturally relevant field
+explicit, after a parity audit against
+`base_checkpoints/d6_stage2/meta_005000.json`. Drift caught:
+
+| flag | base_train.py default | seed=42 reference | implication if not passed |
+|---|---|---|---|
+| `--head-dim` | 128 | **64** | n_embd would be 768 vs reference 384 — different model |
+| `--max-seq-len` | 2048 | **512** | different context length, different memory footprint |
+| `--window-pattern` | "SSSL" | **"L"** | sliding-window attention vs full attention |
+| `--num-iterations` | -1 (auto-chinchilla) | **5000** | should match auto-compute but explicit avoids drift if defaults change |
+| `--eval-every` | 250 | **100** | different val_bpb sampling cadence |
+| `--core-metric-every` | 2000 | **-1** | reference skipped CORE during training; matching saves time |
+
+Two intentional divergences from the seed=42 reference (operational, not
+val_bpb-affecting):
+- `--save-every=1000 --save-keep-last-n=2` (reference used `-1` = no
+  intermediate saves; rolling cleanup gives crash insurance for ~2.4 GB
+  disk cost)
+- `--sample-every=-1` (reference used 100; we don't need mid-training
+  samples for A3's val_bpb comparison)
 
 Expected per-pretrain wall: ~3h on M2 24GB (was 5h13min on the seed=42
 Stage 2 pretrain per HANDOFF, but optimizer improvements have landed
