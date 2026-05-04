@@ -622,3 +622,44 @@ session with all prerequisites landed.
 - Forward-pass fuse opportunity in `LearnedGateLinearMemory`.
 - ChatCORE on baseline d6 SFT and Stage 1 SFT for direct comparators (baseline pretrain checkpoint is gone; cost ~5h to regenerate).
 - Codex's third sanity-check pass on paper equations.
+
+### Addendum 2026-05-04 (post-session-5, pre-A3)
+
+After the session-5 wrap, Codex's pre-A3 sanity-check came back. Two
+concrete outcomes integrated before any next-session A3 launch:
+
+**Q1 verdict (methodological)**: option (a) — A2's tight cluster only
+bounds the SFT-seed component of variance, not the pretrain-seed
+component, and not the baseline d6 distribution (which we never
+measured). A3 will support "Stage 2 pretraining is seed-stable and
+reaches baseline-like pretrain bpb" but NOT "Stage 2's architecture
+effect is real vs natural d6-seed noise." Codex's cheaper compromise:
+**A3-prime** — after A3 if tight, run ONE fresh baseline d6 pretrain
++ SFT with the modern recipe (~4h). Doesn't fully bound variance but
+catches the biggest risk (historical baseline being stale/lucky).
+
+**Q2 verdict (operational)**: implement **`--inherit-from`** on training
+scripts before A3. Reason: I caught a head_dim default drift (128 vs
+reference 64) plus 5 other field mismatches in the original queued A3
+commands. Without explicit re-passing every relevant flag, A3 would
+have silently trained a different model — 6h of compute wasted.
+
+**Implementation landed (commit `ca9bc94`)**:
+- `nanochat/common.py::load_inherit_config()` helper
+- `--inherit-from=<meta_path>` flag on `base_train.py` and `chat_sft.py`
+- Loads reference `user_config` as parser defaults *before* CLI parsing;
+  CLI flags override only what's intentionally different
+- Excludes per-run / operational fields (`run`, `model_tag`, `seed`,
+  `resume_from_step`, `force_overwrite`, `save_every`, `save_keep_last_n`)
+- Verified end-to-end: 34 fields auto-loaded from the seed=42 reference
+  meta, including `head_dim=64`, `max_seq_len=512`, `window_pattern=L`,
+  `num_iterations=5000`, `eval_every=100`
+
+**Updated A3 launch commands** (`cca0f1c`): now ~5 lines instead of
+~20, with architectural-config parity by construction. The config-
+parity audit table stays in the writeup as a verification step, not
+the prevention mechanism. Pre-Codex queued commands had the head_dim
+bug; post-fix they would have worked but been brittle to future drift.
+
+**Refined recommended order**: A1 ✓ → A2 ✓ → **A3** → **A3-prime**
+(conditional) → F → (D or E) → C. Documented in audit doc.
