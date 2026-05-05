@@ -51,7 +51,63 @@ change sign or magnitude at d=8 vs d=6?
 
 ## Proposed sequence
 
-### Phase 1 — derisk (~1-2h)
+### Phase 0 — d4 methodology rig (~2-4h, optional but recommended)
+**Goal:** validate the experiment harness at a cheap scale before
+committing d8 budget. Catch instrumentation bugs and bound baseline-
+seed variance at a depth where n=3 is affordable.
+
+**Why d4 specifically:**
+- Memory layer at index 2 of 4 is the topological analogue of d6's
+  index 3 of 6 (both at 50% through depth). Conclusions transfer
+  cleanly to d6 / d8 in a way d3's layer-1-of-3 (33% through depth,
+  heavily structural) does not.
+- Wall time ~60-90 min per pretrain — n=3 baseline + n=3 Stage 2
+  fits in ~6-9h, the n=3 baseline-seed bound that Codex called too
+  expensive at d6.
+- Architecturally representative: d4 asks the same architectural
+  question as d6 and d8, just at smaller width and fewer layers.
+
+**Procedure:**
+- Run d4 baseline pretrain × n=3 (seeds 42, 1, 2) and d4 Stage 2
+  pretrain × n=3. Measure baseline-seed spread + Stage 2-vs-baseline
+  delta vs that spread.
+- Side-test instrumentation: `--inherit-from` carries through
+  `--depth=4` override correctly; qk_norm A/B wire in cleanly (per
+  `feat_modernization_alignment.md::A2`); save-keep-last-n behaves;
+  smoke-test the seed-noise plot/table generation.
+- **Pass criteria:**
+  - Harness runs end-to-end without modification.
+  - n=3 seeds at d4 produce a measurable spread (any number; just
+    confirms machinery works).
+  - Stage 2 vs baseline delta sign at d4 is informative — either
+    bounds are tight enough to make a claim, or claim is "neutral
+    within bounds."
+
+**What d4 doesn't tell us:** whether Stage 2 helps at d8. d4 result
+should be treated as bounds-firming for d6 (a smaller-but-topologically-
+analogous re-test), not as a prediction for d8. The architectural
+question still requires d8 itself.
+
+#### When d3 might come in handy instead
+
+d4 is the right call for *result-bearing* derisk because of topological
+representativeness. **d3 is ~30 min faster per run but trades that for
+architectural distortion** (memory layer is 33% of network at d3 vs 16%
+at d6, so the pathway is structurally over-weighted).
+
+d3 is useful **only for pure plumbing/harness tests** where we don't
+care if conclusions transfer to d6/d8 — for example:
+- Validating new instrumentation (a new logging hook, a new probe
+  variant) that has nothing to do with the architectural question.
+- Iterating on the experiment-runner / wandb integration / seed-loop
+  bash.
+- Burn-in tests of new features before they touch result-bearing runs.
+
+If a future need arises for fastest-possible iteration on
+infrastructure, d3 is the answer. For any architectural-question
+work, skip d3 and go to d4.
+
+### Phase 1 — d8 derisk (~1-2h)
 **Goal:** confirm M2 can run d8 at all, and Stage 2 mechanism still
 saturates the probe at d8 init.
 
@@ -126,13 +182,14 @@ proxy), document the result and close the line; do not invest Phase 3.
 
 | phase | wall (M2) | new disk | conditional? |
 |---|---:|---:|---:|
-| 1 (derisk) | 1-2 h | <1 GB | always run first |
-| 2 (headline) | 10-15 h | ~6 GB | only if Phase 1 passes |
-| 3 (bracket) | 10-15 h | ~6 GB | only if Phase 2 shows movement |
-| **Total floor** (Phase 1+2) | **11-17 h** | **~7 GB** | — |
-| **Total ceiling** (all phases) | **21-32 h** | **~13 GB** | — |
+| 0 (d4 rig) | 2-4 h | ~2 GB | optional, recommended before Phase 1 |
+| 1 (d8 derisk) | 1-2 h | <1 GB | always run first |
+| 2 (d8 headline) | 10-15 h | ~6 GB | only if Phase 1 passes |
+| 3 (d8 bracket) | 10-15 h | ~6 GB | only if Phase 2 shows movement |
+| **Total floor** (Phase 0+1+2) | **13-21 h** | **~9 GB** | — |
+| **Total ceiling** (all phases) | **23-36 h** | **~15 GB** | — |
 
-Spread across 2-4 sessions.
+Spread across 3-5 sessions.
 
 ## Pre-flight checklist (when picked up)
 
