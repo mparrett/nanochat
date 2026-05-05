@@ -58,3 +58,19 @@ We solicited Codex's read. Summary of his response (`/tmp/pasteboard-2`):
 - *α init range (0.995-0.999)*: Reasonable, but not a fixed value. Effective horizon depends on context length: at T=512, α=0.99 decays to ~0.006 by end; α=0.999 to ~0.6. For our probe (T=128), almost any α in this range carries fine; for SFT (T≤1024) and pretrain (T=2048) it matters more. Default to ~0.99 initial (per design prior #2) but treat as a knob, not a fixed.
 
 **Status**: accepted 2026-05-02. Implementation starting.
+
+## ADR-003: Defer upstream PR #544 (dataloader remainder reuse) until after A3/A3-prime (2026-05-04)
+
+**Context**: [karpathy/nanochat#544](https://github.com/karpathy/nanochat/pull/544) is an open PR that reuses cropped document tails (with prepended BOS) instead of discarding them in `nanochat/dataloader.py`. Reduces effective crop waste from ~35% → ~23%. Claimed wall-clock speedup on the d24 record run: 1.18× at T=2048; **1.28× at T=512** (our pretrain seq length, so the biggest gain bucket applies to us). 20-line change with a simulation test.
+
+**Decision**: Do not adopt during the in-flight Hope/NL experiment. Re-evaluate after A3 + A3-prime wrap.
+
+**Why**:
+1. **Parity**: A3 is a seed-variance comparison against the stage2 baseline (trained on the old dataloader). Adopting mid-run means seed=1 (currently running) and seed=2 see different token streams from each other AND from stage2, destroying the measurement.
+2. **Upstream not validated**: PR is OPEN, not merged. No reason to take canary risk while a real experiment is running.
+3. **Baseline drift**: Even after A3 wraps, switching changes the effective per-step token mix. Future val_bpb numbers cannot be directly compared against the historical d6 baseline (1.174) without an asterisk — model is trained on a richer effective corpus per token-budget.
+
+**How to apply**: After A3-prime, if upstream merges OR we independently validate, adopt with a clean re-baseline run at the new dataloader (call it `d6_v2`). Do not retroactively compare cross-dataloader numbers.
+
+**Status**: accepted 2026-05-04. Parked.
+
