@@ -830,3 +830,50 @@ scale changes the picture.
   (now partially answerable — A3' baseline + SFT checkpoint exists, ChatCORE could be run on it for ~1h)
 - Codex's third sanity-check pass on paper equations. (still open; relevant only if E is revived)
 
+### Addendum 2026-05-05 (post-session-6 closeout)
+
+Three commits landed after the session-6 status entry was written —
+the synthesis pass + two future-work tickets:
+
+- **`6561a4c`** — `docs/hope_nl_track_synthesis_2026-05-05.md`. The
+  full Stage 0 → A3' arc as a single read. End-to-end narrative,
+  honest verdict, four "what we learned" points (probe-first
+  load-bearing; recipe drift silent + large; Codex challenge function;
+  single-depth-dial discipline). Use as the canonical document for
+  anyone picking up the track cold. Closes path **C** in the audit doc.
+- **`6561a4c`** + **`92d0233`** — `docs/project_incoming/feat_d8_extension.md`.
+  Tickets the "Cannot exclude memory architectures help at larger
+  scale" carve-out from the synthesis. Three-phase plan + Phase 0 d4
+  methodology rig (added in `92d0233`). Notes d3's separate role
+  (pure plumbing/harness derisk; not for architectural-question work
+  because memory layer is 33% of network at d3 vs 16% at d6).
+  Total floor 13-21h, ceiling 23-36h.
+- **`ae2fcb3`** — `docs/project_incoming/feat_modernization_alignment.md`.
+  Cross-project sync with trx4mr's CS336/Tatsu lecture audit. nanochat
+  is ~85% on-template for 2026 production conventions; 3 deliberate
+  departures (ReLU² over GLU, aspect_ratio=64 vs ~100, softcap-yes /
+  z-loss-no / qk_norm-no); 3 ticketed additions (A1 z-loss-as-standby
+  ADR; A2 qk_norm at d8; A3 GLU sweep) in priority order.
+
+**Next session pickup** (revised after these landings):
+
+The track is wrapped. Three forward-looking lines exist as tickets:
+
+1. **`feat_d8_extension.md`** — pick this up if you want to keep the
+   architectural question open. Phase 0 (d4 rig) is the ~6-9h cheap
+   first move that bounds baseline-seed variance; Phase 1+2 (d8
+   derisk + headline) is ~11-17h committing to the scale question.
+2. **`feat_modernization_alignment.md::A1`** — the zero-cost move:
+   record z-loss as a stability-standby ADR in `decisions.md`,
+   mirroring trx4mr's ADR-019. Independent of d8 path. Do regardless.
+3. **`feat_modernization_alignment.md::A2/A3`** — gated on d8 path
+   activating; slot in alongside Phase 1/2 of d8 if they happen.
+
+Default: if no clear architectural revival appetite, do A1 only and
+let the track stay closed. The synthesis is the canonical answer.
+
+**Status of the synthesis prediction "C is the recommended path":**
+✅ done. Branch is `experiment/hope-nested-learning`, not merged to
+master. Whether to keep the branch open or close it is a separate
+project-governance decision; the experimental record is complete on it.
+
