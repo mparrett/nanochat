@@ -663,3 +663,170 @@ bug; post-fix they would have worked but been brittle to future drift.
 
 **Refined recommended order**: A1 ✓ → A2 ✓ → **A3** → **A3-prime**
 (conditional) → F → (D or E) → C. Documented in audit doc.
+
+## Status update — 2026-05-05 (end of session 6)
+
+Session 6 ran A3 (multi-seed Stage 2 pretrain), SFT on top of A3 seed=1,
+A3-prime (modern-recipe vanilla d6 baseline pretrain + SFT). Combined
+result closes the architectural question on the Hope/NL track at
+d6/5000-iter on ClimbMix.
+
+**Headline:** the original "Stage 2 wins by 1.8% on SFT" claim was
+overwhelmingly recipe drift, not architecture. Modern-recipe vanilla d6
+baseline beats both Stage 2 seeds on pretrain val_bpb AND beats Stage 2
+on SFT val_bpb. All deltas within the 0.0016 seed-noise spread we
+measured on A3 — call it a tie, not a Stage 2 loss — but the +1.8% claim
+does not survive recipe-controlled comparison.
+
+### What got done this session
+
+**A3 — multi-seed Stage 2 pretrain** (~10h wall, sequential)
+- seed=1: val_bpb 1.1729 (4h49m)
+- seed=2: val_bpb 1.1712 (~5h)
+- Inter-seed spread: **0.0016**
+- Both beat the historical d6 baseline (1.174). Confirms Stage 2
+  pretraining is seed-stable.
+- `--inherit-from` mechanism worked end-to-end: 34 fields auto-loaded
+  from `d6_stage2/meta_005000.json`, including head_dim=64, alpha/eta
+  init biases. Hardware-config parity by construction.
+
+**SFT on A3 seed=1** (~1h)
+- val_bpb 0.6495 — beats A2 d6_stage2_s1 (0.6516) by 0.0021. Confirms
+  Stage 2 pretrain quality survives SFT.
+
+**A3-prime — modern-recipe vanilla d6 baseline** (~4h pretrain + 1h SFT)
+- Pretrain val_bpb **1.1686** (vanilla d6, seed=42, current `master`)
+- SFT val_bpb **0.6483** (sft_seed=1, identical SFT recipe)
+- **Beats both Stage 2 seeds on pretrain val_bpb** by 0.0026-0.0043
+- **Beats Stage 2 SFT (A3 seed=1) by 0.0012** — the headline-overturning
+  number
+- The ~0.0156 SFT gap to the historical 0.6639 baseline is now
+  attributable to recipe drift (most prominently `840d3db`: ve_gate
+  Muon → AdamW move) accumulated over 4 commits since the historical
+  baseline was trained.
+
+**A3 + A3' writeup** (`docs/hope_nl_a3_a3prime_2026-05-05.md`, commit `070818a`)
+- Combined experimental result, with full pretrain & SFT trajectory
+  tables, headline-revision section, what-this-means, caveats,
+  artifacts list. The synthesis doc for the architectural question.
+
+**ADR-003** (`docs/project_notes/decisions.md`, commit `e407e41`)
+- Defer upstream PR #544 (dataloader remainder reuse) until after A3'
+  to preserve A3's parity comparison. Adopt later only with a clean
+  re-baseline run; do not retroactively compare cross-dataloader
+  numbers. The PR's claimed 1.28× speedup at our T=512 makes this
+  worth revisiting after the writeup wraps.
+
+**Data investigations backlog** (`docs/project_notes/data_investigations.md`, commit `f2c6cd7`)
+- Q1 (length-stratified val_bpb), Q2 (adopt
+  `ddudek/nanochat-climbmix-annotated` for labeled corpus), Q3
+  (within-corpus dedupe sanity check), Q4 (per-domain CORE).
+- Skip list (re-filtering curated data, DoReMi at 81M tokens,
+  trillion-scale dedupe wins that won't materialize).
+- All gated on Hope/NL writeup wrap to avoid invalidating comparisons.
+
+**Disk hygiene** — pruned ~9 GB of stale step-5/10/50 debug checkpoints
+from `base_checkpoints/d6_stage2/` (only step-5000, the load-bearing
+checkpoint for A3 inherit-from, retained). Disk back to 37 GB free.
+
+### What this means
+
+1. **Stage 2 architecture is neutral, not net-positive, at d6/5000-iter
+   on ClimbMix.** Both pretrain val_bpb and SFT val_bpb show A3' baseline
+   slightly ahead of Stage 2. Magnitudes within seed-noise.
+2. **MQAR probe story remains true** — additive memory branch *learns*
+   on synthetic recall (saturation by step ~76 in Stage 1.5b). Just
+   doesn't translate to LM bpb at this scale/corpus.
+3. **Stage 4 (multi-block memory) was conditional on Stage 2 surviving.
+   Condition not met.** Defer.
+4. **Recipe drift is real and silent.** ~0.0156 of "free" SFT
+   improvement accumulated across 4 commits between historical and
+   modern code, dwarfing the architectural delta. Future
+   architecture-class experiments must pin recipe + seed and re-baseline,
+   not compare against archived numbers.
+
+### Caveats (carried into the writeup)
+
+- **n=1 baseline pretrain seed.** Result reads "Stage 2 doesn't win"
+  with high confidence; "Stage 2 loses" with lower confidence.
+- **Stage 2 SFT only run on A3 seed=1.** Bracketing across both Stage 2
+  pretrain seeds × SFT was deemed redundant given A3'.
+- **d6 / 5000-iter / ClimbMix-only conclusion.** Memory architectures
+  may show structural value at larger scale, longer horizons, or with
+  long-context-rewarding evaluations. Cannot exclude.
+- **MMLU/GSM8K-heavy SFT mix** doesn't reward long-context memory.
+  Different mix could in principle show Stage 2 benefit.
+
+### Files added this session (durable)
+
+- `docs/hope_nl_a3_a3prime_2026-05-05.md` — combined A3+A3' result + revised headline
+- `docs/project_notes/data_investigations.md` — data backlog (Q1-Q4 + skip list)
+- `docs/project_notes/decisions.md` — appended ADR-003 (PR #544 deferral)
+- `~/.cache/nanochat/base_checkpoints/d6_stage2_pretrain_s1/model_005000.pt` (val_bpb 1.1729)
+- `~/.cache/nanochat/base_checkpoints/d6_stage2_pretrain_s2/model_005000.pt` (val_bpb 1.1712)
+- `~/.cache/nanochat/base_checkpoints/d6_baseline_modern/model_005000.pt` (val_bpb 1.1686)
+- `~/.cache/nanochat/chatsft_checkpoints/d6_stage2_pretrain_s1_sft/model_000375.pt` (val_bpb 0.6495)
+- `~/.cache/nanochat/chatsft_checkpoints/d6_baseline_modern_sft/model_000375.pt` (val_bpb 0.6483)
+- wandb runs: avvd9uov, pajx70rk, 2m6exejl, 3fprtaef, s4x7im7t
+
+### Track status (post-A3')
+
+| | Status | Outcome |
+|---|---|---|
+| **A1** Pre-A3 audit / `--inherit-from` plumbing | ✅ done | head_dim drift caught; multi-seed unblocked |
+| **A2** Multi-seed SFT-on-d6_stage2 | ✅ done | 3/3 within 0.0004 — SFT-seed not the noise source |
+| **A3** Multi-seed Stage 2 pretrain | ✅ done | spread 0.0016, both beat historical baseline |
+| **A3'** Modern-recipe baseline + SFT | ✅ done | Beats Stage 2 — overturns the headline |
+| **B** Stage 4 multi-block memory | ❌ blocked | Conditional on A3 surviving; condition not met |
+| **F** CMS-Independent ablation (Eq 74 head-wise) | open | Cheap (~3h), separate question from Stage 2 |
+| **D** §7.3 retrofit (continue-pretrain at CMS levels) | open | ~3-6h, exploratory stress test |
+| **E** Hope-Attention Stage 5 (full CMS chain) | open | ~1-1.5 weeks, real design block |
+| **C** Wrap and write up | active | A3+A3' writeup committed; full track synthesis pending |
+
+### Next session: pick up here
+
+**Recommended path: C (wrap and synthesize).**
+
+The architectural question has a clean answer ("Stage 2 doesn't win at
+d6/5000-iter on ClimbMix"). F/D/E either ask different questions
+(multi-frequency memory, retrofit mechanism, Hope-Attention) or scale up
+substantially. The honest move is the synthesis doc + close-out:
+
+1. **Track-level synthesis writeup** (~2-4h)
+   - Stage 0 (plumbing) → 1 (swap) → 1.5 (probe + W_o root cause) → 2
+     (learned gate) → A1/A2/A3/A3' → conclusion.
+   - Pull from the existing per-stage docs; the experimental record is
+     already complete.
+   - End with the honest finding + the four "what this means" points
+     above.
+2. **HTML narrative writeup** for publication (per CLAUDE.md convention:
+   markdown first, then HTML).
+3. **Update the trx4mr ticket** with the result, so the originating
+   project knows the d6 answer.
+
+**Optional revisits** (not the recommended path, but available):
+- **F** (CMS-Independent ablation, ~3h) — cheap signal on whether
+  multi-frequency memory at d6 helps. Even at neutral, gives one more
+  data point in a different memory-kind direction.
+- **PR #544 adoption + clean re-baseline** — `d6_v2` corpus would unlock
+  ~1.28× speedup at T=512 for any future runs. Per ADR-003.
+- **Q1 from `data_investigations.md`** (length-stratified val_bpb) —
+  cheap probe of the memory hypothesis on long docs even with current
+  corpus. Could revive Stage 2 if memory turns out to help on long-doc
+  subset specifically.
+- **n=2 baseline seed** — bracket the n=1 A3' baseline. ~5h.
+
+**Defer indefinitely:** B (Stage 4 multi-block) and E (Hope-Attention
+Stage 5) until either an architectural revival path appears or compute
+scale changes the picture.
+
+### Open questions still punted (carried + closed)
+
+- ~~Multi-seed Stage 2 pretrain — A3.~~ ✅ done.
+- Stage 2 swap topology has never been pretrained. (still open, low priority post-A3')
+- Stage 1-additive (W_o=1) full pretrain. (still open, low priority post-A3')
+- Forward-pass fuse opportunity in `LearnedGateLinearMemory`. (still open; perf-only, not result-changing)
+- ChatCORE on baseline d6 SFT and Stage 1 SFT for direct comparators.
+  (now partially answerable — A3' baseline + SFT checkpoint exists, ChatCORE could be run on it for ~1h)
+- Codex's third sanity-check pass on paper equations. (still open; relevant only if E is revived)
+
