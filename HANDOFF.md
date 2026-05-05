@@ -877,3 +877,18 @@ let the track stay closed. The synthesis is the canonical answer.
 master. Whether to keep the branch open or close it is a separate
 project-governance decision; the experimental record is complete on it.
 
+### Addendum 2026-05-05 (A1 of modernization-alignment landed)
+
+- **`b04f04f`** — `docs/project_notes/decisions.md::ADR-004` ("Z-loss as
+  standby stability lever"). Mirrors trx4mr ADR-019, reframed for
+  nanochat's spike-risk regime (d8+ extension, longer horizons,
+  quantization) rather than trx4mr's STE regime. Park-don't-ship
+  stance: reach for it *first* if a future run spikes, before
+  LR/clip-grad/init-scale; if invoked, becomes the default (no
+  feature flag, per modernization-alignment scope rules); ~5 lines,
+  DCLM-style 1e-4 coefficient.
+- Closes **A1** of `feat_modernization_alignment.md` — the zero-cost
+  do-regardless item. Track is fully wrapped; only forward-work items
+  left are `feat_d8_extension.md` and A2/A3 of modernization-alignment
+  (both gated on d8 activating).
+
