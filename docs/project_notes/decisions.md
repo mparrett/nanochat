@@ -74,3 +74,38 @@ We solicited Codex's read. Summary of his response (`/tmp/pasteboard-2`):
 
 **Status**: accepted 2026-05-04. Parked.
 
+## ADR-004: Z-loss as standby stability lever (2026-05-05)
+
+**Context**: CS336 Lecture 3 (Tatsu, 2026) catalogues z-loss — a `(log Z)²`
+regularizer on the softmax normalizer — as one of three lifesaving tricks
+against mid-training loss spikes. DCLM and Olmo both ship it; the lecture
+frames it as "more universal" than logit softcap, which it labels Gemma-only
+and perf-costing. nanochat currently has logit softcap (`softcap=15`,
+`gpt.py:741-745`) and no z-loss. At d6/5000 iters on ClimbMix we have not
+seen a spike that softcap couldn't suppress, so the lever is unused; the
+question is whether to leave it that way.
+
+trx4mr filed the same audit against picoGPT and adopted the standby stance
+(ADR-019) for the 1-bit/ternary STE regime where spikes are most likely.
+Cross-project alignment ticket: `docs/project_incoming/feat_modernization_alignment.md::A1`.
+
+**Decision**: Don't add z-loss now. Note that it exists, and reach for it
+*first* if a deeper-depth run (d8+ per `feat_d8_extension.md`), longer
+training horizon, or quantization experiment starts spiking — before
+chasing LR / clip-grad / init-scale. Keep the bar low: one diagnostic run
+with z-loss before assuming the spike is a deeper problem.
+
+**Why**: Avoids accumulating unneeded knobs in stable regimes (consistent
+with nanochat's "strong baseline, not configurable framework" stance per
+CLAUDE.md), but keeps the lever discoverable for the regime where it
+actually helps. Mirrors trx4mr ADR-019 so the rationale is symmetric across
+the two projects sharing this audit.
+
+**How to apply**: When invoked, add as `(log Z)²` term on the cross-entropy
+softmax normalizer with a small coefficient (DCLM uses 1e-4); ~5 lines.
+Pair with a control run at iso-config to confirm no regression on stable
+training. If adopted, becomes the new default — do not add a feature flag
+(per modernization-alignment ticket "what's not in scope").
+
+**Status**: accepted 2026-05-05. Parked as standby; no code change.
+
