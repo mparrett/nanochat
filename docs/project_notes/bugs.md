@@ -1,5 +1,53 @@
 # Bug Log
 
+## 2026-05-05 - `torchrun` on MPS crashes optimizer at first step [KNOWN, PREVENTION DOCUMENTED]
+
+**Symptom**: launching pretrain with
+`torchrun --standalone --nproc_per_node=1 -m scripts.base_train` on M2/MPS
+trains for one validation pass (`val_bpb` prints), then crashes at the
+first optimizer step:
+
+```
+File "/.../nanochat/optim.py", line 560, in step
+    rank = dist.get_rank()
+ValueError: Default process group has not been initialized,
+            please make sure to call init_process_group.
+```
+
+**Mechanism**: `torchrun` injects `RANK`/`LOCAL_RANK`/`WORLD_SIZE` env vars,
+which makes `is_ddp_requested()` return True. But `compute_init` in
+`nanochat/common.py:246` only calls `dist.init_process_group()` when
+`device_type == "cuda"` — on MPS the second clause runs and the process
+group is never initialized. The `MuonAdamW` optimizer (`nanochat/optim.py:560-561`)
+calls `dist.get_rank()` and `dist.get_world_size()` unconditionally at every
+step, so the first step crashes.
+
+When launched via direct python (no torchrun), no DDP env vars get set,
+`is_ddp_requested()` returns False, and the launch path is internally
+consistent. (This is the path d6_baseline_modern + A3 + A3' all used.)
+
+**Prevention** (already documented in `key_facts.md::Launch patterns on M2`):
+use `uv run python -u -m scripts.base_train` directly, not torchrun.
+The d3 smoke recipe (`docs/d3_smoke_recipe_2026-05-05.md`) and the d6
+canonical commands all match this pattern.
+
+**Failure mode is loud, not silent**: the crash happens within ~30 seconds
+of launch with a full Python traceback. Caught it on the d3 smoke run
+before the recipe was corrected. We already fail fast; no extra detection
+needed.
+
+**Why we're not fixing the underlying issue**: the prevention is durable
+and the failure is loud. A real fix would require either initializing a
+gloo-backed process group on MPS (so `dist.get_rank()` works at world_size=1)
+or adding a non-DDP fast path in the optimizer. Both are ~5-line changes
+but neither is load-bearing — single-rank MPS doesn't benefit from the
+DDP primitives anyway.
+
+**If ever revisited**: cleanest fix is probably gating optimizer's
+`dist.get_rank()` / `dist.get_world_size()` on `dist.is_initialized()`,
+returning `(0, 1)` when no PG exists. Would harmonize the M2 and CUDA
+launch paths and make `torchrun` harmless.
+
 ## 2026-05-03 - Stage 2 additive SFT hangs at step 200 (M2 24GB) [ROOT-CAUSED]
 
 **Root cause** (confirmed 2026-05-03 with `python -u` unbuffered logging plus the new `torch.mps.empty_cache()` fix that got us *past* the save and into the actual error):
