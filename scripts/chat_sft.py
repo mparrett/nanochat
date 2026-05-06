@@ -74,6 +74,7 @@ parser.add_argument("--chatcore-max-sample", type=int, default=24, help="max pro
 # Data mixture
 parser.add_argument("--mmlu-epochs", type=int, default=3, help="number of epochs of MMLU in training mixture (teaches Multiple Choice)")
 parser.add_argument("--gsm8k-epochs", type=int, default=4, help="number of epochs of GSM8K in training mixture (teaches Math and Tool Use)")
+parser.add_argument("--smoltalk-epochs", type=int, default=1, help="number of epochs of SmolTalk in training mixture (general multi-turn chat; default=1 preserves baseline behaviour)")
 # If --inherit-from is set, apply the reference run's user_config as parser
 # defaults BEFORE parse_args() — CLI flags then override only what's
 # intentionally different. Excludes per-run + operational fields.
@@ -194,7 +195,7 @@ for group in optimizer.param_groups:
 # SFT data mixture and DataLoader
 identity_conversations_filepath = os.path.join(base_dir, "identity_conversations.jsonl")
 train_tasks = [
-    SmolTalk(split="train"), # 460K rows of general conversations
+    *[SmolTalk(split="train") for _ in range(args.smoltalk_epochs)], # 460K rows per epoch (general conversations, ~60% are 3-turn)
     CustomJSON(filepath=identity_conversations_filepath), # 1000 rows of synthetic identity conversations
     CustomJSON(filepath=identity_conversations_filepath), # 2 epochs of these
     *[MMLU(subset="all", split="auxiliary_train") for _ in range(args.mmlu_epochs)], # 100K rows per epoch
@@ -203,7 +204,7 @@ train_tasks = [
     SpellingBee(size=80000, split="train"), # 80K rows of Spelling Bee (e.g. how many 'r' are in 'strawberry'?)
 ]
 train_dataset = TaskMixture(train_tasks)
-print0(f"Training mixture: {len(train_dataset):,} rows (MMLU x{args.mmlu_epochs}, GSM8K x{args.gsm8k_epochs})")
+print0(f"Training mixture: {len(train_dataset):,} rows (SmolTalk x{args.smoltalk_epochs}, MMLU x{args.mmlu_epochs}, GSM8K x{args.gsm8k_epochs})")
 val_dataset = TaskMixture([
     SmolTalk(split="test"), # 24K rows in test set
     MMLU(subset="all", split="test", stop=5200), # 14K rows in test set, use only 5.2K to match the train ratios
