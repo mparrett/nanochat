@@ -1,0 +1,462 @@
+{
+  "timestamp": "2026-05-06 16:34:55",
+  "device_type": "mps",
+  "decoding": {
+    "max_tokens": 256,
+    "temperature": 0.6,
+    "top_k": 50,
+    "seed": 42
+  },
+  "prompts": [
+    {
+      "name": "persona_retention",
+      "turns": [
+        "Hi! I'm Alex, a software engineer at a small startup.",
+        "What do you like to do for fun?",
+        "I really enjoy mountain biking on weekends.",
+        "What's my name and job?"
+      ]
+    },
+    {
+      "name": "reference_resolution",
+      "turns": [
+        "I have a cat named Mittens, she's 4 years old and very fluffy.",
+        "Cool. What kind of cats are most playful in general?",
+        "Interesting. What about exercise needs for indoor cats?",
+        "How old is Mittens now? And how would you describe her temperament?"
+      ]
+    },
+    {
+      "name": "numerical_thread",
+      "turns": [
+        "I bought 5 apples at the store today.",
+        "I ate 2 of them for lunch.",
+        "Then I gave 1 to my friend.",
+        "How many apples do I have left?"
+      ]
+    },
+    {
+      "name": "topic_stickiness",
+      "turns": [
+        "I'm planning a 3-day weekend trip to Portland, Oregon.",
+        "Tell me about food I should try there.",
+        "Are there any good day hikes nearby?",
+        "Going back to my original trip \u2014 what's something specifically Portland-y I should not miss?"
+      ]
+    },
+    {
+      "name": "constraint_accumulation",
+      "turns": [
+        "Help me plan a vacation. No flights please \u2014 only ground transit.",
+        "Budget is under $500 total.",
+        "I have 5 days off work.",
+        "Suggest a specific itinerary."
+      ]
+    },
+    {
+      "name": "self_correction",
+      "turns": [
+        "What's the capital of Australia?",
+        "Actually, the capital is Canberra, not Sydney.",
+        "What other unusual capital choices have countries made?",
+        "Earlier we discussed the capital of Australia \u2014 what is it?"
+      ]
+    },
+    {
+      "name": "open_drift",
+      "turns": [
+        "Tell me something interesting.",
+        "That's neat. What else?",
+        "Cool. Tell me another one.",
+        "And another?",
+        "What was the very first thing you told me?"
+      ]
+    }
+  ],
+  "baseline": {
+    "model_tag": "d6_baseline_modern_sft",
+    "convos": {
+      "persona_retention": [
+        {
+          "turn": 1,
+          "user": "Hi! I'm Alex, a software engineer at a small startup.",
+          "assistant": "Hello! How can I help you with that?",
+          "response_token_count": 10
+        },
+        {
+          "turn": 2,
+          "user": "What do you like to do for fun?",
+          "assistant": "I'm Alex, Alex, and I'm Alex.",
+          "response_token_count": 11
+        },
+        {
+          "turn": 3,
+          "user": "I really enjoy mountain biking on weekends.",
+          "assistant": "What's the mountain biking on weekends, and I'm a software engineer!",
+          "response_token_count": 15
+        },
+        {
+          "turn": 4,
+          "user": "What's my name and job?",
+          "assistant": "A mountain biking on week is a big group, and I'm a seasoned engineer. I'm a software engineer, engineer, and engineer in a big group.",
+          "response_token_count": 32
+        }
+      ],
+      "reference_resolution": [
+        {
+          "turn": 1,
+          "user": "I have a cat named Mittens, she's 4 years old and very fluffy.",
+          "assistant": "In a cat named Mittens, she's 4 years old, and she's 4 years old, she's 4 years older than 4 years old. So, she's 4+4 = <|python_start|>4+4<|python_end|><|output_start|>8<|output_end|>8 years old.\nAfter she's 4 years old, she's 8+4 = <|python_start|>8+4<|python_end|><|output_start|>12<|output_end|>12 years old.\nAfter she's 4 years old, she's 4-12 = <|python_start|>4-12<|python_end|><|output_start|>-8<|output_end|>-8 years old.\n#### 8",
+          "response_token_count": 118
+        },
+        {
+          "turn": 2,
+          "user": "Cool. What kind of cats are most playful in general?",
+          "assistant": "That's a great goal. To do this, we need to find the most effective cats in a cat, which is a cat. It is a cat, and she's 1.4 times old.\nWe can also add the cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat's cat",
+          "response_token_count": 256
+        },
+        {
+          "turn": 3,
+          "user": "Interesting. What about exercise needs for indoor cats?",
+          "assistant": " exercise needs to be done. To find the most effective indoor cats, we can use the difference between the difference between the difference between the difference in the difference between the difference between the difference between the difference. We can also use the difference between the difference between the difference between the difference between the difference and the difference between the difference between the difference between the difference and the difference between the difference between the difference and the difference between the difference between the difference between the difference and the difference between the difference between the difference and the difference between the difference between the difference between the difference between the difference and the difference between the difference between the difference and the difference between the difference and the difference between the difference between the difference and the difference between the difference between the difference between the difference and the difference between the difference between the difference between the difference between the difference between the difference and the difference between the difference between the difference between the difference and the difference between the difference between the difference between the difference between the difference and the difference between the difference between the difference and the differences between difference between the difference and difference between the difference between difference and difference between the difference between the difference between the difference between the difference difference between the difference between difference and the difference between the difference between the difference between difference and the difference between",
+          "response_token_count": 256
+        },
+        {
+          "turn": 4,
+          "user": "How old is Mittens now? And how would you describe her temperament?",
+          "assistant": "At the difference between the difference between difference and the difference between the difference between difference and the difference between the difference between the difference between the difference and the difference between difference between the difference between difference and the difference between the difference between difference between the difference between the difference between difference and the difference between difference between difference and difference between difference between difference and difference between difference between difference between difference and difference between difference and difference between difference between difference between difference and difference between difference between difference between difference between difference and difference between difference between difference difference between difference and difference between difference between difference difference and difference between difference between difference and difference between difference between difference difference and difference between difference and difference between difference between difference between difference and difference between difference between difference between difference difference between difference and difference between difference between difference between difference difference between difference difference between difference and difference between difference difference between difference difference and difference between difference between difference between difference difference between difference between difference difference and difference between difference between difference difference between difference between difference difference between difference difference between difference difference and difference between difference betweendifference difference and difference between difference difference between difference difference between difference between difference between difference and difference between difference difference between difference difference between difference difference and difference between difference difference between difference difference between difference difference between difference difference between difference between difference difference difference and",
+          "response_token_count": 256
+        }
+      ],
+      "numerical_thread": [
+        {
+          "turn": 1,
+          "user": "I bought 5 apples at the store today.",
+          "assistant": "Since the store has a total of 5 apples, the store has 5 apples, and 5 apples have 5 apples, we need to find the total number of apples. We know that each apples has 5 apples, so the total number of apples is 5 apples.\n\n5 apples have 5 apples, so the total number of apples is 5 apples.",
+          "response_token_count": 76
+        },
+        {
+          "turn": 2,
+          "user": "I ate 2 of them for lunch.",
+          "assistant": "I ate 2 of them for lunch, so the total number of apples is 2 * 2 = 2.\n\nNow, since we know that the number of apples is 5 apples, each which has 2.",
+          "response_token_count": 46
+        },
+        {
+          "turn": 3,
+          "user": "Then I gave 1 to my friend.",
+          "assistant": "Here's the total number of apples, so the total number of apples is 2 * 1 = 2.\n\nNow, we multiply that number by 5:\n\n2 * 2 = 4\n\nThe total number of apples is 4.",
+          "response_token_count": 51
+        },
+        {
+          "turn": 4,
+          "user": "How many apples do I have left?",
+          "assistant": "You know that the number of apples is left, so the total number of apples is 4 * 5 = 5.\n\nSo, 5 apples have 5 apples left, so the total number of apples is 5 * 5 = 5 apples left.",
+          "response_token_count": 55
+        }
+      ],
+      "topic_stickiness": [
+        {
+          "turn": 1,
+          "user": "I'm planning a 3-day weekend trip to Portland, Oregon.",
+          "assistant": "My final trip is filled with a variety of activities and activities, including burning calories and building muscle. The diverse activities are covered in a few activities, including walking or running, walking, walking, or hiking through the mountains, there are several activities and activities that cater to different tastes. Here are some activities:\n\n1. Get a picnic in the park with a small journal or a picnic in the park. This activity can be a challenge, but it's possible to participate in a picnic.\n2. Try walking through the mountains and walking through the mountains, and watch them and watch them grow them as they grow and grow.\n3. Bring extra copies of your picnic to a quiet spot, and be sure to bring a blanket for a picnic.",
+          "response_token_count": 149
+        },
+        {
+          "turn": 2,
+          "user": "Tell me about food I should try there.",
+          "assistant": "Food I should try there. We can have a picnic in the park or a picnic in the park, and it's possible to enjoy the fresh air and water from the park. You can also try reading your book or practicing gratitude for the laughter of a friends and family, and try reading your book or a favorite book on the local food.",
+          "response_token_count": 69
+        },
+        {
+          "turn": 3,
+          "user": "Are there any good day hikes nearby?",
+          "assistant": "Yes, there are many good day day hikes nearby. We can enjoy the diverse food and enjoy the fresh air, and we can see a picnic in the park. We can also enjoy the fresh air and water from the park, and remember to bring a blanket for the picnic.",
+          "response_token_count": 57
+        },
+        {
+          "turn": 4,
+          "user": "Going back to my original trip \u2014 what's something specifically Portland-y I should not miss?",
+          "assistant": "You can also enjoy the fresh air, including the fresh air and water from the park. We can also see a picnic in the park in a picnic, and you can enjoy the fresh air and water for a picnic.",
+          "response_token_count": 44
+        }
+      ],
+      "constraint_accumulation": [
+        {
+          "turn": 1,
+          "user": "Help me plan a vacation. No flights please \u2014 only ground transit.",
+          "assistant": "Of course, I can help you plan a vacation. Here are some general steps to consider:\n\n1. Identify the main options: The flights and flights are located in the United States and are available to pick up flights. \n\n2. Consider factors such as the weather, climate, and climate, as well as any climate and weather conditions. Look for factors that need to be considered to be at the top of your budget.\n\n3. Consider factors such as climate, global temperatures, and climate change. Consider factors that are expected to be at the top of your budget and to be considered to be at the top of your budget.",
+          "response_token_count": 126
+        },
+        {
+          "turn": 2,
+          "user": "Budget is under $500 total.",
+          "assistant": "To determine the best option, consider the type of flights and flights that might be at the top of your budget. Consider factors like climate, climate, and climate change. Consider factors like climate, climate, and climate change. Evaluate the climate and weather conditions for each option.\n\n4. Evaluate the climate and weather conditions for each option. Consider factors such as climate, climate, and climate, and consider factors like climate, global temperatures, and climate change. Analyze the climate and weather conditions for each option to find a suitable option.\n\n5. Evaluate the climate and weather conditions for each option. Consider factors like climate, climate, and climate, which can help you plan your vacation. Evaluate the climate and weather conditions for each option, such as climate, climate, and climate change. Consider factors that need to be considered to be at the top of your budget and to be considered to be at the top of your budget.\n\n6. Verify the weather conditions and weather conditions for each option. Evaluate the climate and climate conditions of each option to determine if the climate and weather conditions are appropriate. Look for climate, weather, and climate change. Evaluate the climate and weather conditions for each option.\n\n7. Research the climate and climate conditions for each option",
+          "response_token_count": 256
+        },
+        {
+          "turn": 3,
+          "user": "I have 5 days off work.",
+          "assistant": "We can start by selecting the most appropriate option. We can start by choosing the most appropriate option to choose a option that aligns with the climate, weather conditions, and weather conditions. This option is typically a bit more specific to the climate, but it can also be selected to choose a option that aligns with the climate and weather conditions.",
+          "response_token_count": 67
+        },
+        {
+          "turn": 4,
+          "user": "Suggest a specific itinerary.",
+          "assistant": "No, it is not a specific place. We can also consider factors such as climate, weather, and climate change. We can also evaluate different options to find a specific option that is appropriate for the needs of different climate conditions.",
+          "response_token_count": 46
+        }
+      ],
+      "self_correction": [
+        {
+          "turn": 1,
+          "user": "What's the capital of Australia?",
+          "assistant": "The capital of Australia is Australia. It is a city known for its historical landmarks and cultural institutions.\n\nThe capital of Australia is Australia.",
+          "response_token_count": 27
+        },
+        {
+          "turn": 2,
+          "user": "Actually, the capital is Canberra, not Sydney.",
+          "assistant": "Paris is a city known for its historical landmarks and cultural institutions. It is a city known for its historical landmarks and cultural institutions.",
+          "response_token_count": 27
+        },
+        {
+          "turn": 3,
+          "user": "What other unusual capital choices have countries made?",
+          "assistant": "One of the most famous capital choices for the capital of Australia is the United States. The capital of Australia is the United States.",
+          "response_token_count": 26
+        },
+        {
+          "turn": 4,
+          "user": "Earlier we discussed the capital of Australia \u2014 what is it?",
+          "assistant": "One of the most famous capital choices is the United States. The capital of Australia is the United States.",
+          "response_token_count": 21
+        }
+      ],
+      "open_drift": [
+        {
+          "turn": 1,
+          "user": "Tell me something interesting.",
+          "assistant": "That's a great opportunity to chat. I'm a research project focused on how to research and explore the potential for our research. I have been researching the research and development of the research, and I think it's important that we focus on the research. I also included a research project that focuses on the research, which aims to explore the potential applications of research. For example, I might research a research project that focuses on research and development, which could offer valuable insights into the research's potential applications.",
+          "response_token_count": 101
+        },
+        {
+          "turn": 2,
+          "user": "That's neat. What else?",
+          "assistant": "Not at all, but I'm not sure there are any specific areas of interest you're interested in. It's always a good idea to focus on research and development to ensure that you're on the same page.",
+          "response_token_count": 43
+        },
+        {
+          "turn": 3,
+          "user": "Cool. Tell me another one.",
+          "assistant": "What's your interest?",
+          "response_token_count": 5
+        },
+        {
+          "turn": 4,
+          "user": "And another?",
+          "assistant": "Your interest is a bit more research. I've been researching the research and development of research and development, and I'm a research project about the research and development of research. I'm also interested in your interest and would like to focus on research and development.",
+          "response_token_count": 52
+        },
+        {
+          "turn": 5,
+          "user": "What was the very first thing you told me?",
+          "assistant": "During the first project, I'd love to hear about the research and their development. It's been a research project since it's been an inspiration for research and development. I've had some initial questions that I'd like to focus on.",
+          "response_token_count": 48
+        }
+      ]
+    }
+  },
+  "stage2": {
+    "model_tag": "d6_baseline_smoltalk_2x",
+    "convos": {
+      "persona_retention": [
+        {
+          "turn": 1,
+          "user": "Hi! I'm Alex, a software engineer at a small startup.",
+          "assistant": "Hello! How can I help you today?",
+          "response_token_count": 9
+        },
+        {
+          "turn": 2,
+          "user": "What do you like to do for fun?",
+          "assistant": "Fear [friend's name] I've been working on for years I'm all so skilled at coding my software like my Java Java J. I'm a team member of Java, and I'm working on my software like I'm working on my software like Java Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm software like Java J. I'm currently working on my software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm working on software like Java J. I'm working on my software like Java J. I'm working on my software like Java J. I'm currently working on software like Java J. I'm working on my software like Java J. I'm developing",
+          "response_token_count": 256
+        },
+        {
+          "turn": 3,
+          "user": "I really enjoy mountain biking on weekends.",
+          "assistant": "The mountain biking on weekends is a mountain biking on weekends. It's usually on weekends, but it's also on weekends. It's often a mountain biking on weekends. It's often a mountain biking mountain biking on weekends, but it's also a mountain biking on weekends. It's a mountain biking on weekends and is still on weekends. It's typically a mountain biking mountain biking on weekends today, but it's also a mountain biking on weekends.",
+          "response_token_count": 90
+        },
+        {
+          "turn": 4,
+          "user": "What's my name and job?",
+          "assistant": " My name is J. I'm a software engineer at Java J. I'm working on software like Java J. I'm working on software such as Java J. I'm working on software like Java J. I'm currently working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm developing software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm developing software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J. I'm working on software like Java J",
+          "response_token_count": 256
+        }
+      ],
+      "reference_resolution": [
+        {
+          "turn": 1,
+          "user": "I have a cat named Mittens, she's 4 years old and very fluffy.",
+          "assistant": "\"Mittens, Mittens, and Mittens are all of us, but we're not sure the cat's age is too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too",
+          "response_token_count": 256
+        },
+        {
+          "turn": 2,
+          "user": "Cool. What kind of cats are most playful in general?",
+          "assistant": "\"Our cat's age is too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too",
+          "response_token_count": 256
+        },
+        {
+          "turn": 3,
+          "user": "Interesting. What about exercise needs for indoor cats?",
+          "assistant": " too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too",
+          "response_token_count": 256
+        },
+        {
+          "turn": 4,
+          "user": "How old is Mittens now? And how would you describe her temperament?",
+          "assistant": " too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too too",
+          "response_token_count": 256
+        }
+      ],
+      "numerical_thread": [
+        {
+          "turn": 1,
+          "user": "I bought 5 apples at the store today.",
+          "assistant": "One of the most important things I can do is the store's name and its name. It's a place where we can go to store, and it's a place where we can go to store it. The store's name and its name are the main things I can do for my store, and it's a place where we can go to store it. The store's name and its name are the main things I can do for my store, and it's a place where we can go to store it.",
+          "response_token_count": 104
+        },
+        {
+          "turn": 2,
+          "user": "I ate 2 of them for lunch.",
+          "assistant": "You're welcome! If you have any other questions or need further assistance, feel free to ask.",
+          "response_token_count": 20
+        },
+        {
+          "turn": 3,
+          "user": "Then I gave 1 to my friend.",
+          "assistant": "One of the most important things I can do is the store's name and its name. It's a place where we can go to store, and it's a place where we can go to store it.",
+          "response_token_count": 42
+        },
+        {
+          "turn": 4,
+          "user": "How many apples do I have left?",
+          "assistant": "It's a place where we can go to store, and it's a place where we can go to store it. We're a place that's a place where we can go to store it. You'll find it here is the place where we can go to store it.",
+          "response_token_count": 56
+        }
+      ],
+      "topic_stickiness": [
+        {
+          "turn": 1,
+          "user": "I'm planning a 3-day weekend trip to Portland, Oregon.",
+          "assistant": "There are many popular places to meet, but I can't wait to get you started. You're looking for a relaxing trip to Portland, just a few minutes ago, and I have a few options for a trip. For instance, the Blue River is a great weekend getaway, and it's a great trip to Tokyo. You can also visit the store or go hiking in the area with some local restaurants and parks. You can also visit the store, just ask locals and get some recommendations for the park.",
+          "response_token_count": 103
+        },
+        {
+          "turn": 2,
+          "user": "Tell me about food I should try there.",
+          "assistant": "As a food trip to Portland, you're looking for a relaxing trip to Portland, just a few minutes ago. The park is a great option for you, but it's a perfect way to get the chance to enjoy your experience. You can also visit the store or go hiking in the area with some local restaurants and parks. You can also visit the store or get some recommendations for the gardens.\n\nFor more information, you could visit the store or visit the store locator in the store, just in case. It's always a good idea to check the local stores and check reviews for recommendations. You can also visit the store or visit the store or get some recommendations for the park.",
+          "response_token_count": 138
+        },
+        {
+          "turn": 3,
+          "user": "Are there any good day hikes nearby?",
+          "assistant": "No, there are no good day hikes nearby. You can also visit the store or visit the store, just in case. You can visit the store or get some recommendations for the gardens. You can also visit the store or visit the store or get some recommendations for the gardens.\n\nFor more information, you might want to visit the store or visit the store's store or visit the store located at the store. It's also a great idea to visit the store or get some recommendations for the gardens. You can also visit the store or visit the store or visit the store and get some recommendations for the gardens.\n\nFor more information, you could visit the store or visit the store or visit the store. It's also a great idea to visit the store or visit the store or visit the store or visit the store.",
+          "response_token_count": 164
+        },
+        {
+          "turn": 4,
+          "user": "Going back to my original trip \u2014 what's something specifically Portland-y I should not miss?",
+          "assistant": "Yes, I can certainly help you with that. You can visit the store or visit the store and visit the store or visit the store or visiting the store or visit the store or visit the store or the store.",
+          "response_token_count": 43
+        }
+      ],
+      "constraint_accumulation": [
+        {
+          "turn": 1,
+          "user": "Help me plan a vacation. No flights please \u2014 only ground transit.",
+          "assistant": "That's a great chance to experience your travel experience. I'm here to support you, and I'm here to assist you. If you're looking for a relaxing and enjoyable vacation, please let me know.",
+          "response_token_count": 42
+        },
+        {
+          "turn": 2,
+          "user": "Budget is under $500 total.",
+          "assistant": "It's a great way to get started. I can help you get started on your travel on a beach. If you're looking for a more adventurous experience, I can try to pack your sunscreen and flip flops. However, I can provide you with a comfortable and comfortable beach for your next vacation.",
+          "response_token_count": 61
+        },
+        {
+          "turn": 3,
+          "user": "I have 5 days off work.",
+          "assistant": "We're looking for a relaxing and comfortable beach getaway. I can try to get the right to your right and comfortable beach. If you have any specific needs, you can let me know.",
+          "response_token_count": 39
+        },
+        {
+          "turn": 4,
+          "user": "Suggest a specific itinerary.",
+          "assistant": "A specific itinerary is that it's a great place to get some fun and fun. If you're looking for a relaxing beach getaway, you can try beach volleyball or take a leisurely stroll to get a more comfortable and enjoyable experience.",
+          "response_token_count": 51
+        }
+      ],
+      "self_correction": [
+        {
+          "turn": 1,
+          "user": "What's the capital of Australia?",
+          "assistant": "The capital of Australia is Sydney. Sydney is a city known for its history and culture, and is a place of historical importance and cultural importance in Sydney. Sydney is home to Sydney, Sydney, and Sydney, where Sydney is home to Sydney and Sydney, Sydney, and Sydney. Sydney is a place of Sydney's city home, Sydney, and Sydney, where Sydney is home to Sydney's living rooms and Sydney, Sydney, and Sydney. Sydney is home to Sydney, Sydney, Sydney, and Sydney, Sydney, Sydney, and Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney,",
+          "response_token_count": 256
+        },
+        {
+          "turn": 2,
+          "user": "Actually, the capital is Canberra, not Sydney.",
+          "assistant": "I am Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney Sydney, Sydney Sydney,",
+          "response_token_count": 256
+        },
+        {
+          "turn": 3,
+          "user": "What other unusual capital choices have countries made?",
+          "assistant": " Sydney, Sydney, Sydney, Sydney Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney Sydney, Sydney, Sydney, Sydney Sydney, Sydney, Sydney, Sydney, Sydney, Sydney Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney Sydney, Sydney, Sydney, Sydney, Sydney Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney, Sydney Sydney, Sydney, Sydney, Sydney, Sydney, Sydney Sydney, Sydney Sydney, Sydney, Sydney Sydney, Sydney Sydney, Sydney Sydney, Sydney, Sydney Sydney Sydney, Sydney, Sydney Sydney, Sydney Sydney, Sydney Sydney Sydney, Sydney, Sydney Sydney, Sydney, Sydney Sydney, Sydney Sydney Sydney, Sydney Sydney Sydney, Sydney Sydney Sydney, Sydney Sydney Sydney Sydney, Sydney Sydney Sydney Sydney Sydney, Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney, Sydney Sydney, Sydney",
+          "response_token_count": 256
+        },
+        {
+          "turn": 4,
+          "user": "Earlier we discussed the capital of Australia \u2014 what is it?",
+          "assistant": " Sydney Sydney Sydney Sydney, Sydney Sydney, Sydney Sydney Sydney Sydney Sydney Sydney, Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney, Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney Sydney",
+          "response_token_count": 256
+        }
+      ],
+      "open_drift": [
+        {
+          "turn": 1,
+          "user": "Tell me something interesting.",
+          "assistant": "\"Sure, I'd be happy to help you with that. What would you like to implement?",
+          "response_token_count": 20
+        },
+        {
+          "turn": 2,
+          "user": "That's neat. What else?",
+          "assistant": "We're looking for something interesting and exciting. What's the excitement about finding something another called \"grap\" in our story?",
+          "response_token_count": 26
+        },
+        {
+          "turn": 3,
+          "user": "Cool. Tell me another one.",
+          "assistant": "\"Our story is a hidden story. I love it, but I'm eager to check it.",
+          "response_token_count": 19
+        },
+        {
+          "turn": 4,
+          "user": "And another?",
+          "assistant": "\"Our story is a map of the story, but I'm excited to check it. I'm eager to check it out, but I need it to be a real adventure.",
+          "response_token_count": 35
+        },
+        {
+          "turn": 5,
+          "user": "What was the very first thing you told me?",
+          "assistant": "As I know, I'm not excited to check it. I'm not excited to check it out, but I'll be happy to go over it.",
+          "response_token_count": 31
+        }
+      ]
+    }
+  }
+}
