@@ -102,8 +102,8 @@ def tokenizing_distributed_data_loader_with_state_bos_bestfit(
     """
     assert split in ["train", "val"], "split must be 'train' or 'val'"
 
-    rank, _ = get_dist_info()
-    if rank == 0:
+    _ddp, _rank, _, _ = get_dist_info()
+    if _rank == 0:
         print(f"[dataloader] variant={DATALOADER_VARIANT} (NANOCHAT_DATALOADER_REUSE_REMAINDER={'1' if REUSE_REMAINDER else '0'}) split={split}")
 
     row_capacity = T + 1
