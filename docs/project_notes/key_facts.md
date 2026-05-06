@@ -47,6 +47,37 @@ in `meta_*.json` automatically via `vars(args).copy()`.
 (`chatsft_checkpoints/d6_stage2/meta_000375.json`) is the canonical reference;
 SFT recipe story is captured in `docs/sft_oom_investigation_2026-05-03.md`.
 
+## Launch patterns on M2
+
+**Use direct python, not `torchrun`.** Canonical pattern:
+```bash
+PYTHONUNBUFFERED=1 nohup uv run python -u -m scripts.base_train ...
+```
+Why: `torchrun --standalone --nproc_per_node=1` injects `RANK`/`LOCAL_RANK`/
+`WORLD_SIZE` env vars, but `compute_init` in `nanochat/common.py:246` only
+calls `dist.init_process_group()` when `device_type == "cuda"`. On MPS the
+process group is never initialized, and the `MuonAdamW` optimizer's
+`dist.get_rank()` at the first step crashes with "Default process group has
+not been initialized." The d6_baseline_modern + A3 + A3' runs all use
+direct python; matched by the d3 smoke recipe (`docs/d3_smoke_recipe_2026-05-05.md`).
+
+**Use `--inherit-from`, not flag enumeration.** Canonical pattern for any
+non-baseline run:
+```bash
+uv run python -u -m scripts.base_train \
+    --inherit-from=$NANOCHAT_BASE_DIR/base_checkpoints/d6_baseline_modern/meta_005000.json \
+    --depth=<N> --seed=<S> --model-tag=<tag> --run=<name> \
+    [other intentional overrides]
+```
+Why: script defaults differ from canonical d6 (`head_dim=128` vs `64`,
+`max_seq_len=2048` vs `512`, `window_pattern=SSSL` vs `L`). Forgetting any
+one silently trains a different model — A1 of the Stage 2 audit caught a
+head_dim drift exactly this way. `--inherit-from` loads 34 fields from a
+reference meta as parser defaults; CLI flags override only intentional
+deltas. Excluded from inheritance (must re-pass): `run`, `model_tag`,
+`sft_tag`, `seed`, `resume_from_step`, `force_overwrite`, `save_every`,
+`save_keep_last_n`. Mechanism landed in commit `ca9bc94`.
+
 ## References
 
 - **Cross-depth architecture audit (d3/d6/d12/d20):**
