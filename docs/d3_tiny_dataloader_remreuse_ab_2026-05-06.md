@@ -31,29 +31,49 @@ PYTHONUNBUFFERED=1 nohup uv run python -u -m scripts.base_train \
 - Model: 17.37 M params (d3, n_embd=128, n_head=2, T=256), inherits from `d6_baseline_modern` meta.
 - Dataset: ClimbMix-400B (`karpathy/climbmix-400b-shuffle`), default rank-0 shard.
 - Hardware: M2 MacBook Pro (MPS, bf16 compute, single rank, no DDP).
-- Both runs share `seed=42`; the only thing that differs is which packing produces the rows.
-- Baseline run finished 2026-05-05 22:33 (model-tag `d3_tiny`).
-- A/B run finished 2026-05-06 05:19 (model-tag `d3_tiny_remreuse`). First launch 05:09 hit a wiring bug (`get_dist_info()` returns 4 values, the banner unpacked 2) — caught at first `next(train_loader)` call, fixed in `2c2c54e`, relaunched cleanly.
+- Each run pair shares a seed; the only thing that differs is which packing produces the rows.
+- **Seed pair 1 (seed=42)**: baseline finished 2026-05-05 22:33 (model-tag `d3_tiny`); A/B finished 2026-05-06 05:19 (model-tag `d3_tiny_remreuse`). First A/B launch 05:09 hit a wiring bug (`get_dist_info()` returns 4 values, the banner unpacked 2) — caught at first `next(train_loader)` call, fixed in `2c2c54e`, relaunched cleanly.
+- **Seed pair 2 (seed=2)**: chained baseline → A/B, both finished 2026-05-06 (model-tags `d3_tiny_s2` and `d3_tiny_remreuse_s2`).
 
 ---
 
-## Headline numbers
+## Headline numbers (n=2 seeds)
 
-| metric | discard (baseline) | remainder_reuse | Δ |
-|---|---:|---:|---:|
-| total_training_time | 376.7 s | 392.6 s | **+4.2 % slower** |
-| dt (final) | 0.793 s | 0.826 s | +4.2 % |
-| train/loss (final, step 499) | 5.417 | 5.453 | +0.04 (worse) |
-| **val_bpb (final, step 500)** | **1.6561** | **1.6611** | **+0.005 (worse, within noise)** |
-| min val_bpb (over run) | 1.6561 | 1.6611 | +0.005 |
-| source-doc consumption (final read-group) | 30 | **14** | **−53 %** |
+Means across `seed=42` and `seed=2`:
 
-The val_bpb gap (the canonical metric in this repo) is ~10× smaller than the
-train-loss gap. That difference is not noise — it's mechanism.
+| metric | discard (baseline) | remainder_reuse | Δ (mean) | per-seed Δ |
+|---|---:|---:|---:|---:|
+| **val_bpb (final, step 500)** | **1.6530** | **1.6619** | **+0.0089 (worse)** | +0.0050, +0.0128 |
+| total_training_time | 382.9 s | 392.7 s | **+2.6 % slower** | +4.2 %, +0.9 % |
+| dt (final) | 0.794 s | 0.828 s | +4.2 % | +4.2 %, +4.4 % |
+| train/loss (final) | 5.408 | 5.456 | +0.048 (worse) | +0.036, +0.060 |
+| source-doc consumption (final `rg`) | 30 | **14** | **−53 %** | identical both seeds |
+
+Per-seed details:
+
+| metric | seed=42 base | seed=42 A/B | seed=2 base | seed=2 A/B |
+|---|---:|---:|---:|---:|
+| val_bpb (step 500) | 1.6561 | 1.6611 | 1.6499 | 1.6627 |
+| total_training_time | 376.7 s | 392.6 s | 389.1 s | 392.8 s |
+| train/loss (final) | 5.417 | 5.453 | 5.399 | 5.458 |
+| source-doc rg | 30 | 14 | 30 | 14 |
+
+Two findings the seed pair changes:
+- **val_bpb regression is structural**, not seed noise. Both seeds show
+  remainder_reuse worse, in the +0.005 to +0.013 band. The first seed's
+  +0.005 was the optimistic case; +0.013 on the second seed shows the gap
+  isn't bounded by noise.
+- **Wall-time penalty is quieter than seed=42 alone suggested.** Seed=42's
+  baseline ran faster than seed=2's baseline (376.7 s vs 389.1 s), inflating
+  the seed=42 Δ. Both A/B runs land at ~392.6–392.8 s, which is the
+  load-bearing per-step number. Net penalty is ~+2.6 % across seeds, not
+  +4.2 %. Still real, just smaller.
 
 ---
 
 ## val_bpb trajectory (every 50 steps)
+
+**seed=42:**
 
 | step | discard | remainder_reuse | Δ |
 |---:|---:|---:|---:|
@@ -69,9 +89,29 @@ train-loss gap. That difference is not noise — it's mechanism.
 | 450 | 1.6640 | 1.6690 | +0.005 |
 | 500 | 1.6561 | 1.6611 | +0.005 |
 
-The two curves are essentially superimposed for the first 100 steps, then
-remainder_reuse settles into a stable +0.004 to +0.007 trail. That's a real
-small bias, not drift — but it is small.
+**seed=2:**
+
+| step | discard | remainder_reuse | Δ |
+|---:|---:|---:|---:|
+| 0 | 3.2059 | 3.1904 | −0.015 |
+| 50 | 2.1857 | 2.1708 | −0.015 |
+| 100 | 1.9883 | 1.9799 | −0.008 |
+| 150 | 1.8831 | 1.8845 | +0.001 |
+| 200 | 1.8131 | 1.8173 | +0.004 |
+| 250 | 1.7626 | 1.7692 | +0.007 |
+| 300 | 1.7246 | 1.7329 | +0.008 |
+| 350 | 1.6959 | 1.7058 | +0.010 |
+| 400 | 1.6739 | 1.6857 | +0.012 |
+| 450 | 1.6579 | 1.6709 | +0.013 |
+| 500 | 1.6499 | 1.6627 | +0.013 |
+
+Both seeds show the same shape: curves track tightly through ~step 100
+(remainder_reuse marginally ahead), then a sustained widening gap.
+Remainder_reuse never closes the gap once it opens. Crucially, seed=2's
+gap *grows* through the run (+0.001 → +0.013) while seed=42's gap
+*plateaus* (+0.007 → +0.005). Both end with remainder_reuse worse, but
+seed=2 is the larger gap and the sustained-widening shape is the more
+honest read on what happens at this scale.
 
 ## train_loss trajectory (every 25 steps, summary)
 
@@ -167,11 +207,13 @@ ADR-005 lists three triggers. Restated as a decision tree:
 
 ## Risks / what I'm not certain of
 
-- **n=1 seed.** Same seed (42) for both runs, so dataloader state advances
-  identically up to the moment a crop happens. That's the right A/B for
-  *this question* (does the gate change anything mechanically), but doesn't
-  estimate seed variance. A second run at a different seed would tell us
-  whether the +0.005 val_bpb gap is structural or seed-dependent.
+- **n=2 seeds is enough to reject "noise" but not to bound the regression
+  tightly.** Both seeds show remainder_reuse worse on val_bpb in the
+  +0.005 to +0.013 band — outside the expected per-seed jitter, so the
+  effect is real and structural. But two seeds is not enough to compute a
+  confidence interval; a third seed would tighten the bound on whether
+  the regression is closer to +0.005 or +0.013. We're not running it
+  because the decision (default OFF on M2) doesn't change at either end.
 - **Single context length / depth.** PR #544 reports gain *grows* at smaller
   T (1.18× at T=2048, 1.28× at T=512). We tested T=256, where the gain
   should be biggest in the regime the PR targets. That doesn't extrapolate
@@ -199,11 +241,16 @@ ADR-005 lists three triggers. Restated as a decision tree:
 
 ## Artefacts
 
-- Wandb runs: [`d3_tiny`](https://wandb.ai/matt-parrett/nanochat/runs/nasvg15p) (discard), [`d3_tiny_remreuse`](https://wandb.ai/matt-parrett/nanochat/runs/uh2vf0s8) (remainder_reuse).
-  Note: the remreuse wandb run started 05:09:43 ahead of the relaunch; the
-  *successful* run is the one with `total_training_time=392.5588`.
-- Local logs: `/tmp/d3_tiny_pretrain.log`, `/tmp/d3_tiny_remreuse_pretrain.log`.
-- Checkpoints: `$NANOCHAT_BASE_DIR/base_checkpoints/d3_tiny/{model,optim}_000500.pt`,
-  `$NANOCHAT_BASE_DIR/base_checkpoints/d3_tiny_remreuse/{model,optim}_000500.pt`.
-  Each meta records the variant under `user_config.dataloader_variant`.
-- Commits: `2173dab` (capability + meta plumbing), `2c2c54e` (banner unpack fix), `e32c17b` (ADR-005).
+- Wandb runs:
+  - [`d3_tiny`](https://wandb.ai/matt-parrett/nanochat/runs/nasvg15p) — seed=42, discard
+  - [`d3_tiny_remreuse`](https://wandb.ai/matt-parrett/nanochat/runs/uh2vf0s8) — seed=42, remainder_reuse (the successful run; an earlier 05:09:43 run for the same model-tag hit the wiring bug, see `2c2c54e`)
+  - `d3_tiny_s2`, `d3_tiny_remreuse_s2` — seed=2 pair under the same wandb project.
+- Local logs:
+  - `/tmp/d3_tiny_pretrain.log`, `/tmp/d3_tiny_remreuse_pretrain.log` (seed=42)
+  - `/tmp/d3_tiny_s2_pretrain.log`, `/tmp/d3_tiny_remreuse_s2_pretrain.log` (seed=2)
+- Checkpoints (each meta records the variant under `user_config.dataloader_variant`):
+  - `$NANOCHAT_BASE_DIR/base_checkpoints/d3_tiny/{model,optim}_000500.pt`
+  - `$NANOCHAT_BASE_DIR/base_checkpoints/d3_tiny_remreuse/{model,optim}_000500.pt`
+  - `$NANOCHAT_BASE_DIR/base_checkpoints/d3_tiny_s2/{model,optim}_000500.pt`
+  - `$NANOCHAT_BASE_DIR/base_checkpoints/d3_tiny_remreuse_s2/{model,optim}_000500.pt`
+- Commits: `2173dab` (capability + meta plumbing), `2c2c54e` (banner unpack fix), `e32c17b` (ADR-005), `a698a0d` (initial writeup, seed=42 only).

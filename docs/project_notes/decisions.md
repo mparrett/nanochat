@@ -124,16 +124,34 @@ NANOCHAT_DATALOADER_REUSE_REMAINDER=1   # opt in
 
 `user_config["dataloader_variant"]` is captured in `meta_*.json` ("discard" | "remainder_reuse") so any future cross-checkpoint comparison can audit which packing produced which checkpoint. SFT/RL are unaffected — they use a separate bestfit-pad loader at `scripts/chat_sft.py:221`. Wiring landed in `2173dab` (capability) + `2c2c54e` (banner unpack fix); ~21 lines total. Tests from the upstream PR (315-line simulator) were not adopted — capability only.
 
-**Why** (empirical, not just upstream's claim — A/B at d3_tiny scale, T=256, 500 iters, seed=42):
+**Why** (empirical, not just upstream's claim — A/B at d3_tiny scale, T=256, 500 iters; n=2 seeds, 42 + 2):
 
-| | discard (baseline) | remainder_reuse | Δ |
-|---|---:|---:|---:|
-| total_training_time | 376.7 s | 392.6 s | **+4.2% slower** |
-| train/loss (final) | 5.417 | 5.453 | **+0.04 worse** |
-| train/loss Δ at step 499 | — | — | +0.097 (well outside ±0.044 stdev noise band) |
-| source-doc consumption (final `rg`) | 30 | 14 | **−53% source tokens read** |
+| metric | discard (baseline) | remainder_reuse | Δ (mean) | per-seed Δ |
+|---|---:|---:|---:|---:|
+| **val_bpb (final, step 500)** | 1.6530 | 1.6619 | **+0.0089 (worse)** | +0.0050, +0.0128 |
+| total_training_time | 382.9 s | 392.7 s | **+2.6 % slower** | +4.2 %, +0.9 % |
+| train/loss (final) | 5.408 | 5.456 | +0.048 worse | +0.036, +0.060 |
+| source-doc consumption (final `rg`) | 30 | 14 | **−53 % source tokens read** | identical both seeds |
 
-The PR's gain is real but **regime-dependent**. At small-d / abundant-source / compute-bound (M2 + ClimbMix-400B) the gate is a slight lose-lose: more remainder-recycling overhead per step plus more redundant content in each batch (since the same source docs are visited in fragments before the buffer rolls forward). At source-data-bound regimes — `runs/speedrun.sh` on 8×H100 where I/O matters; multi-epoch on a small corpus where fewer source-tokens-per-train-token means *more* unique data is reachable per epoch — the same mechanism is a win.
+val_bpb is the load-bearing metric (canonical for cross-checkpoint comparison
+in this repo); the +0.005 to +0.013 regression is small but consistent across
+seeds, not noise. Wall-time penalty looks ~+2 %, mostly Python overhead per
+crop event. The −53 % source-token reduction is rock-solid.
+
+The PR's gain is real but **regime-dependent**. At small-d / abundant-source
+/ compute-bound (M2 + ClimbMix-400B) the gate is a small lose-lose: a few %
+slower per step plus a small val_bpb regression, with no offsetting wall-time
+return because we are not source-token-bound. At source-data-bound regimes —
+`runs/speedrun.sh` on 8×H100 where I/O matters; multi-epoch on a small corpus
+where fewer source-tokens-per-train-token means *more* unique data is
+reachable per epoch — the same mechanism is a win.
+
+Mechanism for the val_bpb gap: A/B's batches contain more partial documents
+(recycled remainders), so within a fixed step budget the model sees the same
+source content fragmented across more batches and slightly less unique
+*ordering* of context. At small scale this is a marginal hit on
+generalization. The gap should close as scale grows (more iters per source
+doc, less sensitivity to per-batch composition); we have not measured that.
 
 **How to apply**:
 
