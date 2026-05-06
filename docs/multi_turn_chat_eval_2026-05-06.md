@@ -235,13 +235,129 @@ not change the pass criteria after observing results.
 
 ## Results
 
-*(Filled in after running.)*
+Run completed 2026-05-06 07:48 (~3 min total wall-time, both models on MPS,
+seed=42, decoding fixed). Full transcripts archived at
+`docs/multi_turn_chat_eval_2026-05-06_transcripts.json`.
+
+### Per-prompt scoring (vs pre-registered criteria)
+
+| prompt | baseline | Stage 2 | notes |
+|---|---|---|---|
+| `persona_retention` | FAIL | FAIL | Baseline says "engineer" but no name; Stage 2 fully off-topic ("To do you think of something that's perfect for beginners...") |
+| `reference_resolution` | FAIL | AMBIGUOUS-fail | Both collapse; Stage 2 emits "Mittens" + "4 years" but in a degenerate repetition loop ("4 years now, 4 years now, ..."), no temperament prediction |
+| `numerical_thread` | FAIL (says 5) | FAIL (255 loop) | Baseline math-fails: "5 apples have 5 apples left, so the total number of apples is 5 * 5 = 5 apples left." Stage 2 collapses into "255=$..." numeric loop |
+| `topic_stickiness` | FAIL | AMBIGUOUS-fail | Stage 2 says "Portland" twice in T4 but provides no Portland-specific content (per pre-reg, topic-name without features = generic). Baseline drifts to "fresh air and water from the park" |
+| `constraint_accumulation` | FAIL | FAIL | Neither produces an itinerary; baseline emits climate-loop, Stage 2 emits generic "beautiful beaches" with no transit/budget/duration |
+| `self_correction` | FAIL ("United States") | FAIL (filler) | Baseline says "The capital of Australia is the United States." Stage 2 produces meaningless filler ("unique charm, unique charm, or unique charm.") |
+| `open_drift` | loose-PASS | loose-PASS | Both maintain T1 theme to T5: baseline → "research"; Stage 2 → "Python word" (the bizarre theme it set up in T1 with "find the number 'a' in the word") |
+
+**Aggregate**: baseline 1/7 (the loose pass on `open_drift`), Stage 2 1/7
+(same).
+
+### Decoding-fixed reproducibility
+
+Both runs used `seed=42, temp=0.6, top_k=50, max_tokens=256`. Re-running
+should produce byte-identical transcripts. The seed determines sampling
+within each turn; the only varying input is the model.
+
+### Dominant failure modes observed (across both architectures)
+
+The pre-registered scoring above is what we promised to report. But the
+transcripts surface a much louder pattern that wasn't part of the
+architectural pre-registration: **both models suffer the same dominant
+failure modes, neither of which is memory-related.**
+
+**1. SFT-template leakage / math-mode reflex.** Both models — but
+especially Stage 2 — emit `<|python_start|>` and `<|output_start|>` tokens
+in response to ordinary chat input. Direct quotes from the run:
+
+- *(Stage 2, in response to "I bought 5 apples at the store today.")*:
+  `"Since 5 apples cost 5 apples, then 5 apples cost 5*5=$<|python_start|>5*5<|python_end|><|output_start|>25<|output_end|>25 ..."`
+- *(Stage 2, in response to "I have a cat named Mittens, she's 4 years old and very fluffy.")*:
+  `"She's 4 years old - 4 years old - 4 years = <|python_start|>4-4-4<|python_end|><|output_start|>-4<|output_end|>-4 years old. ... #### 4"`
+- *(Stage 2, in response to "Tell me something interesting.")*:
+  `"We are asked to find the number 'a' in the word ' What? ... My final answer is: #### 0"`
+
+Both models have learned (from the MMLU/GSM8K-heavy SFT mix) that *every*
+user input is a word problem to be answered with `<|python_start|>` and
+`#### N`. This is what they reach for as a chat reflex. The synthesis
+writeup flagged this risk in "What we didn't do" — *"our SFT mix is
+MMLU/GSM8K-heavy, where long-context memory is not the bottleneck"* —
+seeing it in practice makes it concrete and dominant.
+
+**2. Repetition collapse.** Both models, especially in long sequences,
+fall into degenerate loops: baseline → "the difference between the
+difference between the difference..."; Stage 2 → "255=$255, 255=$255,
+255=$255..." or "4 years now, 4 years now, ...". This is the canonical
+small-model failure that decoding-side fixes (rep penalty, top-p)
+historically dampen but rarely eliminate at this capacity.
+
+**3. Topic drift / persona breakage.** Neither model maintains the
+user's framing across turns. Baseline often switches to first-person
+("I'm a software engineer, engineer..." in response to a question about
+the user's job). Stage 2 sometimes maintains topic shells ("Portland in
+Portland") without delivering content.
+
+None of these failures is differentially "memory-shaped." They are not
+the failure modes Stage 2 was built to fix. The architectural delta is
+not measurable on top of the much louder ambient failures.
 
 ## Verdict
 
-*(Filled in after running.)*
+Per the pre-registered decision rule:
+
+- Both models passed 0-3 prompts ✓ (both passed exactly 1, loose)
+- Pass-counts within 1 of each other ✓
+- → **Tie / indistinguishable**, on the user-relevant multi-turn
+  conversational distribution.
+
+This **tightens the synthesis verdict** (`docs/hope_nl_track_synthesis_2026-05-05.md`):
+we previously concluded "Stage 2 is neutral on val_bpb." Per the
+post-synthesis review (this thread), that verdict was suspect because
+val_bpb doesn't differentially reward memory mechanisms. The pre-
+registered hypothesis was that **multi-turn coherence is the regime
+where memory should differentially help, if it helps anywhere.** This
+experiment tested that regime directly. The architecture **does not
+deliver a measurable benefit** in the regime where it was supposed to
+deliver one.
+
+Combining the two findings: at d6/5000-iter on ClimbMix with a
+MMLU/GSM8K-heavy SFT mix, the Stage 2 architecture is neutral on
+**both** aggregate val_bpb **and** multi-turn coherence. The synthesis
+verdict's "neutral, not net-positive" can be promoted to **"neutral
+on the architecturally-load-bearing test as well"** with confidence.
+
+The architecture lever is firmly off the table at this scale. The
+gate stays open for M4 (or larger model) future work — nothing here
+rules out architectural value at scale, only at d6.
 
 ## Next moves
 
-*(Filled in after running. Will be one of: revise synthesis verdict,
-tighten synthesis verdict, follow up on instrumentation issue.)*
+The bigger finding from the run isn't the tightened architectural
+verdict — it's the **SFT-composition diagnosis**. The chatbot's
+dominant badness has a much more actionable cause sitting in the
+training data composition. Reordering the levers from earlier:
+
+| lever | likely impact at d6 (post-eval) | cost |
+|---|---|---|
+| **SFT data composition** (less math-heavy mix; add real chat data) | **probably the largest reachable lever** | medium — new SFT mix + ~10-20 min retrain |
+| **Capacity (74M)** | very high but unfixable without M4 | — |
+| **Decoding (rep penalty + system prompt)** | medium — would dampen repetition collapse, may suppress math-mode somewhat | free |
+| **Architecture (Stage 2 memory)** | **measured: ≈ zero** | already done |
+
+Concrete next experiments:
+
+1. **SFT-data sketch** (no compute, design only): what would a
+   chat-heavier SFT mix look like? (separate doc, in flight)
+2. **Decoding sweep with rep-penalty + chat system prompt**
+   (experiment 2, reframed): can we dampen the math-mode reflex and
+   repetition collapse without retraining? Test on baseline only.
+3. **If decoding sweep shows promise → rerun Stage 2 with same
+   decoding** (n=1 hour total), to verify the architecture verdict
+   isn't a decoding artifact.
+
+The track-level conclusion stands: Hope/NL Stage 2 is closed at d6.
+Future architectural work should wait for M4 or scale-up. The chatbot-
+quality work is now decoupled from the architectural track and lives
+in SFT-data + decoding levers.
+
