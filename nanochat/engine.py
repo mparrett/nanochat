@@ -138,9 +138,23 @@ class KVCache:
 
 # -----------------------------------------------------------------------------
 @torch.inference_mode()
-def sample_next_token(logits, rng, temperature=1.0, top_k=None):
-    """Sample a single next token from given logits of shape (B, vocab_size). Returns (B, 1)."""
+def sample_next_token(logits, rng, temperature=1.0, top_k=None, repetition_penalty=1.0, prior_tokens=None):
+    """Sample a single next token from given logits of shape (B, vocab_size). Returns (B, 1).
+
+    Optional repetition_penalty (>1.0) divides logits at already-seen-token positions before
+    softmax, dampening loops. prior_tokens: list-of-lists [B][len_i] of tokens seen so far per row;
+    only consulted when repetition_penalty != 1.0.
+    """
     assert temperature >= 0.0, "temperature must be non-negative"
+    if repetition_penalty != 1.0 and prior_tokens is not None:
+        logits = logits.clone()
+        for i, toks in enumerate(prior_tokens):
+            if not toks:
+                continue
+            uniq = torch.tensor(list(set(toks)), dtype=torch.long, device=logits.device)
+            row_logits = logits[i, uniq]
+            row_logits = torch.where(row_logits > 0, row_logits / repetition_penalty, row_logits * repetition_penalty)
+            logits[i, uniq] = row_logits
     if temperature == 0.0:
         return torch.argmax(logits, dim=-1, keepdim=True)
     if top_k is not None and top_k > 0:
@@ -173,7 +187,7 @@ class Engine:
         self.tokenizer = tokenizer # needed for tool use
 
     @torch.inference_mode()
-    def generate(self, tokens, num_samples=1, max_tokens=None, temperature=1.0, top_k=None, seed=42):
+    def generate(self, tokens, num_samples=1, max_tokens=None, temperature=1.0, top_k=None, seed=42, repetition_penalty=1.0):
         """Same as generate, but does single prefill and then clones the KV cache."""
         assert isinstance(tokens, list) and isinstance(tokens[0], int), "expecting list of ints"
         device = self.model.get_device()
@@ -236,7 +250,8 @@ class Engine:
                 break
 
             # Sample the next token for each row
-            next_ids = sample_next_token(logits, rng, temperature, top_k)  # (B, 1)
+            prior = [s.current_tokens for s in row_states] if repetition_penalty != 1.0 else None
+            next_ids = sample_next_token(logits, rng, temperature, top_k, repetition_penalty, prior)  # (B, 1)
             sampled_tokens = next_ids[:, 0].tolist()
 
             # Process each row: choose the next token, update state, optional tool use
