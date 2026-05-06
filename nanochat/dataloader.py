@@ -16,11 +16,18 @@ Fallback to the original if you have very limited data AND long documents:
 https://github.com/karpathy/nanochat/blob/3c3a3d7/nanochat/dataloader.py#L78-L117
 """
 
+import os
 import torch
 import pyarrow.parquet as pq
 
 from nanochat.common import get_dist_info
 from nanochat.dataset import list_parquet_files
+
+# Experimental capability gate for upstream PR #544 (cropped-remainder reuse).
+# OFF by default (preserves baseline). Enable with NANOCHAT_DATALOADER_REUSE_REMAINDER=1.
+# Recorded in meta_*.json as user_config["dataloader_variant"] for cross-checkpoint auditability.
+REUSE_REMAINDER = os.environ.get("NANOCHAT_DATALOADER_REUSE_REMAINDER", "0") == "1"
+DATALOADER_VARIANT = "remainder_reuse" if REUSE_REMAINDER else "discard"
 
 def _document_batches(split, resume_state_dict, tokenizer_batch_size):
     """
@@ -95,6 +102,10 @@ def tokenizing_distributed_data_loader_with_state_bos_bestfit(
     """
     assert split in ["train", "val"], "split must be 'train' or 'val'"
 
+    rank, _ = get_dist_info()
+    if rank == 0:
+        print(f"[dataloader] variant={DATALOADER_VARIANT} (NANOCHAT_DATALOADER_REUSE_REMAINDER={'1' if REUSE_REMAINDER else '0'}) split={split}")
+
     row_capacity = T + 1
     batches = _document_batches(split, resume_state_dict, tokenizer_batch_size)
     bos_token = tokenizer.get_bos_token_id()
@@ -149,6 +160,10 @@ def tokenizing_distributed_data_loader_with_state_bos_bestfit(
                     doc = doc_buffer.pop(shortest_idx)
                     row_buffer[row_idx, pos:pos + remaining] = torch.tensor(doc[:remaining], dtype=torch.long)
                     pos += remaining
+                    if REUSE_REMAINDER:
+                        leftover = doc[remaining:]
+                        if len(leftover) > 1:
+                            doc_buffer.append([bos_token] + leftover)
 
         # Copy to pinned CPU buffer, then single HtoD transfer
         cpu_inputs.copy_(row_buffer[:, :-1])

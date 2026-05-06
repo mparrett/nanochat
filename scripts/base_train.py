@@ -111,6 +111,10 @@ if _inherit_pre.inherit_from is not None:
     print(f"Inherited {len(_inherited)} fields from {_inherit_pre.inherit_from}")
 args = parser.parse_args()
 user_config = vars(args).copy()  # for logging
+# Record dataloader variant (PR #544 capability gate, env-controlled, not a CLI flag).
+# Captured here so meta_*.json identifies which packing was used for any given checkpoint.
+from nanochat.dataloader import DATALOADER_VARIANT
+user_config["dataloader_variant"] = DATALOADER_VARIANT
 # -----------------------------------------------------------------------------
 # Compute init and wandb logging
 
