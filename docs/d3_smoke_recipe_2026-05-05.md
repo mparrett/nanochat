@@ -50,41 +50,50 @@ ls ~/.cache/nanochat/base_checkpoints/d3_smoke 2>/dev/null  # must be empty/miss
 
 **Memory: OFF.** No `--hope-*` flags. Plain transformer baseline.
 
+**Use `--inherit-from` from the canonical d6 metas, override only depth +
+per-run fields.** This is how A3/A3' avoided the same recipe-drift class
+of bug. Eliminates the need to remember `--head-dim=64`, `--max-seq-len=512`,
+`--window-pattern=L`, all the LR/warmup/decay flags, etc.
+
 ```bash
 # Pretrain — ~25-30 min wall on M2
-PYTHONUNBUFFERED=1 torchrun --standalone --nproc_per_node=1 \
-    -m scripts.base_train -- \
-    --depth=3 --device-batch-size=32 --total-batch-size=16384 \
+PYTHONUNBUFFERED=1 nohup uv run python -u -m scripts.base_train \
+    --inherit-from=$HOME/.cache/nanochat/base_checkpoints/d6_baseline_modern/meta_005000.json \
+    --depth=3 \
     --num-iterations=1500 \
-    --eval-every=100 --eval-tokens=524288 \
+    --eval-every=100 \
     --save-every=500 --save-keep-last-n=2 \
     --seed=42 \
     --model-tag=d3_smoke --run=d3_smoke \
-    2>&1 | tee /tmp/d3_smoke_pretrain.log
+    > /tmp/d3_smoke_pretrain.log 2>&1
 
 # SFT — ~12-18 min wall on M2
-PYTHONUNBUFFERED=1 torchrun --standalone --nproc_per_node=1 \
-    -m scripts.chat_sft -- \
-    --num-iterations=375 --total-batch-size=65536 \
-    --eval-every=50 --eval-tokens=524288 \
-    --seed=1 \
-    --model-tag=d3_smoke --sft-tag=d3_smoke_sft --run=d3_smoke_sft \
-    2>&1 | tee /tmp/d3_smoke_sft.log
+PYTHONUNBUFFERED=1 nohup uv run python -u -m scripts.chat_sft \
+    --inherit-from=$HOME/.cache/nanochat/chatsft_checkpoints/d6_baseline_modern_sft/meta_000375.json \
+    --model-tag=d3_smoke --sft-tag=d3_smoke_sft \
+    --seed=1 --run=d3_smoke_sft \
+    > /tmp/d3_smoke_sft.log 2>&1
 ```
 
-**Notes on the flags:**
-- `PYTHONUNBUFFERED=1` is the session-4 hard-won lesson — without it, errors
-  hide for hours behind block-buffered stdio. Always set for long-running runs.
-- `--num-iterations=1500` overrides the chinchilla auto-calc (~900) to give
-  the model a bit more horizon at d3 — pulls out of pure memorization
-  territory enough to be entertaining. Adjust down to 1000 if you want
-  faster.
-- `--eval-every=100` gives ~15 val_bpb samples across the run for a clean
-  curve.
-- `--eval-tokens=524288` matches the d6 SFT recipe (`key_facts.md`).
-  Default `20M` would silently hang.
-- `--save-keep-last-n=2` caps disk at 2 intermediate + 1 final ≈ 90 MB.
-- `--total-batch-size=65536` for SFT means accum=4 (per the post-bug recipe).
+**Notes on the launch pattern:**
+- **`uv run python -u -m scripts.base_train`** (NOT `torchrun`). On M2/MPS,
+  bare `torchrun` injects DDP env vars but `compute_init` in `nanochat/common.py`
+  only initializes the process group on CUDA. The result: optimizer crashes
+  on `dist.get_rank()` at first step. Direct `python` invocation matches the
+  d6_baseline_modern + A3/A3' canonical pattern.
+- `PYTHONUNBUFFERED=1 + python -u`: the session-4 hard-won lesson — without
+  these, errors hide for hours behind block-buffered stdio. Always set both.
+- `--inherit-from` carries 34 fields including `head_dim=64`, `max_seq_len=512`,
+  `window_pattern=L`, `device_batch_size=32`, `total_batch_size=16384`, all the
+  LRs and warmup/decay schedules. CLI flags after it override only what's
+  intentionally different.
+- Excluded from inheritance (must re-pass each time): `run`, `model_tag`, `seed`,
+  `resume_from_step`, `force_overwrite`, `save_every`, `save_keep_last_n`.
+- `--num-iterations=1500` overrides the inherited `5000` to give a d3-appropriate
+  budget. Adjust down to 1000 if you want faster.
+- `--eval-every=100` overrides inherited `100` (no-op; explicit for clarity).
+- For SFT, `eval_every`, `eval_tokens`, `num_iterations`, `total_batch_size`
+  all inherit from the d6 SFT meta. Same recipe, just on the d3 base checkpoint.
 
 ## Recipe B — d3 + memory (only if validating memory machinery)
 
@@ -94,20 +103,16 @@ re-test "does Stage 2 work."
 
 ```bash
 # Pretrain with Stage 2 memory at layer 1 (the only middle option at d3)
-PYTHONUNBUFFERED=1 torchrun --standalone --nproc_per_node=1 \
-    -m scripts.base_train -- \
-    --depth=3 --device-batch-size=32 --total-batch-size=16384 \
+PYTHONUNBUFFERED=1 nohup uv run python -u -m scripts.base_train \
+    --inherit-from=$HOME/.cache/nanochat/base_checkpoints/d6_stage2/meta_005000.json \
+    --depth=3 \
     --num-iterations=1500 \
-    --eval-every=100 --eval-tokens=524288 \
+    --eval-every=100 \
     --save-every=500 --save-keep-last-n=2 \
     --seed=42 \
     --hope-additive-memory-layer=1 \
-    --hope-memory-kind=learned_gate \
-    --hope-memory-w-o-init-scale=1.0 \
-    --hope-memory-alpha-init-bias=4.595 \
-    --hope-memory-eta-init-bias=-2.197 \
     --model-tag=d3_smoke_stage2 --run=d3_smoke_stage2 \
-    2>&1 | tee /tmp/d3_smoke_stage2_pretrain.log
+    > /tmp/d3_smoke_stage2_pretrain.log 2>&1
 ```
 
 Different `--model-tag` from Recipe A so the vanilla checkpoint stays intact.
@@ -116,12 +121,12 @@ Different `--model-tag` from Recipe A so the vanilla checkpoint stays intact.
 
 ```bash
 # CLI smoke prompts
-python -m scripts.chat_cli --model-tag=d3_smoke_sft -p "What is the capital of France?"
-python -m scripts.chat_cli --model-tag=d3_smoke_sft -p "Spell 'banana' letter by letter."
-python -m scripts.chat_cli --model-tag=d3_smoke_sft -p "Once upon a time"
+uv run python -m scripts.chat_cli --model-tag=d3_smoke_sft -p "What is the capital of France?"
+uv run python -m scripts.chat_cli --model-tag=d3_smoke_sft -p "Spell 'banana' letter by letter."
+uv run python -m scripts.chat_cli --model-tag=d3_smoke_sft -p "Once upon a time"
 
 # Web UI for free-form play
-python -m scripts.chat_web --model-tag=d3_smoke_sft
+uv run python -m scripts.chat_web --model-tag=d3_smoke_sft
 # Then browse to the printed http://localhost:... URL
 ```
 
