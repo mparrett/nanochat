@@ -109,3 +109,43 @@ training. If adopted, becomes the new default — do not add a feature flag
 
 **Status**: accepted 2026-05-05. Parked as standby; no code change.
 
+## ADR-005: Adopt PR #544 (dataloader remainder reuse) as env-gated opt-in (2026-05-06)
+
+**Context**: ADR-003 deferred [karpathy/nanochat#544](https://github.com/karpathy/nanochat/pull/544) until after A3/A3-prime. A3-prime is wrapped, so the deferral is lifted. The PR claims ~1.28× speedup at T=512 by recycling cropped document tails (with prepended BOS) into the doc buffer instead of discarding them. The PR is still **OPEN** upstream as of 2026-05-06.
+
+We did *not* want to either (a) adopt-as-permanent-default, which forces a one-time `d6_baseline_modern` rebaseline (~4 h M2) to keep historical comparisons coherent; or (b) ignore the capability, which leaves a known speedup unavailable in source-data-bound regimes (8×H100 speedrun, multi-epoch on small corpora).
+
+**Decision**: Adopt as a capability behind an env-var gate, not as a default.
+
+```
+NANOCHAT_DATALOADER_REUSE_REMAINDER=1   # opt in
+(unset / 0)                              # baseline behaviour, default
+```
+
+`user_config["dataloader_variant"]` is captured in `meta_*.json` ("discard" | "remainder_reuse") so any future cross-checkpoint comparison can audit which packing produced which checkpoint. SFT/RL are unaffected — they use a separate bestfit-pad loader at `scripts/chat_sft.py:221`. Wiring landed in `2173dab` (capability) + `2c2c54e` (banner unpack fix); ~21 lines total. Tests from the upstream PR (315-line simulator) were not adopted — capability only.
+
+**Why** (empirical, not just upstream's claim — A/B at d3_tiny scale, T=256, 500 iters, seed=42):
+
+| | discard (baseline) | remainder_reuse | Δ |
+|---|---:|---:|---:|
+| total_training_time | 376.7 s | 392.6 s | **+4.2% slower** |
+| train/loss (final) | 5.417 | 5.453 | **+0.04 worse** |
+| train/loss Δ at step 499 | — | — | +0.097 (well outside ±0.044 stdev noise band) |
+| source-doc consumption (final `rg`) | 30 | 14 | **−53% source tokens read** |
+
+The PR's gain is real but **regime-dependent**. At small-d / abundant-source / compute-bound (M2 + ClimbMix-400B) the gate is a slight lose-lose: more remainder-recycling overhead per step plus more redundant content in each batch (since the same source docs are visited in fragments before the buffer rolls forward). At source-data-bound regimes — `runs/speedrun.sh` on 8×H100 where I/O matters; multi-epoch on a small corpus where fewer source-tokens-per-train-token means *more* unique data is reachable per epoch — the same mechanism is a win.
+
+**How to apply**:
+
+1. **Default OFF** for all M2 development runs. ADR-003's parity concern stays: any run intended to be cross-comparable with `d6_baseline_modern` (val_bpb 1.174) must use `discard`.
+2. **Turn ON** when the run is source-data-bound:
+   - `speedrun.sh` on 8×H100 (I/O bound at the ClimbMix scan rate)
+   - Multi-epoch experiments where corpus exhaustion is in play
+   - Any run where the meta records `dataloader_variant: "remainder_reuse"` for matching, e.g. an A/B against another `remainder_reuse` run
+3. **Never mix** `discard` and `remainder_reuse` checkpoints in a comparison without flagging it. The meta captures the variant for exactly this audit.
+4. **Removability**: gate is one commit to remove if upstream merges and we adopt as default (which would require a one-time `d6_baseline_modern_v2` rebaseline per ADR-003) or if we drop the capability.
+
+**Where we depart from the upstream PR's framing**: the PR notes "The optimization is always-on with no configuration needed." For this codebase we explicitly disagree — abundant-source compute-bound regimes (which is most M2 work in this repo) net-lose from the change. Always-on would either silently regress those runs or force a global rebaseline. The env gate is a load-bearing departure from upstream until/unless the regime-dependence is resolved.
+
+**Status**: accepted 2026-05-06. Capability committed in 2173dab + 2c2c54e. Default behaviour unchanged.
+
