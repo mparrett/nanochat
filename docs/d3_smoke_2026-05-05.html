@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dispatch IV — The recipe was wrong. Twice.</title>
+<style>
+  :root {
+    --paper: #f5f1e8;
+    --paper-dim: #ebe5d6;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-mute: #8a857a;
+    --rule: #c9c2b0;
+    --accent: #b04a2f;
+    --accent-soft: #d97b5c;
+    --green: #4a7c3f;
+    --code-bg: #1c1d1f;
+    --code-fg: #e8e3d4;
+    --code-mute: #8d8675;
+    --code-key: #c9b76b;
+    --code-str: #a3b87a;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Charter", "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(0,0,0,0.025) 31px 32px),
+      var(--paper);
+  }
+  .sheet { max-width: 920px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+  .masthead {
+    border-top: 4px double var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0 1rem;
+    margin-bottom: 3rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1rem;
+  }
+  .masthead .kicker {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: 0.6rem;
+  }
+  .masthead h1 {
+    font-family: "Iowan Old Style", "Charter", Georgia, serif;
+    font-weight: 700; font-size: clamp(2rem, 4.6vw, 3.2rem);
+    line-height: 1.05; letter-spacing: -0.015em; margin: 0;
+  }
+  .masthead h1 em { font-style: italic; color: var(--accent); }
+  .masthead .meta {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.78rem; color: var(--ink-mute); text-align: right; line-height: 1.5;
+  }
+  .masthead .meta strong { color: var(--ink); font-weight: 600; }
+
+  .lede {
+    font-size: 1.25rem; line-height: 1.55; color: var(--ink-soft);
+    margin: 0 0 3rem; max-width: 38em;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .pull {
+    border-left: 3px solid var(--accent);
+    padding: 1.2rem 1.5rem;
+    margin: 2.5rem 0;
+    background: var(--paper-dim);
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.15rem; line-height: 1.5; font-style: italic;
+  }
+  .pull .src {
+    display: block; margin-top: 0.6rem;
+    font-family: "JetBrains Mono", monospace; font-style: normal;
+    font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-mute);
+  }
+
+  section { margin: 3rem 0; }
+  section > .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: 0.4rem;
+  }
+  section > h2 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.85rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em;
+    margin: 0.2rem 0 1.2rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.6rem;
+  }
+  section h3 { font-family: "Iowan Old Style", Georgia, serif; font-size: 1.2rem; font-weight: 700; margin: 1.6rem 0 0.5rem; }
+  p { margin: 0 0 1rem; }
+  p + p { text-indent: 1.5em; }
+
+  pre, code { font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace; }
+  code {
+    font-size: 0.92em; background: var(--paper-dim);
+    padding: 0.05em 0.35em; border-radius: 2px; color: var(--ink);
+  }
+  pre {
+    background: var(--code-bg); color: var(--code-fg);
+    padding: 1.2rem 1.4rem; border-radius: 4px; font-size: 0.82rem; line-height: 1.5;
+    overflow-x: auto; margin: 1.4rem 0; border-left: 3px solid var(--code-mute);
+  }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+
+  .chat {
+    background: var(--paper-dim);
+    border-left: 3px solid var(--ink-mute);
+    padding: 1.1rem 1.4rem;
+    margin: 1.4rem 0;
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 0.98rem;
+    line-height: 1.6;
+    color: var(--ink);
+  }
+  .chat .q {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 0.55rem;
+    display: block;
+  }
+  .chat .a { display: block; }
+  .chat em.tok {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.85em;
+    color: var(--ink-mute);
+    font-style: normal;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.4rem 0;
+    font-size: 0.95rem; background: var(--paper); border: 1px solid var(--rule);
+  }
+  th, td { padding: 0.7rem 0.8rem; text-align: left; border-bottom: 1px solid var(--rule); color: var(--ink); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--paper-dim); }
+  th {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-mute); font-weight: 600; border-bottom: 2px solid var(--ink); background: var(--paper);
+  }
+  td.numeric { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; color: var(--ink); text-align: right; }
+  td.win    { color: var(--green) !important; font-weight: 600; }
+  td.miss   { color: var(--accent) !important; font-weight: 600; }
+  td.neutral { color: var(--ink-mute) !important; }
+
+  .tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 0.18em 0.55em; border-radius: 2px; border: 1px solid currentColor;
+  }
+  .tag.win { color: var(--green); }
+  .tag.miss { color: var(--accent); }
+  .tag.committed { color: var(--ink); background: var(--paper); }
+  .tag.unfinished { color: var(--ink-soft); border-style: dashed; }
+
+  ol.takeaways { list-style: none; counter-reset: t; padding: 0; margin: 1.4rem 0; }
+  ol.takeaways li { counter-increment: t; padding-left: 3rem; position: relative; margin-bottom: 1rem; }
+  ol.takeaways li::before {
+    content: counter(t, decimal-leading-zero);
+    position: absolute; left: 0; top: 0.05rem;
+    font-family: "JetBrains Mono", monospace; font-weight: 700;
+    color: var(--accent); font-size: 0.95rem; letter-spacing: 0.05em;
+  }
+  ol.takeaways b { font-weight: 700; }
+
+  .colophon {
+    margin-top: 5rem; padding-top: 1.5rem; border-top: 4px double var(--ink);
+    font-family: "JetBrains Mono", monospace; font-size: 0.74rem; color: var(--ink-mute); line-height: 1.7;
+  }
+  .colophon a { color: var(--ink); }
+
+  hr.fancy { border: none; text-align: center; margin: 2.5rem 0; color: var(--ink-mute); }
+  hr.fancy::before { content: "·   ·   ·"; letter-spacing: 0.5em; }
+
+  @media (max-width: 600px) {
+    .sheet { padding: 2rem 1.1rem 4rem; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead .meta { text-align: left; }
+    .lede { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+<article class="sheet">
+
+<header class="masthead">
+  <div>
+    <div class="kicker">Dispatch IV &nbsp;·&nbsp; nanochat → fast-iteration smoke</div>
+    <h1>The recipe was wrong.<br><em>Twice.</em></h1>
+  </div>
+  <div class="meta">
+    <strong>Date</strong> 2026-05-05<br>
+    <strong>Hardware</strong> MacBook M2, 24GB<br>
+    <strong>Branch</strong> experiment/hope-nested-learning<br>
+    <strong>Result</strong> d3 smoke run, 63 min, two durable fixes
+  </div>
+</header>
+
+<p class="lede">
+  The Hope/Nested-Learning track had wrapped the day before — synthesis doc committed, ADR-004 (z-loss-as-standby) landed, no architectural appetite left in the tank. So we picked up a small leftover from the d8-extension ticket: <strong>d3 as a fast-iteration smoke platform</strong>. Forty-five minutes of compute, a chat-able tiny LM at the end, and a chance to see what kind of silly text comes out of a model 1/8 the size of d6. The plan was tidy. The launch script was not.
+</p>
+
+<div class="pull">
+  "Pre-flight clean: no orphan workers, all flags present, 33 GB free disk. Ready to run later tonight."
+  <span class="src">— commit <code>0aa98df</code>, the recipe doc, six minutes before the first launch</span>
+</div>
+
+<section>
+  <div class="label">01 / Why a smoke at all</div>
+  <h2>The carve-out from the d8 ticket</h2>
+  <p>
+    The session-6 wrap left three forward-work tickets standing: <code>feat_d8_extension.md</code> (keep the architectural question alive at scale), <code>feat_modernization_alignment.md</code> (zero-cost alignment with 2026 LLM templates), and a small carve-out inside the d8 ticket itself — <em>"d3 might come in handy, but only as a pure plumbing/harness rig, not for architectural-question work."</em> At d3 the memory layer is 33% of the network versus 16% at d6; any architectural conclusion gets structurally over-weighted.
+  </p>
+  <p>
+    The trade we wanted to test was simpler. Forget architectural conclusions. Just: <em>can we run end-to-end, cold to chatbot, in well under an hour, on a model small enough to be entertainingly bad at everything?</em> If yes, d3 becomes a reusable harness for any future instrumentation change — new probes, eval modes, save-policy tweaks — without paying the d6 wall every time. The recipe doc was the durable artifact; the run itself was the validation.
+  </p>
+  <p>
+    Sizing comes out cleanly from <code>--depth=3</code>: <code>n_embd=192</code>, three heads of width 64, three transformer blocks. Roughly 7.6M params on the architectural side, plus a 6.3M embedding table. Chinchilla-budget at <code>--target-param-data-ratio=12</code> auto-resolves to about 900 iters; we set 1500 explicitly to give the model a bit more horizon than pure memorization.
+  </p>
+</section>
+
+<section>
+  <div class="label">02 / The recipe-first ritual</div>
+  <h2>Lock the doc, then launch</h2>
+  <p>
+    The codebase has been bitten enough times by recipe drift that the standing convention is: <strong>markdown writeup first, run second</strong>. So the d3 smoke got its own doc — pre-flight checklist (no orphan Python or wandb workers, 33 GB free, no clobber on the <code>d3_smoke</code> tag), Recipe A (vanilla pretrain + SFT), Recipe B (with memory at layer 1, conditional only on validating memory plumbing), expected wall time, sample chat prompts, what to record. Committed at <code>0aa98df</code> with a "ready-to-launch" status line.
+  </p>
+  <p>
+    The launch was supposed to be six minutes of paste-and-run. Forty-five minutes of training. Three silly chat outputs. Done by dinner.
+  </p>
+</section>
+
+<section>
+  <div class="label">03 / Bug #1</div>
+  <h2>Bare <code>torchrun</code> on MPS doesn't init the dist process group</h2>
+  <p>
+    The recipe used <code>torchrun --standalone --nproc_per_node=1 -m scripts.base_train</code> — the pattern documented in the historical Stage 2 launch commands. First launch died after the model loaded, the embedding table allocated, the first validation pass at <code>val_bpb 3.194</code> printed cleanly, and the optimizer took its first step:
+  </p>
+  <pre><code>File "/Users/matt/projects-new/3p/nanochat/nanochat/optim.py", line 560, in step
+    rank = dist.get_rank()
+  ...
+ValueError: Default process group has not been initialized,
+            please make sure to call init_process_group.</code></pre>
+  <p>
+    The optimizer's <code>step()</code> calls <code>dist.get_rank()</code> and <code>dist.get_world_size()</code> unconditionally. Both require <code>init_process_group</code>. And in <code>nanochat/common.py::compute_init</code>:
+  </p>
+  <pre><code>is_ddp_requested, ddp_rank, ddp_local_rank, ddp_world_size = get_dist_info()
+if is_ddp_requested and device_type == "cuda":
+    dist.init_process_group(backend="nccl", device_id=device)
+else:
+    device = torch.device(device_type)  # mps|cpu</code></pre>
+  <p>
+    On M2 / MPS, <code>device_type != "cuda"</code>, so the second clause runs — no <code>init_process_group</code> call, even though <code>torchrun</code> has dutifully populated <code>RANK</code>, <code>LOCAL_RANK</code>, and <code>WORLD_SIZE</code> in the environment. The optimizer crashes on the first step.
+  </p>
+  <p>
+    Pulled the <code>d6_baseline_modern</code> launch command from <code>docs/hope_nl_a3_a3prime_2026-05-05.md</code>. The canonical M2 pattern is direct python:
+  </p>
+  <pre><code>PYTHONUNBUFFERED=1 nohup uv run python -u -m scripts.base_train \
+    --run=baseline-d6-modern --model-tag=d6_baseline_modern \
+    --depth=6 --head-dim=64 --max-seq-len=512 --window-pattern=L \
+    ...</code></pre>
+  <p>
+    No <code>torchrun</code>. The d6 runs that landed under the modern recipe — A3 seed=1, A3 seed=2, A3' baseline — all used <code>uv run python -u -m</code> directly. The Stage 2 pretrain commands that <em>did</em> use <code>torchrun</code> (in the older HANDOFF entries) presumably worked because the earlier optimizer code had a non-DDP path; the recent <code>MuonAdamW</code> consolidation removed it. Or because they ran from an activated venv where <code>torchrun</code> resolved to <code>.venv/bin/torchrun</code> instead of the homebrew one. Either way, post-A3 the canonical M2 pattern is direct python, and the recipe was built against the wrong precedent.
+  </p>
+</section>
+
+<section>
+  <div class="label">04 / Bug #2</div>
+  <h2>Default flags ≠ canonical d6 — the <code>--inherit-from</code> fix</h2>
+  <p>
+    Re-launched without <code>torchrun</code>. New error, deeper in the script:
+  </p>
+  <pre><code>File "/.../scripts/base_train.py", line 452, in &lt;module&gt;
+    assert total_batch_size % world_tokens_per_fwdbwd == 0
+AssertionError</code></pre>
+  <p>
+    <code>--total-batch-size=16384</code>, <code>--device-batch-size=32</code>, world size 1. So <code>world_tokens_per_fwdbwd = 32 * max_seq_len</code>. For the assertion to pass, <code>max_seq_len</code> needs to be 512 — and the d6 canonical recipe uses 512. Except <code>base_train.py</code>'s default for <code>--max-seq-len</code> is <strong>2048</strong>. Multiplied through: <code>32 * 2048 = 65536</code>, and <code>16384 % 65536 ≠ 0</code>. Crash before training begins.
+  </p>
+  <p>
+    Pulled the canonical d6 user_config from the <code>d6_baseline_modern</code> meta file. Three departures from the <code>base_train.py</code> defaults stood out:
+  </p>
+  <table>
+    <thead>
+      <tr><th>flag</th><th>script default</th><th>canonical d6</th><th>effect at d3</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>--max-seq-len</code></td>      <td class="numeric">2048</td>  <td class="numeric">512</td>  <td>assertion fails outright</td></tr>
+      <tr><td><code>--head-dim</code></td>         <td class="numeric">128</td>   <td class="numeric">64</td>   <td>n_embd=256 vs intended 192; 2 heads vs 3</td></tr>
+      <tr><td><code>--window-pattern</code></td>   <td class="numeric">SSSL</td>  <td class="numeric">L</td>    <td>local/global alternation that d6 didn't use</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The reflex was to add three more flags to the recipe. The better instinct was to recognize this as exactly the class of bug <code>--inherit-from</code> was built to prevent. The mechanism — landed in commit <code>ca9bc94</code> at the start of the A3 multi-seed sweep — loads a reference <code>meta_*.json</code> as parser defaults <em>before</em> CLI parsing, so any unspecified flag inherits from a known-good run; CLI overrides win for what's intentionally different.
+  </p>
+  <p>
+    Final launch command, six lines instead of fifteen:
+  </p>
+  <pre><code>PYTHONUNBUFFERED=1 nohup uv run python -u -m scripts.base_train \
+    --inherit-from=$HOME/.cache/nanochat/base_checkpoints/d6_baseline_modern/meta_005000.json \
+    --depth=3 \
+    --num-iterations=1500 \
+    --eval-every=100 \
+    --save-every=500 --save-keep-last-n=2 \
+    --seed=42 \
+    --model-tag=d3_smoke --run=d3_smoke \
+    > /tmp/d3_smoke_pretrain.log 2>&amp;1</code></pre>
+  <p>
+    Thirty-four fields auto-loaded from the d6 meta — <code>head_dim=64</code>, <code>max_seq_len=512</code>, <code>window_pattern=L</code>, every learning-rate scalar, the warmup and warmdown schedule. <code>--depth=3</code> is the only architectural override; the rest are per-run knobs (run name, seed, save policy, iteration count). The same approach handled SFT, inheriting from <code>d6_baseline_modern_sft/meta_000375.json</code>. Two recipes, same shape.
+  </p>
+  <p>
+    Launched. <strong>Step 26 of 1500. Loss 9.11, descending. ETA 25 minutes.</strong> The discipline paid off in the failure.
+  </p>
+</section>
+
+<section>
+  <div class="label">05 / The clean run</div>
+  <h2>What 63 minutes of d3 looks like</h2>
+  <p>
+    Pretrain finished in 32.9 minutes (the recipe estimate had said 25-30; MPS dispatch overhead at d3 is essentially the same as d6, so the per-iter wall doesn't drop in proportion to model size). SFT chained automatically on success and ran 29.5 minutes (the recipe had estimated 12-18; SFT at <code>total_batch_size=65536, accum=4</code> is dominated by four micro-batch fwd/bwd passes per step — batch-size-limited, not model-size-limited at d3). Total cold-to-chatbot: 62.4 minutes. Updated the recipe's estimate band to ~60-65 min for any future d3 smoke on this M2.
+  </p>
+  <table>
+    <thead>
+      <tr><th>metric</th><th class="numeric">d3 smoke</th><th class="numeric">d6 baseline</th><th class="numeric">gap</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>pretrain val_bpb @ final</td>    <td class="numeric">1.3766</td>  <td class="numeric">1.1686</td>  <td class="numeric">+0.21</td></tr>
+      <tr><td>SFT val_bpb @ final</td>         <td class="numeric">0.7753</td>  <td class="numeric">0.6483</td>  <td class="numeric">+0.13</td></tr>
+      <tr><td>pretrain wall</td>               <td class="numeric">32.9 min</td><td class="numeric">~4 h</td>    <td class="numeric">~7×</td></tr>
+      <tr><td>SFT wall</td>                    <td class="numeric">29.5 min</td><td class="numeric">~60 min</td> <td class="numeric">~2×</td></tr>
+      <tr><td>final pretrain checkpoint</td>   <td class="numeric">101 MB</td>  <td class="numeric">800 MB</td>  <td class="numeric">~1/8</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The +0.21 / +0.13 val_bpb gap is the gap a smaller-and-shorter-trained model produces; nothing more. The wall-time shape — pretrain 7× faster, SFT only 2× faster — is the actually-interesting datum. d3 is not a uniformly-faster d6; it's a faster pretrain platform tied to a roughly-the-same SFT cost. For any harness change that touches SFT specifically, the time savings are smaller than the per-token compute argument suggests.
+  </p>
+</section>
+
+<section>
+  <div class="label">06 / The silly outputs</div>
+  <h2>Three prompts, three failure modes</h2>
+  <p>
+    The chatbot was the payoff, and the failure modes were each their own little portrait of "model knows part of the structure, doesn't have the capacity to finish it cleanly." Verbatim from <code>chat_cli</code>:
+  </p>
+
+  <div class="chat">
+    <span class="q">Q · "What is the capital of France?"</span>
+    <span class="a">"France is the capital of France. It is the capital of France. France is Paris. Paris is a city known for its historical landmarks and historical landmarks. Paris is the most iconic landmarks in the city is the largest city in the city. Paris is a city known for its historical landmarks and cultural institutions."</span>
+  </div>
+  <p>
+    The factual association between "France" and "Paris" is <em>there</em> — the model emits "France is Paris" partway through. But the structural priors are weak enough that it can't get to it on the first try. It runs through "France is the capital of France" twice (wrong direction, syntactically fine) before self-correcting. Then degenerates into the landmark-loop. A bigger model would either get the answer cleanly or fabricate plausibly; d3 stutters its way to a partially-right answer through a tunnel of repetition.
+  </p>
+
+  <div class="chat">
+    <span class="q">Q · "Spell 'banana' letter by letter."</span>
+    <span class="a">"leana' letter by letter.:l,e,a,n,a,l,i,n,g,e, letter."</span>
+  </div>
+  <p>
+    Drops the leading "B" entirely (<code>leana</code>), but does pick up the letter-by-letter format from SFT. Output letters: <code>l, e, a, n, a, l, i, n, g, e</code>. Positions 2–5 (<code>e, a, n, a</code>) are correct — the middle of "banana." Everything else drifts. The SpellingBee training fingerprint is faintly visible; the <em>capacity</em> to spell is not.
+  </p>
+
+  <div class="chat">
+    <span class="q">Q · "Once upon a time"</span>
+    <span class="a">"The time of a time is taken to a time to find a time spent in time. It takes a time to start, time, and minutes, and minutes to minutes... <em class="tok">[the word "minutes" then repeats roughly fifty times, filling the context window]</em>"</span>
+  </div>
+  <p>
+    Pure repetition death-spiral. Latches onto "minutes" and runs it into the wall of the 512-token max. Classic small-LM failure mode and, at d3, the most likely outcome on any open-ended prompt. Pure entertainment.
+  </p>
+
+  <p>
+    None of these are quotable as Hope/NL evidence — the architectural question is settled at d6, and d3 numbers don't transfer regardless. They are the entertainment value the recipe doc promised, and they are also a useful calibration: if you ever want to know what a model with about 8 million transformer parameters does on a chat prompt, this is what that looks like.
+  </p>
+</section>
+
+<section>
+  <div class="label">07 / Takeaways</div>
+  <h2>What stays after the chatbot is shut down</h2>
+  <ol class="takeaways">
+    <li>
+      <b>Doc-then-launch caught two real bugs in twelve minutes.</b> Both bugs were in the launch <em>script pattern</em>, not the architecture. Both would have been silent on a small typo or buried under a different runtime path. Writing the recipe doc before launching, locking it as a commit, then trying to run it forced the failure into the visible foreground. The discipline isn't ceremony; it's how you get the surface area of "what the script actually does" into the conversation log instead of into your head.
+    </li>
+    <li>
+      <b><code>--inherit-from</code> is a class-of-bugs solution.</b> Bug #2 was three flag mismatches; the temptation was to add three flags. The better move was the meta-inheritance mechanism A3 had landed for exactly this purpose — it eliminates the entire category of "did I remember <code>--max-seq-len=512</code>" by construction. The lesson generalizes: any future architectural-experiment recipe should default to <code>--inherit-from &lt;reference_meta&gt;</code> with minimal overrides, not flag enumerations.
+    </li>
+    <li>
+      <b>Direct-python is the M2 canonical launch pattern.</b> <code>torchrun</code> on Apple Silicon injects DDP environment variables, but <code>compute_init</code> only initializes the process group on CUDA. The optimizer's <code>dist.get_rank()</code> then fails on the first step. The d6_baseline_modern + A3 + A3' runs all use <code>uv run python -u -m scripts.base_train</code> directly. This isn't currently spelled out in any auto-loaded surface (<code>CLAUDE.md</code>, <code>DEV.md</code>, <code>key_facts.md</code>); the recipe doc commit captures it, but lifting it into <code>key_facts.md</code> would prevent the next session from rediscovering the same trap.
+    </li>
+    <li>
+      <b>d3 is harness platform, not research platform.</b> The wall-time picture (pretrain 7× faster than d6, SFT only 2× faster) tells you what d3 is good for: validating instrumentation that touches the pretrain loop, training-script flags, save-policy changes, eval-mode tweaks. It is bad for anything where SFT cost dominates, and it is structurally invalid for architectural conclusions. The recipe doc carries this distinction explicitly; the result run validated it empirically.
+    </li>
+  </ol>
+  <hr class="fancy">
+  <p>
+    The smoke run produced one final on-disk artifact pair (<code>~/.cache/nanochat/base_checkpoints/d3_smoke/model_001500.pt</code> at 101 MB; <code>chatsft_checkpoints/d3_smoke_sft/model_000375.pt</code> at 101 MB), one wandb pretrain run, one wandb SFT run, and a chat server still listening on port 8765. The Hope/NL track stays closed; the harness now has a fast-iteration rig if anything in <code>feat_d8_extension.md</code> ever activates. The recipe doc is the durable artifact. The run was the validation.
+  </p>
+</section>
+
+<div class="colophon">
+  Dispatch IV. Branch <code>experiment/hope-nested-learning</code>.<br>
+  Companion notes: <code>docs/d3_smoke_recipe_2026-05-05.md</code> (the locked recipe), <code>docs/d3_smoke_results_2026-05-05.md</code> (the run record), <code>docs/project_incoming/feat_d8_extension.md</code> (the d3 carve-out), <code>docs/hope_nl_a3_a3prime_2026-05-05.md</code> (where the canonical M2 launch pattern was first written down).<br>
+  Bug-fix commit: <code>749631c</code> (recipe corrections).<br>
+  wandb runs: <a href="https://wandb.ai/matt-parrett/nanochat/runs/72smovk4">pretrain</a>, <a href="https://wandb.ai/matt-parrett/nanochat-sft/runs/gzdpj6mt">SFT</a>.
+</div>
+
+</article>
+</body>
+</html>
