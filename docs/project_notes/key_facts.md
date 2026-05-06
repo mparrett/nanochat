@@ -47,6 +47,13 @@ in `meta_*.json` automatically via `vars(args).copy()`.
 (`chatsft_checkpoints/d6_stage2/meta_000375.json`) is the canonical reference;
 SFT recipe story is captured in `docs/sft_oom_investigation_2026-05-03.md`.
 
+## References
+
+- **Cross-depth architecture audit (d3/d6/d12/d20):**
+  `docs/architecture_audit_d3_d6_d12_d20_2026-05-05.md` — shape, params,
+  auto-derived training hyperparams, M2 wall projections, tweakable knobs
+  in 4 tiers, code-location pointers for every scaling formula.
+
 ## Branch
 - Main: `master`
 - Current working branch: `experiment/hope-nested-learning`
