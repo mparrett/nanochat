@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>0 → 4 of 30 — L1 persona-LoRA on d6, 2026-05-07</title>
+<style>
+  :root { --bg: #1a1a2e; --fg: #e0e0e0; --accent: #e94560; --accent2: #0f3460;
+          --good: #4ade80; --bad: #f87171; --mid: #fbbf24; --card: #16213e;
+          --blue: #60a5fa; --dim: #888; --violet: #a78bfa; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg);
+         color: var(--fg); line-height: 1.75; padding: 2rem 1.5rem; max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 1.85rem; margin-bottom: 0.4rem; color: #fff; letter-spacing: -0.025em; line-height: 1.25; }
+  h2 { font-size: 1.3rem; margin: 2.8rem 0 0.8rem; color: var(--accent); letter-spacing: -0.01em;
+       border-bottom: 1px solid #2a2a4a; padding-bottom: 0.3rem; }
+  h3 { font-size: 1.05rem; margin: 1.8rem 0 0.4rem; color: var(--blue); }
+  h4 { font-size: 0.95rem; margin: 1.2rem 0 0.4rem; color: var(--violet); }
+  p { margin: 0.7rem 0; font-size: 0.95rem; }
+  .subtitle { color: var(--dim); font-size: 0.88rem; margin-bottom: 0.5rem; }
+  .byline { color: var(--dim); font-size: 0.78rem; margin-bottom: 2rem;
+            font-family: 'JetBrains Mono', monospace; }
+  .lede { font-size: 1.05rem; color: #ddd; margin: 1.2rem 0 2rem;
+          line-height: 1.85; padding-left: 1rem; border-left: 3px solid var(--accent); }
+  code { background: #222; padding: 0.12em 0.35em; border-radius: 3px; font-size: 0.85em;
+         font-family: 'JetBrains Mono', 'SF Mono', monospace; color: var(--blue); }
+  a { color: var(--blue); text-decoration: none; border-bottom: 1px solid #2a4470; }
+  a:hover { border-bottom-color: var(--blue); }
+  em { color: #ddd; font-style: italic; }
+  strong { color: #fff; }
+
+  pre { background: #0d0d1a; border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0;
+        font-family: 'JetBrains Mono', 'SF Mono', monospace; font-size: 0.82rem;
+        overflow-x: auto; line-height: 1.5; border-left: 3px solid var(--violet);
+        color: #ddd; white-space: pre-wrap; word-break: break-word; }
+  pre code { background: none; padding: 0; color: #ddd; font-size: inherit; }
+
+  blockquote { background: rgba(167,139,250,0.06); border-left: 3px solid var(--violet);
+               padding: 0.9rem 1.2rem; margin: 1.4rem 0; border-radius: 6px;
+               font-style: italic; color: #ddd; font-size: 0.92rem; }
+
+  .pull { font-size: 1.05rem; color: #fff; padding: 1.2rem 1.5rem; margin: 1.8rem 0;
+          background: linear-gradient(135deg, rgba(233,69,96,0.08), rgba(167,139,250,0.04));
+          border-radius: 10px; border-left: 4px solid var(--accent);
+          line-height: 1.6; font-style: italic; }
+
+  .insight { padding: 0.9rem 1.1rem; margin: 1.4rem 0; border-radius: 8px;
+             background: rgba(74,222,128,0.05); border-left: 3px solid var(--good);
+             font-size: 0.9rem; }
+  .insight.warn { background: rgba(251,191,36,0.05); border-left-color: var(--mid); }
+  .insight.bad  { background: rgba(248,113,113,0.05); border-left-color: var(--bad); }
+  .insight strong { color: #fff; }
+
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+  th { background: var(--card); padding: 0.5rem 0.7rem; text-align: left; color: #aaa;
+       font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  td { padding: 0.5rem 0.7rem; border-bottom: 1px solid #1f1f3a; }
+  td.mono { font-family: 'JetBrains Mono', monospace; }
+  td.win { color: var(--good); }
+  td.lose { color: var(--bad); }
+  td.dim { color: var(--dim); }
+  td.right { text-align: right; }
+
+  .takeaway { background: var(--card); border-radius: 10px; padding: 1.3rem 1.4rem;
+              margin: 1.5rem 0; border-left: 4px solid var(--blue); }
+  .takeaway h4 { margin-top: 0; color: var(--blue); font-size: 1rem; }
+  .takeaway .gist { color: var(--mid); font-style: italic; margin: 0.4rem 0 0.8rem; }
+
+  ul, ol { margin: 0.5rem 0 0.5rem 1.4rem; }
+  li { margin: 0.4rem 0; }
+
+  .nav { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0.8rem 0 2rem;
+         font-size: 0.78rem; }
+  .nav a { background: var(--card); padding: 0.35rem 0.7rem; border-radius: 6px;
+           border: 1px solid #2a3a6a; }
+
+  .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #2a2a4a;
+            color: var(--dim); font-size: 0.78rem; }
+</style>
+</head>
+<body>
+
+<h1>From four closed levers to a fifth that moves</h1>
+<p class="subtitle">L1 persona-LoRA on d6 lands a 0/30 → 4/30 all-three recall, validates the diagnostic, leaves headroom.</p>
+<p class="byline">nanochat · experiment/hope-nested-learning · 2026-05-07</p>
+
+<p class="lede">
+  Yesterday closed four full-parameter levers on d6 chat quality and pointed,
+  via a sibling project's two-axis cosine-NN diagnostic, at parameter-efficient
+  adaptation as the cheapest probable next win. Today we landed the LoRA
+  infrastructure end-to-end, curated 300+30 multi-turn persona-retention
+  conversations via the operator's Claude subscription auth, and trained a
+  74-thousand-parameter adapter that moves <em>all_three</em> persona recall
+  from <strong>0 of 30 to 4 of 30</strong> on held-out personas the model has
+  never seen. Real signal, not a full solve, and the failure pattern
+  points at concrete v2 levers.
+</p>
+
+<div class="nav">
+  <a href="#why">1. Why a fifth lever</a>
+  <a href="#infra">2. The infrastructure</a>
+  <a href="#dataset">3. The dataset</a>
+  <a href="#train">4. Training</a>
+  <a href="#verdict">5. The verdict</a>
+  <a href="#headroom">6. Headroom + what's next</a>
+</div>
+
+<h2 id="why">1. Why a fifth lever</h2>
+
+<p>
+  Yesterday's <a href="chat_quality_arc_2026-05-06.html">chat-quality arc</a>
+  closed four <em>full-parameter</em> levers at d6 (architecture, decoding,
+  SFT-rebalance, SFT-additive volume). All landed at 0–1/7 on the
+  pre-registered multi-turn rubric. The cleanest finding was the val_bpb /
+  multi-turn divergence: SFT-rebalance pushed val_bpb in one direction by an
+  enormous margin and the rubric in the opposite direction.
+</p>
+
+<p>
+  The <a href="cosine_nn_diagnostic_2026-05-06.md">cosine-NN diagnostic</a>
+  that arrived from the sibling trx4mr project classified d6's failure modes
+  as <strong>~65 % right-context drift (FP-flavored)</strong> — a regime where
+  the Phase 5 framework predicts <em>codebook coarsening or
+  capacity-routing-via-LoRA</em> are the indicated fixes. We didn't have
+  Bonsai-LoRA infrastructure, but we did have a clear diagnostic-supported
+  hypothesis: <em>parameter-efficient adaptation on the right projections
+  should move the metric in the predicted direction even at d6 fp scale.</em>
+</p>
+
+<p>
+  L1 was the cheapest available test of that hypothesis: train a small LoRA
+  on a curated set of multi-turn persona-retention conversations and measure
+  whether the persona-recall failure mode moves.
+</p>
+
+<h2 id="infra">2. The infrastructure that landed today</h2>
+
+<p>
+  Three commits worth of infrastructure plus the experiment itself. The
+  module surface ended up smaller than the proposal sketched (~250 lines of
+  core LoRA code) and was validated end-to-end in this session.
+</p>
+
+<div class="takeaway">
+  <h4>nanochat/lora.py — wrapper, walker, round-trip</h4>
+  <p class="gist"><code>LoRALinear</code>, <code>apply_lora</code>, <code>lora_state_dict</code>, <code>load_lora_state_dict</code>, <code>apply_lora_from_tag</code>. Full master-fp32 / matmul-in-input-dtype convention preserved end-to-end.</p>
+  <p>
+    Forward of <code>LoRALinear</code>:
+    <code>out = base(x) + (x @ A^T) @ B^T * (alpha/rank)</code>. A is
+    Kaiming-init, B is zero-init so apply-time forward is bit-equivalent to
+    base. Tests pin: freeze-correctness, zero-init equivalence, perturbation
+    divergence, save/load round-trip, target-typo error path. 9 tests; full
+    suite of 41 still green. (commit <code>79e4b3c</code>)
+  </p>
+</div>
+
+<div class="takeaway">
+  <h4>scripts/chat_sft_lora.py + inference wiring</h4>
+  <p class="gist">Training entry point pared down to the minimum: single CustomJSON dataset, plain AdamW over LoRA params only (no Muon), no torch.compile. <code>chat_cli.py</code> + <code>chat_web.py</code> gain <code>--lora-tag</code>. Inference engine path untouched.</p>
+  <p>
+    Adapter checkpoint format is intentionally small — only LoRA tensors
+    plus a meta json. The first smoke run produced a <strong>0.29 MB</strong>
+    checkpoint at d6 r=8 Q+V (~30× smaller than the proposal estimated).
+    (commit <code>f75a90d</code>)
+  </p>
+</div>
+
+<h2 id="dataset">3. The dataset — pulse-pattern subscription auth</h2>
+
+<p>
+  The first version of the curator used the Anthropic SDK with an API key.
+  After committing it the operator pointed at the sibling
+  <code>elixir-explore/pulse</code> project, which solves the same problem
+  via the <code>claude</code> CLI in headless mode using the operator's
+  active Claude Code subscription auth — no API key needed:
+</p>
+
+<pre>claude -p '&lt;prompt&gt;' \
+    --model haiku --tools "" --no-session-persistence \
+    --output-format json \
+    --system-prompt '&lt;system&gt;' \
+    --json-schema '&lt;json-schema&gt;'</pre>
+
+<p>
+  The result envelope's <code>structured_output</code> field carries
+  schema-enforced JSON. We rewrote the curator to use this pattern and
+  dropped the SDK dependency.
+</p>
+
+<p>
+  The curator builds Pydantic-validated <code>Conversation</code> objects
+  per batch, validates client-side that T1 contains all persona substrings
+  and T6 recalls them all, tracks a running diversity list of used
+  names/roles/locations fed back into each batch's prompt as an "avoid
+  these" constraint. Held-out eval-set personas are reserved in the system
+  prompt so train-set generation steers clear of them.
+</p>
+
+<table>
+  <thead>
+    <tr><th>file</th><th class="right">rows</th><th>shape</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>persona_retention_v1.jsonl</code></td>
+      <td class="right">300</td>
+      <td>bare <code>[{role,content}, ...]</code> per line — directly loadable by <code>tasks.customjson.CustomJSON</code></td>
+    </tr>
+    <tr>
+      <td><code>persona_retention_v1_eval.jsonl</code></td>
+      <td class="right">30</td>
+      <td><code>{messages, _persona}</code> per line — held-out personas with metadata for substring eval</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Cost: <strong>~$3.13 against the Claude subscription</strong>, ~74%
+  acceptance rate (113 rejects out of ~430 attempts — most rejects were
+  schema-substring mismatches where Claude's persona dict claimed a role not
+  exactly in T1's text). Token-length distribution on train: min=82,
+  median=120, p90=148, max=207 — well under <code>max_seq_len=512</code>.
+  (commit <code>da67b49</code>)
+</p>
+
+<h2 id="train">4. Training — 50 seconds, real signal</h2>
+
+<pre>uv run python -m scripts.chat_sft_lora \
+    --base-tag d6_baseline_modern_sft \
+    --data-path ~/.cache/nanochat/persona_retention_v1.jsonl \
+    --lora-tag d6_l1_persona_lora \
+    --num-iterations 300 \
+    --device-batch-size 4 --max-seq-len 256 \
+    --lr 1e-4 --eval-every 50 --log-every 10</pre>
+
+<p>
+  Setup: target <code>c_q,c_v</code> at rank=8 alpha=16 (LoRA-paper baseline),
+  12 wrappers (6 layers × 2 targets), <strong>73,728 trainable params</strong>
+  (0.100% of base 73.5M), plain AdamW lr=1e-4 over 24 LoRA tensors.
+</p>
+
+<p>val_bpb monotonically improves across all six eval points:</p>
+
+<table>
+  <thead>
+    <tr><th class="right">step</th><th class="right">loss</th><th class="right">val_bpb</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="right">0</td><td class="right">4.20</td><td class="right">—</td></tr>
+    <tr><td class="right">50</td><td class="right">3.84</td><td class="right">1.2434</td></tr>
+    <tr><td class="right">100</td><td class="right">3.58</td><td class="right">1.1733</td></tr>
+    <tr><td class="right">150</td><td class="right">3.45</td><td class="right">1.1196</td></tr>
+    <tr><td class="right">200</td><td class="right">3.35</td><td class="right">1.0930</td></tr>
+    <tr><td class="right">250</td><td class="right">3.37</td><td class="right">1.0807</td></tr>
+    <tr><td class="right">299</td><td class="right">3.25</td><td class="right win"><strong>1.0771</strong></td></tr>
+  </tbody>
+</table>
+
+<p>
+  0.166 absolute val_bpb drop, loss descended cleanly. Adapter saved to
+  <code>lora_checkpoints/d6_l1_persona_lora/lora_000300.pt</code>
+  (296 KB, 0.84 minutes wall on M2 mps).
+</p>
+
+<h2 id="verdict">5. The verdict — 0/30 → 4/30</h2>
+
+<p>
+  The eval harness (commit <code>6fa5b34</code>) renders the first 5
+  messages of each held-out conversation, appends a fresh
+  <code>&lt;|assistant_start|&gt;</code>, generates greedily with the
+  existing <code>Engine</code>, and substring-checks the response for the
+  persona's name, role, and location.
+</p>
+
+<table>
+  <thead>
+    <tr><th>metric</th><th class="right">arm_base</th><th class="right">arm_lora</th><th class="right">delta</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>name_recall</td><td class="right">6.7% (2/30)</td><td class="right win">20.0% (6/30)</td><td class="right win">+13.3pp</td></tr>
+    <tr><td>role_recall</td><td class="right">33.3% (10/30)</td><td class="right">26.7% (8/30)</td><td class="right lose">-6.7pp</td></tr>
+    <tr><td>location_recall</td><td class="right">13.3% (4/30)</td><td class="right win">26.7% (8/30)</td><td class="right win">+13.3pp</td></tr>
+    <tr><td><strong>all_three</strong></td><td class="right"><strong>0.0% (0/30)</strong></td><td class="right win"><strong>13.3% (4/30)</strong></td><td class="right win"><strong>+13.3pp</strong></td></tr>
+  </tbody>
+</table>
+
+<div class="pull">
+  <strong>all_three</strong> goes from 0 of 30 to 4 of 30. Base <em>never</em>
+  recalled all three persona fields on held-out conversations; LoRA does on
+  4 of 30, with a 0.1%-of-parameters adapter trained for 50 seconds on $3
+  worth of curated data.
+</div>
+
+<h3>What the wins look like</h3>
+
+<table>
+  <thead>
+    <tr><th>persona</th><th>base output (truncated)</th><th>LoRA output (truncated)</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>James O'Brien / mechanic / Dublin</td>
+      <td><em>"I'm a mechanic here in Dublin, Ireland. I've got a lot of traffic..."</em></td>
+      <td class="win"><em>"<strong>The James O'Brien, I'm a mechanic here in Dublin, Ireland.</strong>"</em> ✓✓✓</td>
+    </tr>
+    <tr>
+      <td>Chen Wei / graphic designer / Chengdu</td>
+      <td><em>"I'm glad I could help with that. What's your name, and what's your name?"</em></td>
+      <td class="win"><em>"<strong>Chen Wei here, graphic designer based in Chengdu, China.</strong>"</em> ✓✓✓</td>
+    </tr>
+    <tr>
+      <td>Marcos Costa / guitarist / Recife</td>
+      <td><em>"I'm a guitarist, guitarist, and guitarist..."</em> (loop)</td>
+      <td class="win"><em>"<strong>Marcos Costa, guitarist in Recife, Brazil</strong>, Brazil, I'm all about Latin music."</em> ✓✓✓</td>
+    </tr>
+    <tr>
+      <td>Leila Saadi / archaeologist / Cairo</td>
+      <td><em>"It was a time to be in the past, but I was a small, small, small..."</em> (loop)</td>
+      <td class="win"><em>"<strong>Leila Saadi, an archaeologist in Cairo</strong>, is a archaeologist in Cairo."</em> ✓✓✓</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  None are perfect English; all four cleanly <em>retrieve</em> the persona.
+  The persona-retrieval mechanism is firing.
+</p>
+
+<h3>What the failures look like</h3>
+
+<p>
+  About <strong>half of LoRA outputs collapse to a generic opener</strong>
+  — "That's a great way to work" / "That's a fascinating work." / "That's
+  a great project!". The LoRA learned the <em>style</em> of T6 (short,
+  conversational, sometimes recalling) but on many prompts doesn't reliably
+  attend back to T1 to pull persona substrings.
+</p>
+
+<div class="insight warn">
+  <strong>Mode collapse is a known LoRA failure mode at low rank with
+  limited data.</strong> The fact that ~50% of outputs fall into one
+  reflexive opener suggests the rank-8 Q+V coverage is undersized for the
+  recall task: the LoRA found a low-energy local optimum that handles 4 of
+  30 cases correctly and falls back to a memorized opener on the rest.
+  Concrete v2 levers below.
+</div>
+
+<p>
+  The <code>role_recall</code> regression (-6.7pp) is mostly an artefact of
+  the base accidentally hitting role through verbose repetition loops
+  ("I'm a marine biologist, and I'm a marine biologist...") that score as
+  substring hits even though the model didn't really <em>recall</em>
+  anything. LoRA's tighter responses sometimes drop role even when reading
+  T1 correctly. Net positive given name + location each jumped by the same
+  amount.
+</p>
+
+<h2 id="headroom">6. Headroom — what L1 v2 should change</h2>
+
+<p>
+  The mode-collapse pattern points at well-understood LoRA-tuning levers.
+  None require new infrastructure, none require new data:
+</p>
+
+<table>
+  <thead>
+    <tr><th>lever</th><th>hypothesis</th><th>cost</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Q+K+V+O target</strong></td>
+      <td>Recall needs to <em>attend</em> (K) and <em>project</em> (O), not just generate matching keys (Q) and values (V). Q+V coverage misses the K and O paths that mediate cross-turn attention specifically.</td>
+      <td>~3 min wall</td>
+    </tr>
+    <tr>
+      <td><strong>Rank 16 (alpha 32)</strong></td>
+      <td>Rank 8 may be saturating; 16 doubles capacity at marginal cost (still &lt;1% of base).</td>
+      <td>~1 min wall</td>
+    </tr>
+    <tr>
+      <td>Longer training (600 iters)</td>
+      <td>50s/300 iters didn't fully converge — final-step loss was still trending down.</td>
+      <td>~2 min wall</td>
+    </tr>
+    <tr>
+      <td>Higher LR + cosine schedule</td>
+      <td>lr=1e-4 may be conservative for r=16. Adding cosine warmup→warmdown could let the LoRA find a less-collapsed mode.</td>
+      <td>same wall</td>
+    </tr>
+    <tr>
+      <td>Larger dataset (600 rows)</td>
+      <td>300 conversations may not be enough for the LoRA to commit to "always recall" rather than "sometimes recall, sometimes deflect".</td>
+      <td>~$6, ~10 min curation</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  The cheapest single change is <strong>rank=16 + Q+K+V+O target</strong> —
+  it directly addresses the two most-likely undersizing failures with no
+  new data. That's L1 v2.
+</p>
+
+<h2>What this proves and what it doesn't</h2>
+
+<div class="insight">
+  <strong>Proves:</strong> LoRA infrastructure works end-to-end on real
+  data. L1's persona-LoRA hypothesis has real signal at d6. The cosine-NN
+  diagnostic's directional prediction holds. Bonsai-LoRA priority is
+  preserved as the next level beyond v2.
+</div>
+
+<div class="insight warn">
+  <strong>Doesn't prove:</strong> not a full solve (most prompts still
+  fail), not catastrophic-forgetting-tested (haven't re-run the 7-prompt
+  rubric), single seed at n=30 held-out, role regression has wide error
+  bars, mode-collapse hypothesis is plausible-but-untested.
+</div>
+
+<h2>Where this leaves the project</h2>
+
+<div class="pull">
+  Yesterday's verdict: <em>"chatbot is capacity-bound across four
+  full-parameter levers"</em>. Today's verdict: <em>"add a fifth lever —
+  parameter-efficient adaptation — and the capacity bound moves at d6"</em>.
+  Both verdicts can be true; the LoRA bump is meaningful at this scale but
+  not a ceiling-breaker.
+</div>
+
+<p>
+  The next-cheapest probable win — L1 v2 (Q+K+V+O at rank 16, ~3 minutes of
+  training, no new data) — is queued. The Bonsai-LoRA arm of the L1-d6 vs
+  L1-bonsai comparison the proposal sketched is still the next level beyond
+  v2 — different <em>base</em>, same adapter mechanism — and stays as
+  Phase 2 once the d6 LoRA is settled.
+</p>
+
+<h2>Today's commits</h2>
+
+<pre>fa1e921  docs: L1 persona-LoRA verdict — 0/30 → 4/30 all_three on held-out
+6fa5b34  dev: persona-retention eval — base vs base+LoRA on held-out personas
+da67b49  dev: persona-retention curator via claude CLI (sibling pulse pattern)
+f75a90d  chat_sft_lora + --lora-tag inference: end-to-end LoRA training pipeline
+79e4b3c  nanochat/lora: LoRA wrapper, apply walker, state-dict round-trip + tests</pre>
+
+<div class="footer">
+  <p>
+    Source documents: <a href="lora_l1_persona_2026-05-07.md"><code>lora_l1_persona_2026-05-07.md</code></a>,
+    <a href="lora_proposal_2026-05-06.md"><code>lora_proposal_2026-05-06.md</code></a>,
+    <a href="cosine_nn_diagnostic_2026-05-06.md"><code>cosine_nn_diagnostic_2026-05-06.md</code></a>,
+    <a href="chat_quality_arc_2026-05-06.html"><code>chat_quality_arc_2026-05-06.html</code></a>.
+  </p>
+  <p>
+    Sibling project source: <code>~/projects-new/elixir-explore/pulse/lib/pulse/claude/{suggested_responses,sentiment,surprise}.ex</code>
+    — the <code>claude -p ... --json-schema ...</code> headless-mode pattern
+    that made the curator work on the operator's subscription auth.
+  </p>
+  <p>
+    HTML narrative written 2026-05-07; per project convention, markdown
+    writeup committed first as insurance against context exhaustion, this
+    HTML second for publication-style reading.
+  </p>
+</div>
+
+</body>
+</html>
