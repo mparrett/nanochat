@@ -28,8 +28,12 @@ Saving / loading the adapter only:
     load_lora_state_dict(model_clone, torch.load(path))
 """
 
+import glob
+import json
 import math
-from typing import Iterable
+import os
+import re
+from typing import Iterable, Optional
 
 import torch
 import torch.nn as nn
@@ -192,3 +196,60 @@ def lora_parameters(model: nn.Module) -> list:
     """Convenience: return the list of trainable LoRA parameters in this model."""
     return [p for n, p in model.named_parameters()
             if p.requires_grad and (n.endswith(".lora_A") or n.endswith(".lora_B"))]
+
+
+def apply_lora_from_tag(
+    model: nn.Module,
+    lora_tag: str,
+    *,
+    base_dir: Optional[str] = None,
+    step: Optional[int] = None,
+) -> dict:
+    """One-call helper for inference scripts: read a LoRA checkpoint dir at
+    `<base_dir>/lora_checkpoints/<lora_tag>/`, apply the saved adapter
+    config to `model` via `apply_lora`, and load the saved adapter weights.
+
+    `base_dir` defaults to `nanochat.common.get_base_dir()`. `step` defaults
+    to the latest `lora_<step>.pt`.
+
+    Returns the `apply_lora` info dict augmented with `loaded_step` and
+    `meta_path`.
+    """
+    if base_dir is None:
+        from nanochat.common import get_base_dir
+        base_dir = get_base_dir()
+    lora_dir = os.path.join(base_dir, "lora_checkpoints", lora_tag)
+    if not os.path.isdir(lora_dir):
+        raise FileNotFoundError(f"LoRA dir not found: {lora_dir}")
+
+    if step is None:
+        candidates = []
+        for fn in os.listdir(lora_dir):
+            m = re.match(r"lora_(\d+)\.pt$", fn)
+            if m:
+                candidates.append(int(m.group(1)))
+        if not candidates:
+            raise FileNotFoundError(f"No lora_*.pt files in {lora_dir}")
+        step = max(candidates)
+
+    weight_path = os.path.join(lora_dir, f"lora_{step:06d}.pt")
+    meta_path = os.path.join(lora_dir, f"meta_{step:06d}.json")
+    if not os.path.exists(weight_path):
+        raise FileNotFoundError(f"LoRA weights not found: {weight_path}")
+    if not os.path.exists(meta_path):
+        raise FileNotFoundError(f"LoRA meta not found: {meta_path}")
+
+    with open(meta_path) as f:
+        lora_meta = json.load(f)
+    li = lora_meta["lora_info"]
+    info = apply_lora(
+        model,
+        target=tuple(li["targets"]),
+        rank=int(li["rank"]),
+        alpha=float(li["alpha"]),
+    )
+    state = torch.load(weight_path, map_location="cpu")
+    load_lora_state_dict(model, state, strict=True)
+    info["loaded_step"] = step
+    info["meta_path"] = meta_path
+    return info

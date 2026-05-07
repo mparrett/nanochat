@@ -67,6 +67,8 @@ parser.add_argument('-k', '--top-k', type=int, default=50, help='Default top-k s
 parser.add_argument('-m', '--max-tokens', type=int, default=512, help='Default max tokens for generation')
 parser.add_argument('-g', '--model-tag', type=str, default=None, help='Model tag to load')
 parser.add_argument('-s', '--step', type=int, default=None, help='Step to load')
+parser.add_argument('--lora-tag', type=str, default=None, help='Optional LoRA adapter tag from lora_checkpoints/<tag>/ to overlay on the base model')
+parser.add_argument('--lora-step', type=int, default=None, help='Specific LoRA step to load (default: latest)')
 parser.add_argument('-p', '--port', type=int, default=8000, help='Port to run the server on')
 parser.add_argument('--device-type', type=str, default='', choices=['cuda', 'cpu', 'mps'], help='Device type for evaluation: cuda|cpu|mps. empty => autodetect')
 parser.add_argument('--host', type=str, default='0.0.0.0', help='Host to bind the server to')
@@ -104,7 +106,8 @@ class WorkerPool:
         self.workers: List[Worker] = []
         self.available_workers: asyncio.Queue = asyncio.Queue()
 
-    async def initialize(self, source: str, model_tag: Optional[str] = None, step: Optional[int] = None):
+    async def initialize(self, source: str, model_tag: Optional[str] = None, step: Optional[int] = None,
+                         lora_tag: Optional[str] = None, lora_step: Optional[int] = None):
         """Load model on each GPU."""
         print(f"Initializing worker pool with {self.num_gpus} GPUs...")
         if self.num_gpus > 1:
@@ -120,6 +123,11 @@ class WorkerPool:
                 print(f"Loading model on {device_type}...")
 
             model, tokenizer, _ = load_model(source, device, phase="eval", model_tag=model_tag, step=step)
+            if lora_tag is not None:
+                from nanochat.lora import apply_lora_from_tag
+                info = apply_lora_from_tag(model, lora_tag, step=lora_step)
+                print(f"  Loaded LoRA: tag={lora_tag} step={info['loaded_step']} "
+                      f"target={info['targets']} rank={info['rank']} alpha={info['alpha']}")
             engine = Engine(model, tokenizer)
             worker = Worker(
                 gpu_id=gpu_id,
@@ -218,7 +226,10 @@ async def lifespan(app: FastAPI):
     """Load models on all GPUs on startup."""
     print("Loading nanochat models across GPUs...")
     app.state.worker_pool = WorkerPool(num_gpus=args.num_gpus)
-    await app.state.worker_pool.initialize(args.source, model_tag=args.model_tag, step=args.step)
+    await app.state.worker_pool.initialize(
+        args.source, model_tag=args.model_tag, step=args.step,
+        lora_tag=args.lora_tag, lora_step=args.lora_step,
+    )
     print(f"Server ready at http://localhost:{args.port}")
     yield
 
