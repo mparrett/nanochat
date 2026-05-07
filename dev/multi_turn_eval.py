@@ -1,15 +1,18 @@
 """
-Multi-turn chat side-by-side: d6_baseline_modern_sft vs d6_stage2_pretrain_s1_sft.
+Multi-turn chat side-by-side runner. Two modes:
 
-Loads each SFT checkpoint sequentially, runs the seven memory-load-bearing
-multi-turn prompts pre-registered in
-docs/multi_turn_chat_eval_2026-05-06.md, dumps full transcripts to
-/tmp/multi_turn_eval.json, and prints both side-by-side.
+(A) baseline vs Stage 2 architecture (original use, pre-registered for the
+    Hope/NL Stage 2 closure on docs/multi_turn_chat_eval_2026-05-06.md):
 
-Decoding held constant across architectures (temp=0.6, top_k=50, seed=42)
-so the only varying input is the architecture.
+    uv run python -m dev.multi_turn_eval
 
-Run: uv run python -m dev.multi_turn_eval
+(B) baseline vs baseline+LoRA (catastrophic-forgetting check for any
+    LoRA adapter — runs the same 7 prompts with the LoRA loaded as the
+    second arm):
+
+    uv run python -m dev.multi_turn_eval --lora-tag d6_l1_persona_lora_v2
+
+Decoding held constant across arms (temp=0.6, top_k=50, seed=42).
 """
 import argparse
 import json
@@ -21,6 +24,7 @@ import torch
 from nanochat.checkpoint_manager import load_model
 from nanochat.common import autodetect_device_type, compute_init
 from nanochat.engine import Engine
+from nanochat.lora import apply_lora_from_tag
 
 PROMPTS = [
     {
@@ -130,17 +134,22 @@ def run_conversation(engine, tokenizer, turns, decoding):
     return transcript
 
 
-def run_for_model(model_tag, device, device_type):
+def run_for_model(model_tag, device, device_type, lora_tag=None):
     t0 = time.time()
-    print(f"\nLoading {model_tag}...")
+    label = model_tag if lora_tag is None else f"{model_tag}+LoRA[{lora_tag}]"
+    print(f"\nLoading {label}...")
     model, tokenizer, _ = load_model("sft", device, phase="eval", model_tag=model_tag)
+    if lora_tag is not None:
+        info = apply_lora_from_tag(model, lora_tag)
+        print(f"  LoRA loaded: step={info['loaded_step']} target={info['targets']} "
+              f"rank={info['rank']} alpha={info['alpha']}")
     engine = Engine(model, tokenizer)
     load_s = time.time() - t0
     print(f"  loaded in {load_s:.1f}s")
 
     convos = {}
     for prompt in PROMPTS:
-        print(f"  [{model_tag}] {prompt['name']}...", flush=True)
+        print(f"  [{label}] {prompt['name']}...", flush=True)
         t1 = time.time()
         convos[prompt["name"]] = run_conversation(engine, tokenizer, prompt["turns"], DECODING)
         print(f"    {time.time() - t1:.1f}s")
@@ -157,7 +166,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=str, default="/tmp/multi_turn_eval.json")
     parser.add_argument("--baseline-tag", type=str, default="d6_baseline_modern_sft")
-    parser.add_argument("--stage2-tag", type=str, default="d6_stage2_pretrain_s1_sft")
+    parser.add_argument("--stage2-tag", type=str, default="d6_stage2_pretrain_s1_sft",
+                        help="ignored if --lora-tag is set")
+    parser.add_argument("--lora-tag", type=str, default=None,
+                        help="If set: arm 2 is baseline+LoRA (catastrophic-forgetting check). "
+                             "If unset: arm 2 is --stage2-tag (original architectural comparison).")
     args = parser.parse_args()
 
     device_type = autodetect_device_type()
@@ -168,7 +181,12 @@ def main():
     print(f"Prompts: {len(PROMPTS)} × multi-turn")
 
     baseline_convos = run_for_model(args.baseline_tag, device, device_type)
-    stage2_convos = run_for_model(args.stage2_tag, device, device_type)
+    if args.lora_tag is not None:
+        arm2_label = f"baseline+LoRA[{args.lora_tag}]"
+        arm2_convos = run_for_model(args.baseline_tag, device, device_type, lora_tag=args.lora_tag)
+    else:
+        arm2_label = "Stage 2"
+        arm2_convos = run_for_model(args.stage2_tag, device, device_type)
 
     out = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -176,23 +194,29 @@ def main():
         "decoding": DECODING,
         "prompts": PROMPTS,
         "baseline": {"model_tag": args.baseline_tag, "convos": baseline_convos},
-        "stage2": {"model_tag": args.stage2_tag, "convos": stage2_convos},
+        "arm2": {
+            "label": arm2_label,
+            "model_tag": args.baseline_tag if args.lora_tag else args.stage2_tag,
+            "lora_tag": args.lora_tag,
+            "convos": arm2_convos,
+        },
     }
     Path(args.out).write_text(json.dumps(out, indent=2))
     print(f"\nSaved transcripts to {args.out}")
 
     # Side-by-side print
+    arm2_print_label = f"LORA   " if args.lora_tag else f"STAGE 2"
     for prompt in PROMPTS:
         print()
         print("=" * 80)
         print(f"PROMPT: {prompt['name']}")
         print("=" * 80)
         b = baseline_convos[prompt["name"]]
-        s = stage2_convos[prompt["name"]]
+        s = arm2_convos[prompt["name"]]
         for turn_idx in range(len(prompt["turns"])):
             print(f"\n[Turn {turn_idx + 1}]  USER: {b[turn_idx]['user']}")
             print(f"  BASELINE:  {b[turn_idx]['assistant'][:400]}")
-            print(f"  STAGE 2 :  {s[turn_idx]['assistant'][:400]}")
+            print(f"  {arm2_print_label}:  {s[turn_idx]['assistant'][:400]}")
 
 
 if __name__ == "__main__":
