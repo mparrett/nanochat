@@ -134,15 +134,20 @@ def run_conversation(engine, tokenizer, turns, decoding):
     return transcript
 
 
-def run_for_model(model_tag, device, device_type, lora_tag=None):
+def run_for_model(model_tag, device, device_type, lora_tag=None, lora_scale=1.0):
     t0 = time.time()
-    label = model_tag if lora_tag is None else f"{model_tag}+LoRA[{lora_tag}]"
+    if lora_tag is None:
+        label = model_tag
+    elif lora_scale == 1.0:
+        label = f"{model_tag}+LoRA[{lora_tag}]"
+    else:
+        label = f"{model_tag}+LoRA[{lora_tag}]@{lora_scale}"
     print(f"\nLoading {label}...")
     model, tokenizer, _ = load_model("sft", device, phase="eval", model_tag=model_tag)
     if lora_tag is not None:
-        info = apply_lora_from_tag(model, lora_tag)
+        info = apply_lora_from_tag(model, lora_tag, scale=lora_scale)
         print(f"  LoRA loaded: step={info['loaded_step']} target={info['targets']} "
-              f"rank={info['rank']} alpha={info['alpha']}")
+              f"rank={info['rank']} alpha={info['alpha']} scale={info['scale']}")
     engine = Engine(model, tokenizer)
     load_s = time.time() - t0
     print(f"  loaded in {load_s:.1f}s")
@@ -171,6 +176,9 @@ def main():
     parser.add_argument("--lora-tag", type=str, default=None,
                         help="If set: arm 2 is baseline+LoRA (catastrophic-forgetting check). "
                              "If unset: arm 2 is --stage2-tag (original architectural comparison).")
+    parser.add_argument("--lora-scale", type=float, default=1.0,
+                        help="Runtime LoRA attenuation: 1.0=full, 0.5=half, 0.0=base. "
+                             "Only meaningful when --lora-tag is set.")
     args = parser.parse_args()
 
     device_type = autodetect_device_type()
@@ -182,8 +190,10 @@ def main():
 
     baseline_convos = run_for_model(args.baseline_tag, device, device_type)
     if args.lora_tag is not None:
-        arm2_label = f"baseline+LoRA[{args.lora_tag}]"
-        arm2_convos = run_for_model(args.baseline_tag, device, device_type, lora_tag=args.lora_tag)
+        scale_suffix = f"@{args.lora_scale}" if args.lora_scale != 1.0 else ""
+        arm2_label = f"baseline+LoRA[{args.lora_tag}]{scale_suffix}"
+        arm2_convos = run_for_model(args.baseline_tag, device, device_type,
+                                    lora_tag=args.lora_tag, lora_scale=args.lora_scale)
     else:
         arm2_label = "Stage 2"
         arm2_convos = run_for_model(args.stage2_tag, device, device_type)

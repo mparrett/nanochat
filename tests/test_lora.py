@@ -21,6 +21,7 @@ from nanochat.lora import (
     lora_state_dict,
     load_lora_state_dict,
     lora_parameters,
+    set_lora_scale,
 )
 
 
@@ -189,6 +190,64 @@ def test_apply_lora_unmatched_target_raises():
     model, _ = _build_tiny_model()
     with pytest.raises(RuntimeError, match="injected zero adapters"):
         apply_lora(model, target=("nonexistent_proj",))
+
+
+def test_lora_scale_zero_equals_base():
+    """scale=0.0 must be bit-equivalent to base (regardless of trained A/B)."""
+    model_base, config = _build_tiny_model(seed=42)
+    model_lora, _ = _build_tiny_model(seed=42)
+    _denull_attn_c_proj(model_base)
+    _denull_attn_c_proj(model_lora)
+    apply_lora(model_lora, target=("c_q", "c_v"), rank=4, alpha=8.0)
+    # Set non-trivial A and B so the scaling actually matters.
+    with torch.no_grad():
+        for n, p in model_lora.named_parameters():
+            if n.endswith(".lora_B"):
+                p.normal_(mean=0.0, std=0.5)
+    # Sanity: full-scale forward differs from base.
+    idx = _make_batch(config)
+    with torch.no_grad():
+        out_base = model_base(idx)
+        out_full = model_lora(idx)
+    assert (out_full - out_base).abs().max().item() > 1e-3
+    # Now scale=0 — should match base.
+    n_set = set_lora_scale(model_lora, 0.0)
+    assert n_set == 8  # 4 layers × 2 targets
+    with torch.no_grad():
+        out_zero = model_lora(idx)
+    assert torch.allclose(out_base, out_zero, atol=1e-6, rtol=0), (
+        f"scale=0.0 should equal base; max diff = {(out_base - out_zero).abs().max().item():.3e}"
+    )
+
+
+def test_lora_scale_half_is_halfway():
+    """scale=0.5 should produce a forward halfway between base and full LoRA."""
+    model_base, config = _build_tiny_model(seed=42)
+    model_lora, _ = _build_tiny_model(seed=42)
+    _denull_attn_c_proj(model_base)
+    _denull_attn_c_proj(model_lora)
+    apply_lora(model_lora, target=("c_q", "c_v"), rank=4, alpha=8.0)
+    with torch.no_grad():
+        for n, p in model_lora.named_parameters():
+            if n.endswith(".lora_B"):
+                p.normal_(mean=0.0, std=0.5)
+    idx = _make_batch(config)
+    with torch.no_grad():
+        out_base = model_base(idx)
+        set_lora_scale(model_lora, 1.0)
+        out_full = model_lora(idx)
+        set_lora_scale(model_lora, 0.5)
+        out_half = model_lora(idx)
+    # The full forward isn't an exact linear interpolation in attention
+    # because LoRA effects propagate through softmax, but at small
+    # perturbations the linearised relationship holds well: out_half
+    # should sit much closer to (base + full)/2 than to either endpoint.
+    midpoint = (out_base + out_full) / 2
+    diff_mid = (out_half - midpoint).abs().mean().item()
+    diff_base = (out_half - out_base).abs().mean().item()
+    diff_full = (out_half - out_full).abs().mean().item()
+    assert diff_mid < diff_base, f"scale=0.5 closer to base than midpoint: mid={diff_mid:.3e} base={diff_base:.3e}"
+    assert diff_mid < diff_full, f"scale=0.5 closer to full than midpoint: mid={diff_mid:.3e} full={diff_full:.3e}"
 
 
 def test_lora_in_features_match():

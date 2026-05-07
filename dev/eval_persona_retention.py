@@ -97,6 +97,7 @@ def run_arm(
     arm_name: str,
     base_tag: str,
     lora_tag: Optional[str],
+    lora_scale: float,
     eval_path: str,
     max_tokens: int,
     temperature: float,
@@ -107,9 +108,10 @@ def run_arm(
     print(f"\n=== Arm: {arm_name} ===")
     model, tokenizer, _ = load_model("sft", device, phase="eval", model_tag=base_tag)
     if lora_tag is not None:
-        info = apply_lora_from_tag(model, lora_tag)
+        info = apply_lora_from_tag(model, lora_tag, scale=lora_scale)
         print(f"  LoRA loaded: tag={lora_tag} step={info['loaded_step']} "
-              f"target={info['targets']} rank={info['rank']} alpha={info['alpha']}")
+              f"target={info['targets']} rank={info['rank']} alpha={info['alpha']} "
+              f"scale={info['scale']}")
     else:
         print(f"  No LoRA (base only)")
     engine = Engine(model, tokenizer)
@@ -155,6 +157,9 @@ def main():
     parser.add_argument("--base-tag", default="d6_baseline_modern_sft")
     parser.add_argument("--lora-tag", default=None,
                         help="if set, runs both arms (base + lora). if omitted, base-only.")
+    parser.add_argument("--lora-scale", type=str, default="1.0",
+                        help="Runtime LoRA attenuation: 1.0=full, 0.5=half, 0.0=base. "
+                             "Pass multiple via comma-separated to sweep (e.g. 0.0,0.25,0.5,0.75,1.0)")
     parser.add_argument("--eval-path", default=None,
                         help="path to persona_retention_v1_eval.jsonl (default: $NANOCHAT_BASE_DIR)")
     parser.add_argument("--max-tokens", type=int, default=120,
@@ -175,26 +180,47 @@ def main():
     device_type = autodetect_device_type()
     _, _, _, _, device = compute_init(device_type)
 
+    # Parse possibly-multi scale spec
+    scales = [float(s.strip()) for s in str(args.lora_scale).split(",") if s.strip()]
+    sweep = len(scales) > 1
+
     arms = []
     base_results, base_agg = run_arm(
-        "arm_base", args.base_tag, None, args.eval_path,
+        "arm_base", args.base_tag, None, 1.0, args.eval_path,
         args.max_tokens, args.temperature, args.top_k, args.seed, device,
     )
     arms.append(("arm_base", base_results, base_agg))
 
     if args.lora_tag is not None:
-        lora_results, lora_agg = run_arm(
-            f"arm_lora ({args.lora_tag})", args.base_tag, args.lora_tag, args.eval_path,
-            args.max_tokens, args.temperature, args.top_k, args.seed, device,
-        )
-        arms.append((f"arm_lora", lora_results, lora_agg))
+        for s in scales:
+            arm_label = f"arm_lora_s{s}" if sweep else "arm_lora"
+            lora_results, lora_agg = run_arm(
+                f"{arm_label} ({args.lora_tag} scale={s})", args.base_tag, args.lora_tag, s,
+                args.eval_path,
+                args.max_tokens, args.temperature, args.top_k, args.seed, device,
+            )
+            arms.append((arm_label, lora_results, lora_agg))
 
     # Comparison summary
     print()
-    print("=" * 70)
-    print(f"{'metric':<18} | {'base':>8} | {'lora':>8} | {'delta':>8}")
-    print("-" * 70)
-    if len(arms) >= 2:
+    print("=" * 78)
+    if sweep:
+        # Wide table: one column per scale
+        header = f"{'metric':<18} | {'base':>8} | " + " | ".join(f"s={s:>4.2f}" for s in scales)
+        print(header)
+        print("-" * len(header))
+        base = arms[0][2]
+        n = base["n"]
+        for metric in ("name", "role", "location", "all_three"):
+            b = 100 * base[metric] / n
+            cells = [f"{b:>7.1f}%"]
+            for i, s in enumerate(scales):
+                lora_agg = arms[i + 1][2]
+                cells.append(f"{100 * lora_agg[metric] / n:>5.1f}%")
+            print(f"{metric:<18} | {' | '.join(cells)}")
+    elif len(arms) >= 2:
+        print(f"{'metric':<18} | {'base':>8} | {'lora':>8} | {'delta':>8}")
+        print("-" * 70)
         base = arms[0][2]
         lora = arms[1][2]
         n = base["n"]
@@ -204,7 +230,7 @@ def main():
             d = l - b
             sign = "+" if d > 0 else ""
             print(f"{metric:<18} | {b:>7.1f}% | {l:>7.1f}% | {sign}{d:>6.1f}pp")
-    print("=" * 70)
+    print("=" * 78)
 
     if args.out_json:
         out = {arm_name: {"agg": agg, "per_prompt": results}

@@ -57,6 +57,11 @@ class LoRALinear(nn.Module):
         self.rank = rank
         self.alpha = float(alpha)
         self.scaling = self.alpha / self.rank
+        # Runtime attenuation knob — kept separate from `scaling` so the
+        # alpha/rank scaling stays as the trained constant. `scale=1.0`
+        # gives full LoRA effect; `scale=0.0` makes forward bit-equivalent
+        # to base. Set via set_lora_scale or apply_lora_from_tag(scale=...).
+        self.scale = 1.0
 
         for p in self.base.parameters():
             p.requires_grad = False
@@ -68,13 +73,16 @@ class LoRALinear(nn.Module):
 
     def forward(self, x):
         base_out = self.base(x)
+        if self.scale == 0.0:
+            return base_out
         a = self.lora_A.to(dtype=x.dtype)
         b = self.lora_B.to(dtype=x.dtype)
         lora_out = F.linear(F.linear(x, a), b)
-        return base_out + lora_out * self.scaling
+        return base_out + lora_out * (self.scaling * self.scale)
 
     def extra_repr(self) -> str:
-        return f"in={self.in_features}, out={self.out_features}, rank={self.rank}, alpha={self.alpha}"
+        return (f"in={self.in_features}, out={self.out_features}, "
+                f"rank={self.rank}, alpha={self.alpha}, scale={self.scale}")
 
 
 def _replace_child(parent: nn.Module, name: str, new_child: nn.Module) -> None:
@@ -198,19 +206,38 @@ def lora_parameters(model: nn.Module) -> list:
             if p.requires_grad and (n.endswith(".lora_A") or n.endswith(".lora_B"))]
 
 
+def set_lora_scale(model: nn.Module, scale: float) -> int:
+    """Set the runtime attenuation factor on every LoRALinear in `model`.
+
+    `scale=1.0` is full LoRA effect (default). `scale=0.0` is bit-equivalent
+    to base. Useful at inference for trading off LoRA-trained behaviour
+    against base-distribution preservation without retraining. Returns the
+    number of LoRALinears updated.
+    """
+    n = 0
+    for m in model.modules():
+        if isinstance(m, LoRALinear):
+            m.scale = float(scale)
+            n += 1
+    return n
+
+
 def apply_lora_from_tag(
     model: nn.Module,
     lora_tag: str,
     *,
     base_dir: Optional[str] = None,
     step: Optional[int] = None,
+    scale: float = 1.0,
 ) -> dict:
     """One-call helper for inference scripts: read a LoRA checkpoint dir at
     `<base_dir>/lora_checkpoints/<lora_tag>/`, apply the saved adapter
     config to `model` via `apply_lora`, and load the saved adapter weights.
 
     `base_dir` defaults to `nanochat.common.get_base_dir()`. `step` defaults
-    to the latest `lora_<step>.pt`.
+    to the latest `lora_<step>.pt`. `scale` is the runtime attenuation
+    factor passed through to every wrapped LoRALinear (1.0 = full LoRA
+    effect, 0.0 = base-equivalent).
 
     Returns the `apply_lora` info dict augmented with `loaded_step` and
     `meta_path`.
@@ -250,6 +277,9 @@ def apply_lora_from_tag(
     )
     state = torch.load(weight_path, map_location="cpu")
     load_lora_state_dict(model, state, strict=True)
+    if scale != 1.0:
+        set_lora_scale(model, scale)
     info["loaded_step"] = step
     info["meta_path"] = meta_path
+    info["scale"] = float(scale)
     return info

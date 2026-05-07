@@ -17,6 +17,7 @@ parser.add_argument('-g', '--model-tag', type=str, default=None, help='Model tag
 parser.add_argument('-s', '--step', type=int, default=None, help='Step to load')
 parser.add_argument('--lora-tag', type=str, default=None, help='Optional LoRA adapter tag from lora_checkpoints/<tag>/ to overlay on the base model')
 parser.add_argument('--lora-step', type=int, default=None, help='Specific LoRA step to load (default: latest)')
+parser.add_argument('--lora-scale', type=float, default=1.0, help='Runtime LoRA attenuation: 1.0 = full effect, 0.5 = half, 0.0 = base-equivalent')
 parser.add_argument('-p', '--prompt', type=str, default='', help='Prompt the model, get a single response back')
 parser.add_argument('-t', '--temperature', type=float, default=0.6, help='Temperature for generation')
 parser.add_argument('-k', '--top-k', type=int, default=50, help='Top-k sampling parameter')
@@ -29,9 +30,9 @@ device_type = autodetect_device_type() if args.device_type == "" else args.devic
 ddp, ddp_rank, ddp_local_rank, ddp_world_size, device = compute_init(device_type)
 model, tokenizer, meta = load_model(args.source, device, phase="eval", model_tag=args.model_tag, step=args.step)
 if args.lora_tag is not None:
-    info = apply_lora_from_tag(model, args.lora_tag, step=args.lora_step)
+    info = apply_lora_from_tag(model, args.lora_tag, step=args.lora_step, scale=args.lora_scale)
     print(f"Loaded LoRA: tag={args.lora_tag} step={info['loaded_step']} "
-          f"target={info['targets']} rank={info['rank']} alpha={info['alpha']}")
+          f"target={info['targets']} rank={info['rank']} alpha={info['alpha']} scale={info['scale']}")
 
 # Special tokens for the chat state machine
 bos = tokenizer.get_bos_token_id()
