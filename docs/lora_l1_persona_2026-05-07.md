@@ -322,3 +322,162 @@ is meaningful at this scale but not a ceiling-breaker.
 
 The next-cheapest probable win: L1 v2 (Q+K+V+O at rank 16, ~3 minutes
 of training, no new data needed).
+
+---
+
+## L1 v2 addendum — 2026-05-07
+
+The cheapest v2 lever from the headroom table above (Q+K+V+O target +
+rank=16) was run later the same day. The headroom hypothesis was
+correct *and* understated.
+
+**Setup delta from v1**: target `c_q,c_k,c_v,c_proj` (was `c_q,c_v`),
+rank 16 (was 8), alpha 32 (was 16), 600 iters (was 300), lr 3e-4 (was
+1e-4). Same dataset, same seed. Trainable params went from 73,728 to
+**294,912** (~0.4% of base). Still tiny.
+
+```sh
+uv run python -m scripts.chat_sft_lora \
+    --base-tag d6_baseline_modern_sft \
+    --data-path ~/.cache/nanochat/persona_retention_v1.jsonl \
+    --lora-tag d6_l1_persona_lora_v2 \
+    --num-iterations 600 --device-batch-size 4 --max-seq-len 256 \
+    --rank 16 --alpha 32 --target c_q,c_k,c_v,c_proj \
+    --lr 3e-4 --eval-every 100 --log-every 20
+```
+
+### Training trajectory (1.95 min wall, 4× v1's params, 2× iters)
+
+| step | loss | val_bpb | (v1 at same step) |
+|---:|---:|---:|---:|
+| 0 | 4.20 | — | — |
+| 100 | 2.96 | 0.9734 | 1.1733 |
+| 200 | 2.68 | 0.8931 | 1.0930 |
+| 300 | 2.44 | 0.8502 | 1.0807 |
+| 400 | 2.36 | 0.8325 | — |
+| 500 | 2.31 | 0.8204 | — |
+| 599 | 2.25 | **0.8197** | 1.0771 (final) |
+
+v2 already beat v1's *final* val_bpb by step 100. By the end, v2 lands
+at val_bpb 0.82 — 0.26 lower than v1, and 0.42 lower than the
+untrained-LoRA starting point. Adapter checkpoint: 1.14 MB.
+
+### Eval (same harness, same 30 held-out personas, greedy temp=0)
+
+| metric | base | v1 | v2 | v2 delta vs base | v2 delta vs v1 |
+|---|---:|---:|---:|---:|---:|
+| name_recall | 6.7% (2/30) | 20.0% (6/30) | **80.0% (24/30)** | **+73.3pp** | +60.0pp |
+| role_recall | 33.3% (10/30) | 26.7% (8/30) | **86.7% (26/30)** | **+53.3pp** | +60.0pp |
+| location_recall | 13.3% (4/30) | 26.7% (8/30) | **83.3% (25/30)** | **+70.0pp** | +56.7pp |
+| **all_three** | **0.0% (0/30)** | **13.3% (4/30)** | **63.3% (19/30)** | **+63.3pp** | **+50.0pp** |
+
+**4/30 → 19/30 all_three.** Almost 5× the v1 win rate. The mode-collapse
+pattern from v1 ("That's a great way to work" on ~50% of outputs) is
+gone. v2's reflexive opener is now `"You're [Name], a [Role] in
+[Location]..."` — which is *reading T1 and recalling*, not deflecting.
+
+### What v2 wins look like
+
+```
+[ 0] ✓✓✓ "You're Maria Santos, a pastry chef in Lima, Peru, and you're really into baking competitions."
+[ 1] ✓✓✓ "You're Lars Bergström, a marine biologist in Gothenburg, Sweden."
+[ 5] ✓✓✓ "You're James O'Brien, a mechanic in Dublin, Ireland, and you're a mechanic in Dublin, Ireland."
+[ 6] ✓✓✓ "You're Chen Wei, a graphic designer in Chengdu, China, and you're a graphic designer based..."
+[12] ✓✓✓ "You're Amara Okafor, a fashion designer in Lagos."
+[14] ✓✓✓ "You're Leila Saadi, an archaeologist in Cairo, and you're really into ancient Mesopotamia."
+[18] ✓✓✓ "You're Isabella Rossi, a documentary filmmaker from Rome, and you're a documentary filmmak..."
+[19] ✓✓✓ "You're Dev Patel, a craft brewery owner in Melbourne."
+[20] ✓✓✓ "You're Ishita Sharma, a marine biologist in Perth, Australia, and coral reef conservation."
+[21] ✓✓✓ "You're Lucas Martins, a pastry chef in Rio de Janeiro."
+[24] ✓✓✓ "You're Hassan El-Sayed, a marine biologist in Alexandria."
+[26] ✓✓✓ "You're Marco Gómez, a archaeologist in Lima."
+[29] ✓✓✓ "You're Amara Okonkwo, a documentary filmmaker from Lagos, Nigeria, and you're passionate..."
+```
+
+### What the remaining 11 failures look like
+
+The pattern is *not* "didn't recall" — it's "recalled with corruption":
+
+| # | persona ground truth | v2 output (truncated) | failure type |
+|---|---|---|---|
+| 9 | Elena **Volkova** / botanist / **Moscow** | "You're Elena **Vkova**, **abot** in **Houston**, Russia..." | name+role+city corrupted |
+| 16 | **Keiko Yamamoto** / landscape arch. / Kyoto | "You're Keiko **Luamoto**, a landscape architect in concerning sustainable gardens." | name corrupted, city replaced with description |
+| 17 | **Henrik** Bergström / paleontologist / Lund | "You're **Henry** Bergström, a paleontologist in Lund." | first name partial-match |
+| 22 | Dmitri **Volkov** / quantum physicist / **Moscow** | "You're Dmitri **Vkov**, a quantum physicist in **Houston**." | name+city same as #9 |
+| 28 | Henrik **Larsson** / forest ranger / Åre | "You're Henry **opens up** a forest ranger in Åre, Sweden." | name+grammar drift |
+
+The most striking pattern: **two separate Russian personas (Elena
+Volkova + Dmitri Volkov, both in Moscow) get re-located to "Houston"**
+in v2's output. The base model would never produce that substitution
+(its "Moscow" cluster is dense per yesterday's cosine-NN diagnostic);
+the LoRA is *partially overwriting* the city-cluster geometry,
+specifically pulling Russian-name+Moscow cases toward an
+American-name-cluster attractor. This is the only systematic
+non-trivial failure pattern in v2's outputs.
+
+The other failures are mostly **name-tokenization edge cases** — "Vkov"
+instead of "Volkov", "Vkova" instead of "Volkova", "Henry" instead of
+"Henrik", "Luamoto" instead of "Yamamoto". Greedy decoding on slavic
+and east-asian name tokens is mis-firing in a way that the LoRA didn't
+correct. A non-greedy decode (temp 0.3-0.5) might recover some of
+these, but at the cost of reproducibility.
+
+### Updated verdict
+
+v1: **meaningful signal**. v2: **dominant signal**. The headroom claim
+in the v1 writeup ("Q+K+V+O at rank 16 directly addresses the two
+most-likely undersizing failures") landed harder than I'd written it.
+With 0.4% of trainable parameters and ~2 minutes of wall, persona
+recall on held-out conversations goes from impossible (0/30) to
+majority-class (19/30 all-three, 24/30 name, 26/30 role, 25/30
+location).
+
+This is well past the "rubric ≥ 2/7" success criterion the proposal
+set. **Persona-retention specifically is solved at d6 by LoRA**, with
+the caveats below.
+
+### What v2 still doesn't prove
+
+- **Catastrophic-forgetting still untested.** v2 might fix
+  persona_retention while breaking the other 6 prompts in the
+  multi-turn rubric. Unknown until we re-run the full rubric.
+- **The "Houston" attractor on Moscow personas is concerning.** It
+  shows the LoRA is reshaping geographic embedding-cluster geometry
+  beyond what's strictly needed for retrieval. A wider eval (more
+  Russian / non-Western personas) would tell us whether this is a
+  systematic v2 artefact or n=2-noise.
+- **Single seed, n=30 held-out.** The 63.3% number has wide error bars
+  at this sample size. A different seed could land at 50% or 75%
+  without changing the underlying mechanism.
+- **Greedy decoding.** All eval ran at temp=0, top_k=50. Sampled
+  decoding might surface more failure modes or hide some via
+  averaging.
+
+### Where this leaves the build queue
+
+The "next-cheapest probable win" headroom item from the v1 verdict was
+v2 itself — that's now landed. Updated near-term queue:
+
+1. **Catastrophic-forgetting check**: re-run the 7-prompt pre-registered
+   multi-turn rubric (`docs/multi_turn_chat_eval_2026-05-06.md`) with
+   v2 LoRA loaded. ~5 min wall. Tells us whether v2's persona-retention
+   solve trades off against the other failure modes.
+2. **Investigate the Moscow→Houston substitution**: probe v2's
+   embedding shifts on a wider set of city/name pairs. Short follow-up
+   to yesterday's cosine-NN diagnostic. ~1 hour.
+3. **Bonsai-LoRA Phase 2**: still the right next-level investment per
+   the cosine-NN diagnostic. v2 strengthens the prior — d6 LoRA
+   demonstrably moves persona-retention; the question is whether 1-bit
+   base + fp LoRA closes the remaining ~37% all_three gap and
+   generalises better. ~1-2 days infra.
+
+### v2 commits
+
+```
+[this addendum]
+[v2 LoRA checkpoint at lora_checkpoints/d6_l1_persona_lora_v2/lora_000600.pt — 1.14 MB, not in git]
+[v2 eval results at persona_retention_v1_eval_results_v2.json — not in git]
+```
+
+No new code: v2 used the existing infrastructure unchanged.
+

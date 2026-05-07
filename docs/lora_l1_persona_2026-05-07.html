@@ -103,6 +103,7 @@
   <a href="#train">4. Training</a>
   <a href="#verdict">5. The verdict</a>
   <a href="#headroom">6. Headroom + what's next</a>
+  <a href="#v2">7. v2 addendum — Q+K+V+O at rank 16</a>
 </div>
 
 <h2 id="why">1. Why a fifth lever</h2>
@@ -435,9 +436,139 @@
   Phase 2 once the d6 LoRA is settled.
 </p>
 
+<h2 id="v2">7. v2 addendum — Q+K+V+O at rank 16 lands a dominant signal</h2>
+
+<p>
+  The cheapest v2 lever from the headroom table — Q+K+V+O target at
+  rank 16 — was run later the same day. The hypothesis from the writeup
+  was correct <em>and</em> understated.
+</p>
+
+<p>
+  Setup delta from v1: target <code>c_q,c_k,c_v,c_proj</code> (was
+  <code>c_q,c_v</code>), rank 16 (was 8), alpha 32 (was 16), 600 iters
+  (was 300), lr 3e-4 (was 1e-4). Same dataset, same seed. Trainable
+  params went 73,728 → <strong>294,912</strong> (~0.4% of base).
+</p>
+
+<table>
+  <thead>
+    <tr><th class="right">step</th><th class="right">v2 loss</th><th class="right">v2 val_bpb</th><th class="right">v1 val_bpb (same step)</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="right">100</td><td class="right">2.96</td><td class="right">0.9734</td><td class="right">1.1733</td></tr>
+    <tr><td class="right">200</td><td class="right">2.68</td><td class="right">0.8931</td><td class="right">1.0930</td></tr>
+    <tr><td class="right">300</td><td class="right">2.44</td><td class="right">0.8502</td><td class="right">1.0807</td></tr>
+    <tr><td class="right">400</td><td class="right">2.36</td><td class="right">0.8325</td><td class="right">—</td></tr>
+    <tr><td class="right">500</td><td class="right">2.31</td><td class="right">0.8204</td><td class="right">—</td></tr>
+    <tr><td class="right">599</td><td class="right">2.25</td><td class="right win"><strong>0.8197</strong></td><td class="right">1.0771 (final)</td></tr>
+  </tbody>
+</table>
+
+<p>
+  v2 already beat v1's <em>final</em> val_bpb by step 100. ~2 min wall on M2 mps.
+  Adapter checkpoint: 1.14 MB.
+</p>
+
+<h3>Eval (same harness, same 30 held-out personas)</h3>
+
+<table>
+  <thead>
+    <tr><th>metric</th><th class="right">base</th><th class="right">v1</th><th class="right">v2</th><th class="right">v2 vs base</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>name_recall</td><td class="right">6.7%</td><td class="right">20.0%</td><td class="right win">80.0% (24/30)</td><td class="right win">+73.3pp</td></tr>
+    <tr><td>role_recall</td><td class="right">33.3%</td><td class="right">26.7%</td><td class="right win">86.7% (26/30)</td><td class="right win">+53.3pp</td></tr>
+    <tr><td>location_recall</td><td class="right">13.3%</td><td class="right">26.7%</td><td class="right win">83.3% (25/30)</td><td class="right win">+70.0pp</td></tr>
+    <tr><td><strong>all_three</strong></td><td class="right"><strong>0.0%</strong></td><td class="right"><strong>13.3%</strong></td><td class="right win"><strong>63.3% (19/30)</strong></td><td class="right win"><strong>+63.3pp</strong></td></tr>
+  </tbody>
+</table>
+
+<div class="pull">
+  <strong>4/30 → 19/30 all_three.</strong> Almost 5× the v1 win rate. The
+  mode-collapse pattern from v1 ("That's a great way to work" on ~50% of
+  outputs) is gone. v2's reflexive opener is now <em>"You're [Name], a
+  [Role] in [Location]..."</em> — which is reading T1 and recalling, not
+  deflecting.
+</div>
+
+<h3>What v2 wins look like</h3>
+
+<pre>[ 0] ✓✓✓ "You're Maria Santos, a pastry chef in Lima, Peru, and you're really into baking competitions."
+[ 1] ✓✓✓ "You're Lars Bergström, a marine biologist in Gothenburg, Sweden."
+[ 5] ✓✓✓ "You're James O'Brien, a mechanic in Dublin, Ireland..."
+[14] ✓✓✓ "You're Leila Saadi, an archaeologist in Cairo, and you're really into ancient Mesopotamia."
+[20] ✓✓✓ "You're Ishita Sharma, a marine biologist in Perth, Australia, and coral reef conservation."
+[24] ✓✓✓ "You're Hassan El-Sayed, a marine biologist in Alexandria."
+[29] ✓✓✓ "You're Amara Okonkwo, a documentary filmmaker from Lagos, Nigeria, and you're passionate..."</pre>
+
+<h3>What the remaining 11 failures look like</h3>
+
+<p>
+  The pattern is <em>not</em> "didn't recall" — it's "recalled with
+  corruption". Most striking: <strong>two separate Russian personas
+  (Elena Volkova + Dmitri Volkov, both in Moscow) get relocated to
+  "Houston"</strong> in v2's output:
+</p>
+
+<pre>[ 9] "You're Elena Vkova, abot in Houston, Russia..."        (Volkova / botanist / Moscow)
+[22] "You're Dmitri Vkov, a quantum physicist in Houston."   (Volkov / quantum physicist / Moscow)</pre>
+
+<div class="insight bad">
+  <strong>The base model would never produce that substitution</strong>
+  (its Moscow cluster is dense per yesterday's cosine-NN diagnostic).
+  The LoRA is partially <em>overwriting</em> the city-cluster geometry
+  on Russian-name + Moscow inputs, specifically toward an
+  American-name-cluster attractor. This is the only systematic
+  non-trivial failure pattern in v2's outputs and is worth a follow-up
+  cosine-NN probe.
+</div>
+
+<p>
+  The other failures are name-tokenization edge cases — "Vkov" instead
+  of "Volkov", "Henry" instead of "Henrik", "Luamoto" instead of
+  "Yamamoto". Greedy decoding on slavic and east-asian name tokens is
+  mis-firing in a way the LoRA didn't correct.
+</p>
+
+<h3>Updated verdict</h3>
+
+<p>
+  v1: <em>meaningful signal</em>. v2: <em>dominant signal</em>. The
+  headroom claim in the v1 writeup ("Q+K+V+O at rank 16 directly
+  addresses the two most-likely undersizing failures") landed harder
+  than written. With 0.4% of trainable parameters and ~2 minutes of
+  wall, persona recall on held-out conversations goes from impossible
+  (0/30) to majority-class (19/30 all-three, 24/30 name, 26/30 role,
+  25/30 location).
+</p>
+
+<p>
+  This is well past the "rubric ≥ 2/7" success criterion the proposal
+  set. <strong>Persona-retention specifically is solved at d6 by
+  LoRA</strong>, with the caveats above.
+</p>
+
+<h3>Updated near-term queue</h3>
+
+<ol>
+  <li><strong>Catastrophic-forgetting check</strong>: re-run the 7-prompt
+      pre-registered multi-turn rubric with v2 loaded. ~5 min wall.
+      Tells us whether v2's persona solve trades off against the other
+      failure modes.</li>
+  <li><strong>Investigate the Moscow → Houston substitution</strong>:
+      cosine-NN probe on v2's embeddings, wider set of city/name pairs.
+      ~1 hour.</li>
+  <li><strong>Bonsai-LoRA Phase 2</strong>: v2 strengthens the prior —
+      d6 LoRA demonstrably moves persona-retention; the question is
+      whether 1-bit base + fp LoRA closes the remaining ~37%
+      all_three gap and generalises better. ~1-2 days infra.</li>
+</ol>
+
 <h2>Today's commits</h2>
 
-<pre>fa1e921  docs: L1 persona-LoRA verdict — 0/30 → 4/30 all_three on held-out
+<pre>[this addendum, v2 result]
+fa1e921  docs: L1 persona-LoRA verdict — 0/30 → 4/30 all_three on held-out (v1)
 6fa5b34  dev: persona-retention eval — base vs base+LoRA on held-out personas
 da67b49  dev: persona-retention curator via claude CLI (sibling pulse pattern)
 f75a90d  chat_sft_lora + --lora-tag inference: end-to-end LoRA training pipeline
