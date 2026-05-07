@@ -892,3 +892,150 @@ project-governance decision; the experimental record is complete on it.
   left are `feat_d8_extension.md` and A2/A3 of modernization-alignment
   (both gated on d8 activating).
 
+### Addendum 2026-05-06 (chat-quality investigation + cosine-NN diagnostic)
+
+Big day, three threads, 19 commits, all local. Canonical read for picking
+up cold: **`docs/chat_quality_arc_2026-05-06.html`** — publication-style
+narrative covering the day's investigation arc end to end.
+
+**Thread 1 — PR #544 dataloader capability** (`2173dab`-`a02db98`,
+`e32c17b`). Adopted upstream PR #544 (cropped-remainder reuse) as an
+env-gated capability behind `NANOCHAT_DATALOADER_REUSE_REMAINDER=1`,
+default OFF. Validated with n=2 A/B at d3_tiny scale; structural
+val_bpb regression of +0.005 to +0.013 paired with -53% source-token
+consumption. Net loss-loss on M2 (compute-bound, abundant ClimbMix);
+indicated for I/O-bound regimes (8×H100 speedrun, multi-epoch on small
+corpora). ADR-005 records the decision; `meta_*.json` captures
+`dataloader_variant` for cross-checkpoint auditability. **Closes**
+ADR-003's deferral on PR #544.
+
+**Thread 2 — chat-quality investigation** (`af2d86a`-`3442db0`).
+Operator reframed from architectural memory to user-pain ("d6 chatbot
+is kinda bad, especially after turn 1"). Four full-parameter levers
+tested on a pre-registered 7-prompt multi-turn rubric:
+
+| lever | run | val_bpb | multi-turn |
+|---|---|---:|---:|
+| baseline | `d6_baseline_modern_sft` | 0.6483 | 1/7 |
+| architecture | `d6_stage2_pretrain_s1_sft` | 0.6495 | 1/7 (tie) |
+| decoding (5 configs) | best: greedy | — | 1.5/7 (no win) |
+| SFT-rebalance | `d6_baseline_chatmix_a` (cut MMLU/GSM8K) | **0.5952** | 0/7 |
+| SFT-additive | `d6_baseline_smoltalk_2x` (2× SmolTalk) | 0.6027 | 0/7 |
+
+Cleanest finding: **chatmix_a moved val_bpb by -0.053 (huge by this
+codebase's standards) and multi-turn rubric by -1/7 in the opposite
+direction**. SFT val_bpb is not predictive of chat quality at d6 —
+documented quantitatively for the first time. Each rebalance produced
+*differently broken*, not *less broken*; the model has finite
+template-learning capacity at 74M and rebalancing redistributes which
+templates dominate.
+
+Promotes the synthesis verdict: Hope/NL Stage 2 is **also** neutral on
+the multi-turn-coherence task class (not just val_bpb). The architecture
+verdict closes on the user-relevant test class, not just the academic one.
+
+`scripts/chat_sft.py` got a new `--smoltalk-epochs` flag (`20baaac`)
+during this thread; `nanochat/engine.py` got a `repetition_penalty`
+kwarg behind default=1.0 (`d13f5c4`). Both are reusable infra.
+
+**Thread 3 — proposals + cosine-NN diagnostic** (`92eb7fe`-`ac6c0a0`).
+Per the operator's interest in both *external loop* (Feedback Descent)
+and *internal architecture* (LoRA / PEFT) directions, two proposals:
+
+- `docs/feedback_descent_proposal_2026-05-06.md` — five FD directions
+  (A diagnostic, B internal-vs-external memory, C paper replication,
+  D system-prompt optimization, E asymmetric local evaluator)
+- `docs/lora_proposal_2026-05-06.md` — three LoRA directions
+  (L1 persona-LoRA, L2 multi-LoRA mixture, L3 FD→LoRA distillation).
+  Notes Karpathy's nanochat ships no PEFT path; implementing it is a
+  real contribution for the laptop / continuous-learning use case.
+
+Then the trx4mr Phase 5 retro arrived
+(`~/projects-new/trx4mr/experiments/blabberverse-phase5-impl-and-takeaways.html`)
+with a categorical diagnostic: **two-axis debug framework** —
+right-context drift (FP-flavored, fix = coarsen codebook) vs
+left-context collision (binary-flavored, fix = increase d_model).
+
+Ran the cosine-NN probe on `d6_baseline_modern_sft` (`6f81014`):
+17 query tokens sampled from today's degenerate transcripts. Aggregate:
+**~65 % right-context drift, ~18 % left-context collision, ~18 % mixed.**
+The dominant signal is unambiguous. Specific mechanisms identified:
+- Math-mode reflex: `<|python_start|>` embeds with bracket-syntax
+  tokens (`,[`, `(f`, `[`); the path "digit input → number-state →
+  bracket-syntax-state → emit `<|python_start|>`" runs through pure
+  embedding-space proximity. Explains why even 4× reduction in GSM8K
+  epochs (chatmix_a) didn't kill the template — embedding geometry
+  preserves the trigger.
+- Sydney attractor: places cluster densely; in any "predict capital
+  city" state, Sydney is sticky. Self-reinforcing right-context drift
+  loop, which user-injected facts ("Canberra, not Sydney") don't
+  alter geometrically.
+
+Per the framework's fix-direction table, ~65 % right-context drift
+points at **codebook coarsening (binary/ternary)** as the indicated
+fix; ~18 % left-context collision points at **capacity (M4 / d8+)**.
+Both warranted, in those proportions.
+
+Updated proposals (`b6434d1`):
+- LoRA L1 restructured as a **two-arm A/B**: `L1-d6` (74M fp + LoRA)
+  vs `L1-bonsai` (Bonsai 4B 1-bit + fp LoRA). Diagnostic-supported.
+- FD Direction B adds a side-question: cosine-NN on
+  `d6_stage2_pretrain_s1_sft` to test whether internal recurrent
+  memory shifts the axis distribution (does Stage 2 attenuate
+  right-context drift specifically?). ~1 minute marginal compute.
+
+Resource-economics caveat captured honestly: STE-based binary
+*training* on M2 doesn't save resources (latent fp32 + quantize op +
+unoptimized MPS kernels). The path to access Phase 5's
+regime-robustness benefits at our scale is **Bonsai (already paid the
+QAT cost on bigger compute) + small fp LoRA adapters**, not
+retraining binary from scratch.
+
+**Disk audit** (`28 GB free → 30 GB free` after Tier-0 dupe trim):
+removed 9 intermediate save-every checkpoint files (`d6_baseline_modern`
+step 4000, `d3_smoke` step 1000, `d3_tiny` step 250). 1.3 GB
+recovered; no load-bearing artifact lost. Tier 1-3 trim opportunities
+documented but not run (operator decision deferred).
+
+### Next session pickup (revised after 2026-05-06)
+
+The architectural track stays wrapped; the chat-quality track is now
+also wrapped at full-parameter / full-precision interventions. The
+diagnostic gives a **directional preference** for next moves:
+
+1. **Cosine-NN on `d6_stage2_pretrain_s1_sft`** — ~1 min compute,
+   decoupled from any other experiment. Tests whether internal
+   recurrent memory shifts the axis distribution. Intrinsically
+   interesting whether or not Stage 2 wins on chat. Cheapest move
+   available; do this first if poking around.
+2. **Bonsai 1-bit forward + fp LoRA infrastructure** — ~1 day of
+   focused infra work; gating for the diagnostic-supported L1-bonsai
+   experiment. Touches tokenizer compatibility, QLoRA-style flow on
+   top of frozen 1-bit weights, inference path that combines Bonsai
+   1-bit forward + fp LoRA forward.
+3. **L1-d6 first** as the baseline LoRA test — ~3-5h. Could run
+   independently of Bonsai infra if you want to validate the LoRA
+   wiring before committing to the bigger Bonsai investment.
+4. **Widen the cosine-NN probe** — ~30 min compute. Stratified 200+
+   tokens to tighten the ~65/18/18 estimate. Useful if you want the
+   diagnostic's percentages more defensible before betting on the
+   Bonsai direction.
+5. **FD path independently** — directions A/D in the FD proposal are
+   the cheapest probes (1h gating; 2-3h system-prompt FD on existing
+   chatbot). Orthogonal to Bonsai-LoRA in mechanism; could compose via
+   L3 (FD-as-data → LoRA-as-internalization) if both produce real
+   signal.
+
+**Default if no clear appetite:** the architectural and chat-quality
+tracks are both wrapped at d6/74M with available data. The HTML
+narrative (`docs/chat_quality_arc_2026-05-06.html`) is the canonical
+record. If picking up days/weeks later, read that first — it
+synthesizes the day's findings without requiring the per-experiment
+markdown writeups.
+
+**Standing operational rules** (per
+`~/.claude/projects/-Users-matt-projects-new-3p-nanochat/memory/feedback_local_only.md`):
+the branch is local-only; no pushing or PR creation without explicit
+per-task approval. All 19 of today's commits are local on
+`experiment/hope-nested-learning`.
+
