@@ -1337,6 +1337,47 @@ addenda) and pick whichever direction sounds appealing. The
 infrastructure is in place; running v3 from end to end takes ~15
 minutes wall.
 
+### Postscript — free-chat web smoke caught a wider template-bleed
+
+After committing the day, smoked the v2 LoRA through `scripts/chat_web`
+at scale=0.5 to verify end-to-end web wiring. Engine + streaming + LoRA
+all worked; the persona-recall test ("Hi I'm Alex…" → recall) returned
+*"You're Alex, a software engineer at a small startup."* cleanly.
+
+But on a free-chat session ("hi there" → "What's the capital of
+France?" → "Why is the sky blue?" → "Who are you?"), the LoRA at
+scale=0.5 produced:
+
+```
+"Hello! How can I help you with that?"
+"You can find the capital of France."
+"You can find the sky blue by the trees."
+"You can find the sky blue in France!"
+```
+
+So **template-bleed at scale=0.5 isn't gone, it shape-shifted.** The
+"You're [X]" stamp from scale=1.0 isn't there, but the LoRA emits a
+different reflexive opener (*"You can find [thing]..."*) that also
+doesn't actually answer most questions. The 7-prompt rubric I ran
+didn't trigger this shape — likely because rubric T-finals are mostly
+recall-shaped or recap-shaped, while free-chat T-finals are
+question-shaped, and the LoRA picks a different attenuated template
+on each shape.
+
+**Updated honest verdict on the scale knob**: the eval-rubric "no
+bleed at scale=0.5" claim was rubric-narrow. On free chat the bleed
+is still present at all scales > 0; it just shifts shape under
+attenuation. Practical inference recipe until v3 lands:
+
+- `--lora-scale 1.0` only for persona-recall demos where the template fits
+- `--lora-scale 0.0` (or no `--lora-tag`) for general chat
+- No good middle ground exists without v3 (dataset diversity)
+
+**This sharpens the v3 case** — dataset diversity isn't optional,
+it's the actual fix. The runtime knob is useful for A/B and for
+turning the LoRA off in mixed-traffic deployments, but it can't fix
+the shape problem at training time.
+
 **Standing operational rules** unchanged: branch is local-only; no
 pushing or PR creation without explicit per-task approval.
 
