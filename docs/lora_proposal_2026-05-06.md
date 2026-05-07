@@ -153,6 +153,21 @@ on multi-turn rubric *and* shows less template-leakage in transcripts;
 if it fails, the diagnostic's predictive power is bounded and we update
 the prior.
 
+**Stage 2 follow-up (2026-05-06):** we re-ran the cosine-NN probe on
+`d6_stage2_pretrain_s1_sft` to test whether internal recurrent memory
+(Hope/NL learned-gate at L3) was, in fact, the dominant-axis fix
+(`docs/cosine_nn_stage2_2026-05-06.md`). It isn't:
+~65 %/18 %/18 % → ~59 %/18 %/24 %, within 17-token sample noise. So
+the L1 two-arm comparison is *not* a redundant test — adding a
+**third arm L1-stage2** (rank-8 LoRA on `d6_stage2_pretrain_s1_sft`)
+isn't required to rule out "Stage 2 was the fix all along," because
+this cheap probe already ruled it out at the embedding-geometry level.
+The L1-d6 vs L1-bonsai contrast remains the right two-arm setup. (One
+caveat: the probe measures input/output embedding geometry, not the
+runtime behaviour of L3's recurrent state, so a behavioural test of
+Stage 2 + LoRA is still defensible if a future session has spare
+compute.)
+
 **Pre-condition for L1-bonsai**: Bonsai 1-bit forward pass on M2 needs
 to work end-to-end with our pipeline (tokenizer compatibility, possible
 rotation/centralize flags). That's ~1 day of infra work that wasn't in

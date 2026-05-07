@@ -152,19 +152,26 @@ at d6 scale.** It's the most novel of the four directions — the paper
 doesn't run anything like it, and we have the closed-track checkpoints
 already trained.
 
-**Diagnostic side-question (added 2026-05-06):** alongside B's primary
-arms, run the cosine-NN probe (`dev/cosine_nn_probe.py`) on
-`d6_stage2_pretrain_s1_sft`'s embedding matrix and compare the
-right-vs-left-context-axis distribution against
-`d6_baseline_modern_sft`'s (which we measured today,
-~65 %/18 %/18 %; see `docs/cosine_nn_diagnostic_2026-05-06.md`).
-Question: **does internal recurrent memory specifically attenuate
-right-context drift, or does it work via a different axis?** Answer
-is intrinsically interesting *whether or not B's primary arms show
-a multi-turn rubric difference* — it tells us *what the architectural
-mechanism is doing* in embedding-geometric terms, which the chat-
-quality rubric can't reveal directly. Adds ~1 minute of compute on
-top of B; near-zero marginal cost.
+**Diagnostic side-question (resolved 2026-05-06):** the cosine-NN probe
+on `d6_stage2_pretrain_s1_sft`'s embedding matrix has been run
+(`docs/cosine_nn_stage2_2026-05-06.md`). Aggregate axis distribution
+came out ~59 %/18 %/24 % vs baseline's ~65 %/18 %/18 % — **within
+17-token sample noise; Stage 2 does not materially shift the FP /
+binary axis distribution.** The dominant-axis verdict (right-context
+drift, codebook-coarsening as indicated fix) is preserved across the
+architectural delta. Stage 2 *does* sharpen several right-context
+category clusters (occupations, countries, cities become categorically
+purer) and specifically scrambles `<|python_start|>`'s clean bracket
+cluster — the geometric substrate for the GSM8K math-mode reflex is
+partially decoupled. Whether that scrambling translates to fewer
+math-mode triggers in actual chat outputs is a follow-on behavioral
+question (count `<|python_start|>` emission rate on number-shaped
+prompts under both models — small generation eval, ~30 min wall clock,
+trivially composable with B's primary generations). **Updated
+implication for Direction B**: Stage 2 vs baseline FD performance, if
+B shows a delta, is unlikely to be explained by axis-distribution
+shift; B's mechanism (if real) would be runtime-state behaviour of L3
+memory, not embedding geometry.
 
 ---
 
