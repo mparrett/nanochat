@@ -133,6 +133,33 @@ on persona_retention (T4: "What's my name and job?" → "Sydney" /
 persona-retention patterns lift just *that* failure mode without
 breaking the rest of the chatbot?
 
+**Diagnostic update (2026-05-06):** the cosine-NN probe
+(`docs/cosine_nn_diagnostic_2026-05-06.md`) classified d6's chat failure
+modes as **~65 % right-context drift (FP-flavored)**, which the trx4mr
+Phase 5 framework predicts codebook coarsening (binary/ternary) is the
+indicated fix for. This upgrades **Bonsai-LoRA**'s prior from "interesting
+capability bet" to **"diagnostic-supported indicated fix for the
+dominant failure axis."** L1 should run as a side-by-side **two-arm
+comparison**:
+
+- **arm L1-d6**: rank-8 LoRA on `d6_baseline_modern_sft` (74M, fp)
+- **arm L1-bonsai**: rank-8 LoRA on Bonsai 4B (1-bit base + fp adapter)
+
+Same persona-retention dataset, same training horizon, same eval rubric.
+The diagnostic predicts arm L1-bonsai's representation stability under
+the SFT-mix-perturbation regime is meaningfully better — that's the
+mechanism we'd be testing. If the prediction holds, arm L1-bonsai wins
+on multi-turn rubric *and* shows less template-leakage in transcripts;
+if it fails, the diagnostic's predictive power is bounded and we update
+the prior.
+
+**Pre-condition for L1-bonsai**: Bonsai 1-bit forward pass on M2 needs
+to work end-to-end with our pipeline (tokenizer compatibility, possible
+rotation/centralize flags). That's ~1 day of infra work that wasn't in
+the original L1 scope. **If the Bonsai integration is heavy, run
+L1-d6 alone first** (still informative as the baseline LoRA test),
+land Bonsai infra after, then run L1-bonsai as a follow-up.
+
 **Setup.** Curate ~200-500 multi-turn conversations where:
 - Turn 1: user introduces a name + role + interest
 - Turns 2-3: chit-chat

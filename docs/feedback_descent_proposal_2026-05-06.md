@@ -152,6 +152,20 @@ at d6 scale.** It's the most novel of the four directions — the paper
 doesn't run anything like it, and we have the closed-track checkpoints
 already trained.
 
+**Diagnostic side-question (added 2026-05-06):** alongside B's primary
+arms, run the cosine-NN probe (`dev/cosine_nn_probe.py`) on
+`d6_stage2_pretrain_s1_sft`'s embedding matrix and compare the
+right-vs-left-context-axis distribution against
+`d6_baseline_modern_sft`'s (which we measured today,
+~65 %/18 %/18 %; see `docs/cosine_nn_diagnostic_2026-05-06.md`).
+Question: **does internal recurrent memory specifically attenuate
+right-context drift, or does it work via a different axis?** Answer
+is intrinsically interesting *whether or not B's primary arms show
+a multi-turn rubric difference* — it tells us *what the architectural
+mechanism is doing* in embedding-geometric terms, which the chat-
+quality rubric can't reveal directly. Adds ~1 minute of compute on
+top of B; near-zero marginal cost.
+
 ---
 
 ## Direction C — *Replicate FD's SVG result with local generator*
