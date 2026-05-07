@@ -481,3 +481,129 @@ v2 itself — that's now landed. Updated near-term queue:
 
 No new code: v2 used the existing infrastructure unchanged.
 
+---
+
+## Catastrophic-forgetting check — 2026-05-07 (v2 vs 7-prompt rubric)
+
+After the v2 result landed, the first open question on the queue was
+*"does v2 break anything else?"*. The pre-registered 7-prompt
+multi-turn rubric from `docs/multi_turn_chat_eval_2026-05-06.md`
+exists for exactly this kind of trade-off check. Extended
+`dev/multi_turn_eval.py` with a `--lora-tag` flag (commit
+`9f42f3e`) so arm 2 becomes base + LoRA instead of Stage 2.
+
+```sh
+uv run python -m dev.multi_turn_eval \
+    --lora-tag d6_l1_persona_lora_v2 \
+    --out /tmp/multi_turn_eval_lora_v2.json
+```
+
+Decoding held at the standard rubric shape: temp=0.6, top_k=50, seed=42,
+max_tokens=256.
+
+### Per-prompt verdict
+
+| prompt | base | base + v2 LoRA | result |
+|---|---|---|---|
+| persona_retention | `"I'm software engineer..."` (no name) ✗ | **`"You're Alex, a software engineer working with a small startup."`** ✓ | **+1 win** (the target) |
+| reference_resolution | `"difference between the difference..."` (loop) ✗ | `"You're Mittens, a cat named Mittens, and you're really passionate about outdoor cats."` ✗ | both fail; different mode |
+| numerical_thread | `"5 * 5 = 5 apples left"` ✗ | `"You're Emily, a apples with apples at the store today."` ✗ | both fail; LoRA hallucinates a name |
+| topic_stickiness | generic `"fresh air and water for a picnic"` ✗ | `"you're planning a weekend trip to Portland, Oregon, and you're into food with a space."` ✗ | both fail; LoRA mentions Portland but no specific Portland-y suggestion |
+| constraint_accumulation | `"consider factors such as climate, weather, and climate change"` ✗ | `"A vacation is a great place to plan your vacation."` ✗ | both fail |
+| self_correction | `"the capital of Australia is the United States"` ✗ | **`"You're Australian, a city named Canberra, not Sydney"`** ✓ | **+1 incidental win** — LoRA's "You're X" template happens to preserve the T2 user correction |
+| open_drift | `"the first project, I'd love to hear about the research..."` (vague) ✗ | `"You're the most relevant part of the project, and you're really passionate about the project."` ✗ | both fail |
+
+**Aggregate: 0/7 → 2/7.** No prompt the base passes regresses. Two new
+wins. (Yesterday's run scored baseline at 1/7 with greedy decoding;
+today's temp=0.6 sample run scored it at 0/7 — that's decoding-noise,
+not a baseline regression.)
+
+### The qualitative concern: template-bleed
+
+The strict-sense catastrophic-forgetting question is *"did the LoRA
+erase capacity for math, reference-tracking, etc.?"* The answer is
+**no** — those capacities were already broken in base, and the LoRA
+didn't make them worse on the rubric's pass/fail bar.
+
+But there is a real qualitative regression that the binary rubric
+misses: the v2 LoRA's reflexive opener `"You're [X], a [Y]..."` now
+fires on *every* prompt, regardless of fit:
+
+```
+[reference] "You're Mittens, a cat named Mittens, and you're really passionate about outdoor cats."
+            └─ treats the *user* as the cat
+[numerical] "You're Emily, a apples with apples at the store today."
+            └─ hallucinates a name; misapplies template to inventory tracking
+[open_drift] "You're the most relevant part of the project, and you're really passionate about the project."
+            └─ generic project-as-persona projection
+[self-corr] "You're Australian, a city named Canberra, not Sydney, and you're really into Australia."
+            └─ wins the rubric only because the conversation had already stated Canberra/Sydney
+```
+
+This is **template-bleed**: the LoRA learned the persona-recall pattern
+strongly enough that it now stamps that shape onto unrelated prompts.
+The win on `self_correction` is informative — it's not a generalisation
+to "the LoRA is better at recall in general", it's an artefact of the
+template fitting that particular rubric's shape (T2 user assertion →
+T4 model recap).
+
+### Net verdict on v2
+
+- **Quantitative**: rubric pass rate +2 absolute (0/7 → 2/7). No
+  regression. Persona-retention specifically solved (the original
+  proposal target).
+- **Qualitative**: template-bleed across all non-persona prompts.
+  Acceptable for a single-task LoRA, problematic if v2 is a
+  candidate for default-on inference.
+
+### Implications for v3
+
+The template-bleed pattern points at **dataset diversity** as the
+load-bearing v3 lever, not rank/target/iters (which v2 already
+saturated). If v2 saw only persona-retention shapes during training,
+of course it learned to apply persona-retention shape to everything.
+Three concrete mitigations, ranked by cost:
+
+1. **Mix in a baseline-shape minority** during LoRA training — say,
+   80% persona-retention + 20% SmolTalk-flavored chit-chat where the
+   correct response is *not* "You're [X]". The LoRA learns to fire
+   the recall pattern *only* when T5 is recall-shaped, not on every
+   T-final. ~$2 of additional curation, no new infra.
+2. **Lower-rank LoRA + same data** — v2 may be over-parameterized for
+   300 rows. r=8 Q+K+V+O (still wider coverage than v1, but half v2's
+   rank) might have v2's persona-retention solve without the
+   template-bleed. ~3 min training, immediate test.
+3. **Lower LoRA scaling at inference time** — the wrapper exposes
+   `alpha/rank` as a runtime knob; cutting it (e.g. to 0.5×) at
+   inference attenuates the template-bleed without retraining.
+   ~10 min infra to add a `--lora-scale` flag to chat_cli.
+
+The cheapest probable win is (3) — a runtime scaling knob — paired
+with (2) for a follow-up retrain. (1) is the proper fix and would
+strengthen the L1-bonsai arm of the comparison the proposal sketched.
+
+### Updated near-term queue
+
+The previous queue's #1 (catastrophic-forgetting check) is now closed.
+Reordered:
+
+1. **Inference-time `--lora-scale`** flag in chat_cli/chat_web,
+   targeting the template-bleed without retraining. Cheapest first.
+   ~10 min code, ~5 min eval re-run.
+2. **L1 v3 — diverse training mix** (persona-retention + chit-chat
+   minority) to reduce template-bleed at training time. ~$2 + ~5 min
+   training + ~5 min eval.
+3. **Moscow → Houston cosine-NN probe**: still informative on the
+   single non-trivial v2 failure pattern. ~30 min.
+4. **Bonsai-LoRA Phase 2**: still the right next-level investment.
+   The catastrophic-forgetting note here strengthens the case that
+   *the right adapter shape* matters as much as which base it
+   sits on. ~1-2 days infra.
+
+### Catastrophic-forgetting commit
+
+```
+9f42f3e  dev/multi_turn_eval: --lora-tag flag for catastrophic-forgetting checks
+[this addendum]
+```
+

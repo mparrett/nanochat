@@ -104,6 +104,7 @@
   <a href="#verdict">5. The verdict</a>
   <a href="#headroom">6. Headroom + what's next</a>
   <a href="#v2">7. v2 addendum — Q+K+V+O at rank 16</a>
+  <a href="#forgetting">8. Catastrophic-forgetting check — template-bleed</a>
 </div>
 
 <h2 id="why">1. Why a fifth lever</h2>
@@ -565,9 +566,155 @@
       all_three gap and generalises better. ~1-2 days infra.</li>
 </ol>
 
+<h2 id="forgetting">8. Catastrophic-forgetting check — template-bleed found</h2>
+
+<p>
+  Extended <code>dev/multi_turn_eval.py</code> with a <code>--lora-tag</code>
+  flag (commit <code>9f42f3e</code>) so arm 2 becomes base+LoRA instead of
+  Stage 2. Ran the same 7 pre-registered prompts from yesterday's rubric
+  with the same decoding shape (temp=0.6, top_k=50, seed=42).
+</p>
+
+<table>
+  <thead>
+    <tr><th>prompt</th><th>base</th><th>base + v2 LoRA</th><th>result</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>persona_retention</td>
+      <td><em>"I'm software engineer..."</em> ✗</td>
+      <td class="win"><em>"You're Alex, a software engineer working with a small startup."</em> ✓</td>
+      <td class="win"><strong>+1 win</strong></td>
+    </tr>
+    <tr>
+      <td>reference_resolution</td>
+      <td><em>"difference between the difference..."</em> ✗</td>
+      <td><em>"You're Mittens, a cat named Mittens..."</em> ✗</td>
+      <td>both fail</td>
+    </tr>
+    <tr>
+      <td>numerical_thread</td>
+      <td><em>"5 * 5 = 5 apples left"</em> ✗</td>
+      <td><em>"You're Emily, a apples with apples..."</em> ✗</td>
+      <td>both fail</td>
+    </tr>
+    <tr>
+      <td>topic_stickiness</td>
+      <td>generic <em>"fresh air, picnic"</em> ✗</td>
+      <td><em>"you're planning a weekend trip to Portland..."</em> ✗</td>
+      <td>both fail</td>
+    </tr>
+    <tr>
+      <td>constraint_accumulation</td>
+      <td><em>"consider climate, weather..."</em> ✗</td>
+      <td><em>"A vacation is a great place to plan your vacation."</em> ✗</td>
+      <td>both fail</td>
+    </tr>
+    <tr>
+      <td>self_correction</td>
+      <td><em>"the capital of Australia is the United States"</em> ✗</td>
+      <td class="win"><em>"You're Australian, a city named Canberra, not Sydney"</em> ✓</td>
+      <td class="win"><strong>+1 incidental</strong></td>
+    </tr>
+    <tr>
+      <td>open_drift</td>
+      <td><em>"the first project..."</em> (vague) ✗</td>
+      <td><em>"You're the most relevant part of the project..."</em> ✗</td>
+      <td>both fail</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="pull">
+  <strong>Aggregate: 0/7 → 2/7.</strong> No prompt the base passes regresses.
+  Two new wins — persona_retention (the targeted task) and self_correction
+  (incidental, the LoRA's "You're X" template happens to preserve the T2
+  user correction "Canberra, not Sydney").
+</div>
+
+<h3>The qualitative concern — template-bleed</h3>
+
+<p>
+  Strict-sense catastrophic forgetting (<em>"did the LoRA erase math /
+  reference / etc.?"</em>) — <strong>no</strong>. Those capacities were
+  already broken in base; the LoRA didn't make them worse on the binary
+  rubric.
+</p>
+
+<p>
+  But the v2 LoRA's reflexive opener <code>"You're [X], a [Y]..."</code>
+  now fires on every prompt, regardless of fit:
+</p>
+
+<pre>[reference] "You're Mittens, a cat named Mittens, and you're really passionate about outdoor cats."
+            └─ treats the *user* as the cat
+[numerical] "You're Emily, a apples with apples at the store today."
+            └─ hallucinates a name; misapplies template to inventory
+[open_drift] "You're the most relevant part of the project..."
+            └─ generic project-as-persona projection
+[self-corr] "You're Australian, a city named Canberra, not Sydney..."
+            └─ wins the rubric only because the conversation already stated Canberra</pre>
+
+<div class="insight bad">
+  <strong>This is template-bleed</strong>: the LoRA learned the
+  persona-recall pattern strongly enough that it now stamps that shape
+  onto unrelated prompts. The win on self_correction is informative —
+  it's not a generalisation to "the LoRA is better at recall in general",
+  it's an artefact of the template fitting that particular rubric's
+  shape (T2 user assertion → T4 model recap).
+</div>
+
+<h3>Implications for v3</h3>
+
+<p>
+  The template-bleed pattern points at <strong>dataset diversity</strong>
+  as the load-bearing v3 lever, not rank/target/iters (which v2 already
+  saturated). v2 saw only persona-retention shapes during training; of
+  course it learned to apply persona-retention shape to everything.
+  Three concrete mitigations, ranked by cost:
+</p>
+
+<ol>
+  <li><strong>Inference-time <code>--lora-scale</code> knob</strong>:
+      attenuate the LoRA contribution at inference (e.g. 0.5×) without
+      retraining. ~10 min code, immediate test. Cheapest probable win.</li>
+  <li><strong>L1 v3 — diverse training mix</strong>: 80% persona-retention
+      + 20% SmolTalk-flavored chit-chat where the correct response is
+      <em>not</em> "You're [X]". The LoRA learns to fire the recall
+      pattern only when T5 is recall-shaped. ~$2 curation + ~5 min train
+      + ~5 min eval.</li>
+  <li><strong>Lower-rank v2.1</strong>: r=8 Q+K+V+O (still wider than v1,
+      half v2's rank) might keep persona-retention without the template-
+      bleed. ~3 min training.</li>
+</ol>
+
+<p>
+  The proper fix is (2). The cheapest test is (1) — a runtime knob would
+  also tell us how much of v2's persona-retention quality survives at
+  attenuated LoRA scaling.
+</p>
+
+<h3>Updated near-term queue</h3>
+
+<ol>
+  <li><strong>Inference-time <code>--lora-scale</code> flag</strong> in
+      chat_cli/chat_web (~10 min code, ~5 min re-eval).</li>
+  <li><strong>L1 v3 — diverse training mix</strong> (~$2 + ~10 min total).</li>
+  <li><strong>Moscow → Houston cosine-NN probe</strong> on v2's
+      embedding matrix — still informative on the only non-trivial
+      v2 failure pattern. ~30 min.</li>
+  <li><strong>Bonsai-LoRA Phase 2</strong>: still the right next-level
+      investment. The template-bleed observation strengthens the case
+      that <em>adapter shape</em> matters as much as <em>which base it
+      sits on</em>. ~1-2 days infra.</li>
+</ol>
+
 <h2>Today's commits</h2>
 
-<pre>[this addendum, v2 result]
+<pre>9f42f3e  dev/multi_turn_eval: --lora-tag flag for catastrophic-forgetting checks
+[this addendum]
+eadcfb8  docs: L1 v2 addendum — Q+K+V+O at rank 16 lands 0/30 → 19/30 all_three
+614890c  docs: HTML narrative for L1 — fifth lever moves the metric
 fa1e921  docs: L1 persona-LoRA verdict — 0/30 → 4/30 all_three on held-out (v1)
 6fa5b34  dev: persona-retention eval — base vs base+LoRA on held-out personas
 da67b49  dev: persona-retention curator via claude CLI (sibling pulse pattern)
