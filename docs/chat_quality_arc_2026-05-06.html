@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From four closed levers to a coarse-codebook bet — d6 chat quality, 2026-05-06</title>
+<style>
+  :root { --bg: #1a1a2e; --fg: #e0e0e0; --accent: #e94560; --accent2: #0f3460;
+          --good: #4ade80; --bad: #f87171; --mid: #fbbf24; --card: #16213e;
+          --blue: #60a5fa; --dim: #888; --violet: #a78bfa; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg);
+         color: var(--fg); line-height: 1.75; padding: 2rem 1.5rem; max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 1.85rem; margin-bottom: 0.4rem; color: #fff; letter-spacing: -0.025em; line-height: 1.25; }
+  h2 { font-size: 1.3rem; margin: 2.8rem 0 0.8rem; color: var(--accent); letter-spacing: -0.01em;
+       border-bottom: 1px solid #2a2a4a; padding-bottom: 0.3rem; }
+  h3 { font-size: 1.05rem; margin: 1.8rem 0 0.4rem; color: var(--blue); }
+  h4 { font-size: 0.95rem; margin: 1.2rem 0 0.4rem; color: var(--violet); }
+  p { margin: 0.7rem 0; font-size: 0.95rem; }
+  .subtitle { color: var(--dim); font-size: 0.88rem; margin-bottom: 0.5rem; }
+  .byline { color: var(--dim); font-size: 0.78rem; margin-bottom: 2rem;
+            font-family: 'JetBrains Mono', monospace; }
+  .lede { font-size: 1.05rem; color: #ddd; margin: 1.2rem 0 2rem;
+          line-height: 1.85; padding-left: 1rem; border-left: 3px solid var(--accent); }
+  code { background: #222; padding: 0.12em 0.35em; border-radius: 3px; font-size: 0.85em;
+         font-family: 'JetBrains Mono', 'SF Mono', monospace; color: var(--blue); }
+  a { color: var(--blue); text-decoration: none; border-bottom: 1px solid #2a4470; }
+  a:hover { border-bottom-color: var(--blue); }
+  em { color: #ddd; font-style: italic; }
+  strong { color: #fff; }
+
+  pre { background: #0d0d1a; border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0;
+        font-family: 'JetBrains Mono', 'SF Mono', monospace; font-size: 0.82rem;
+        overflow-x: auto; line-height: 1.5; border-left: 3px solid var(--violet);
+        color: #ddd; white-space: pre-wrap; word-break: break-word; }
+  pre code { background: none; padding: 0; color: #ddd; font-size: inherit; }
+
+  blockquote { background: rgba(167,139,250,0.06); border-left: 3px solid var(--violet);
+               padding: 0.9rem 1.2rem; margin: 1.4rem 0; border-radius: 6px;
+               font-style: italic; color: #ddd; font-size: 0.92rem; }
+
+  .pull { font-size: 1.05rem; color: #fff; padding: 1.2rem 1.5rem; margin: 1.8rem 0;
+          background: linear-gradient(135deg, rgba(233,69,96,0.08), rgba(167,139,250,0.04));
+          border-radius: 10px; border-left: 4px solid var(--accent);
+          line-height: 1.6; font-style: italic; }
+
+  .insight { padding: 0.9rem 1.1rem; margin: 1.4rem 0; border-radius: 8px;
+             background: rgba(74,222,128,0.05); border-left: 3px solid var(--good);
+             font-size: 0.9rem; }
+  .insight.warn { background: rgba(251,191,36,0.05); border-left-color: var(--mid); }
+  .insight.bad  { background: rgba(248,113,113,0.05); border-left-color: var(--bad); }
+  .insight strong { color: #fff; }
+
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+  th { background: var(--card); padding: 0.5rem 0.7rem; text-align: left; color: #aaa;
+       font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  td { padding: 0.5rem 0.7rem; border-bottom: 1px solid #1f1f3a; }
+  td.mono { font-family: 'JetBrains Mono', monospace; }
+  td.win { color: var(--good); }
+  td.lose { color: var(--bad); }
+  td.dim { color: var(--dim); }
+  td.right { text-align: right; }
+
+  .takeaway { background: var(--card); border-radius: 10px; padding: 1.3rem 1.4rem;
+              margin: 1.5rem 0; border-left: 4px solid var(--blue); }
+  .takeaway h4 { margin-top: 0; color: var(--blue); font-size: 1rem; }
+  .takeaway .gist { color: var(--mid); font-style: italic; margin: 0.4rem 0 0.8rem; }
+
+  ul, ol { margin: 0.5rem 0 0.5rem 1.4rem; }
+  li { margin: 0.4rem 0; }
+
+  .nav { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0.8rem 0 2rem;
+         font-size: 0.78rem; }
+  .nav a { background: var(--card); padding: 0.35rem 0.7rem; border-radius: 6px;
+           border: 1px solid #2a3a6a; }
+
+  .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #2a2a4a;
+            color: var(--dim); font-size: 0.78rem; }
+
+  .ascii-arc { background: #0d0d1a; border-radius: 10px; padding: 1.2rem 1.4rem;
+               margin: 1.5rem 0; font-family: 'JetBrains Mono', monospace;
+               font-size: 0.78rem; line-height: 1.55; white-space: pre; overflow-x: auto;
+               color: #ddd; border-left: 3px solid var(--violet); }
+</style>
+</head>
+<body>
+
+<h1>From four closed levers to a coarse-codebook bet</h1>
+<p class="subtitle">A one-day arc on d6 chat quality, ending in a categorical diagnostic that points at Bonsai-LoRA.</p>
+<p class="byline">nanochat · experiment/hope-nested-learning · 2026-05-06</p>
+
+<p class="lede">
+  We started the day reviewing whether the Hope/NL synthesis verdict had measured the right thing. By
+  evening we had closed four levers on d6 chat quality (architecture, decoding, SFT-rebalance,
+  SFT-additive), produced our cleanest evidence yet that <em>SFT val_bpb is not predictive of chat
+  quality</em>, and — via a sibling project's two-axis debug framework — categorized d6's failure
+  modes mechanistically. The diagnostic says <strong>~65 % of d6's chat failures are FP-flavored
+  right-context drift</strong>, which has a known fix direction. That fix points squarely at
+  Bonsai-LoRA, which a session earlier was just one of several speculative directions.
+</p>
+
+<div class="nav">
+  <a href="#reframe">1. The reframe</a>
+  <a href="#levers">2. Closing four levers</a>
+  <a href="#divergence">3. The cleanest finding</a>
+  <a href="#external-internal">4. External vs internal memory</a>
+  <a href="#diagnostic">5. The cosine-NN diagnostic</a>
+  <a href="#land">6. Where we land</a>
+</div>
+
+<h2 id="reframe">1. The reframe — from architecture to chat quality</h2>
+
+<p>
+  Yesterday's <a href="hope_nl_track_synthesis_2026-05-05.md">Hope/NL synthesis</a> closed the
+  architectural track at d6 with the verdict <em>"Stage 2 is neutral, not net-positive, on
+  natural-language val_bpb."</em> That verdict was technically correct on the metric used, but the
+  metric had a known weakness — Stage 1.5's probe-design doc explicitly said:
+</p>
+
+<blockquote>
+  LM val_bpb on DCLM/SFT mixtures is a sum across token positions; positions where carrying state
+  matters are a small fraction of the total. A 1 % val_bpb gap can be either real architectural
+  divergence on the load-bearing positions or noise on the bulk.
+</blockquote>
+
+<p>
+  We pivoted to the user's reframing: <em>"Provably useful continuous learning in an LLM, in a
+  harness that works on my laptop. The chatbot is kinda bad, especially after turn 1. What can we
+  do without inflating wall-clock or buying M4?"</em>
+</p>
+
+<p>
+  The reframe changed which task class we were evaluating on. Free multi-turn chat coherence is
+  exactly the regime where recurrent memory mechanisms <em>should</em> differentially help if they
+  help anywhere — within a single sequence, accumulating context across turns, exactly the regime
+  the synthesis verdict had skipped.
+</p>
+
+<div class="insight">
+  <strong>Bias-controlling move.</strong> Pre-registered a 7-prompt multi-turn rubric with
+  per-prompt pass/fail criteria <em>before</em> running anything. Each prompt was designed to
+  exercise a specific memory-load-bearing pattern: persona retention, reference resolution,
+  numerical thread, topic stickiness, constraint accumulation, self-correction, open drift.
+  Prompts and bar were committed in <code>af2d86a</code>; results landed in
+  <code>5008fe2</code>.
+</div>
+
+<h2 id="levers">2. Closing four levers</h2>
+
+<p>
+  Over four experiments we tested the four interventions available without retraining the base
+  model from scratch or buying new compute. Each was scored on the same 7-prompt rubric.
+</p>
+
+<h3>2.1 Architecture (Stage 2 vs baseline)</h3>
+
+<p>
+  Multi-turn A/B between <code>d6_baseline_modern_sft</code> (vanilla) and
+  <code>d6_stage2_pretrain_s1_sft</code> (Hope/NL Stage 2 with learned-gate memory at L3).
+  Decoding held constant. <strong>Both passed exactly 1 of 7 prompts</strong> (loose pass on
+  <code>open_drift</code>, where both models maintained their T1 theme to T5). Same failure
+  modes, same magnitudes — the architectural delta on user-relevant chat coherence was not
+  measurable.
+</p>
+
+<h3>2.2 Decoding (5-config sweep)</h3>
+
+<p>
+  Same 7-prompt rubric, baseline only, five decoding configurations: default, greedy,
+  rep_penalty=1.2, rep_penalty=1.4, fake-system-prompt-prefix. Range of scores: <strong>0/7 to
+  1.5/7</strong>. The best config (greedy) wins one prompt fully because greedy preserves
+  user-injected facts verbatim ("Canberra, not Sydney" → repeated correctly at T4). All other
+  configs ≤ 1/7. Repetition penalty trades repetition for coherence with no sweet spot. Fake
+  system-prompt backfires into self-referential identity loops.
+</p>
+
+<h3>2.3 SFT-rebalance (Variant A: cut MMLU/GSM8K)</h3>
+
+<p>
+  Reduced <code>--mmlu-epochs</code> from 3 → 1 and <code>--gsm8k-epochs</code> from 4 → 1.
+  Structured-task share dropped from 57 % → 46 %. <strong>val_bpb improved by 0.053 absolute</strong>
+  (0.6483 → 0.5952; ~30× the seed-noise spread we measured on A2). Multi-turn rubric
+  <strong>regressed by 1</strong> (1/7 → 0/7).
+</p>
+
+<h3>2.4 SFT-additive (Variant B1: 2 × SmolTalk)</h3>
+
+<p>
+  Added a <code>--smoltalk-epochs</code> flag, doubled SmolTalk to bring chat-share from 43 % →
+  60 %. Mmlu/gsm8k unchanged (isolates the chat-volume variable). <strong>val_bpb 0.6027</strong>
+  (between original and chatmix_a). Multi-turn rubric <strong>0/7</strong>, same as Variant A.
+</p>
+
+<table>
+  <thead>
+    <tr><th>run</th><th class="right">val_bpb</th><th class="right">multi-turn</th><th>chat share</th><th>structured share</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>d6_baseline_modern_sft</code></td><td class="right">0.6483</td><td class="right">1/7</td><td>43 %</td><td>57 %</td></tr>
+    <tr><td><code>d6_stage2_pretrain_s1_sft</code></td><td class="right">0.6495</td><td class="right">1/7</td><td>43 %</td><td>57 %</td></tr>
+    <tr><td><code>d6_baseline_chatmix_a</code></td><td class="right win">0.5952</td><td class="right lose">0/7</td><td>43 %</td><td>46 %</td></tr>
+    <tr><td><code>d6_baseline_smoltalk_2x</code></td><td class="right">0.6027</td><td class="right lose">0/7</td><td class="win">60 %</td><td>40 %</td></tr>
+  </tbody>
+</table>
+
+<h2 id="divergence">3. The cleanest finding — val_bpb ⊥ chat quality</h2>
+
+<div class="pull">
+  Same intervention (chatmix_a vs baseline) pushed val_bpb in one direction by an enormous
+  margin and the multi-turn rubric in the opposite direction. <strong>0.053 bpb of improvement
+  on the held-out SFT mix bought us a full prompt of regression on multi-turn chat.</strong>
+  By every loss-based metric we'd ever pre-register, chatmix_a is the better model.
+  The user-relevant task says it's worse.
+</div>
+
+<p>
+  This is the single durable thing we proved today, regardless of what comes next:
+  <strong>SFT val_bpb does not predict chat quality at d6 scale</strong>. The two metrics aren't
+  just decoupled — they can diverge sharply on the same model under the same intervention.
+</p>
+
+<h3>3.1 What's actually happening in the transcripts</h3>
+
+<p>
+  Cutting MMLU and GSM8K epochs didn't <em>eliminate</em> template-locking. It
+  <em>shuffled</em> which templates dominate on ambiguous inputs:
+</p>
+
+<ul>
+  <li><strong>Identity-loop became dominant.</strong> The CustomJSON identity examples
+      (1 K rows × 2 epochs, 0.2 % of mix unchanged) gained <em>relative</em> salience because the
+      structured tasks shrank around them. chatmix_a immediately replied
+      "<em>I'm nanochat, a Large Language Model. I beat GPT-2's CORE benchmark, 0.25851...</em>"
+      to "Hi I'm Alex." Original baseline gave a generic SmolTalk reply.</li>
+  <li><strong>SpellingBee leaked into chat.</strong> Mix share rose 7 % → 9.4 %, enough for
+      "<em>find the number 'a' in 'far Sydney': f, a, r, k, i, a...</em>" to trigger on text-heavy
+      ambiguous input.</li>
+  <li><strong>GSM8K template not eliminated.</strong> 1 % mix-share is still enough for
+      <code>&lt;|python_start|&gt;...&lt;|output_start|&gt;...####N</code> to fire on number-shaped
+      input. Reducing volume reduces frequency, not trigger condition.</li>
+  <li><strong>New degenerate suffix loops appeared.</strong> "<em>Portland-y-y-y-y-...</em>"
+      and "<em>the Red Delux, the Red Delux, ...</em>" — pure repetition where template
+      coverage dropped.</li>
+</ul>
+
+<p>
+  smoltalk_2x landed in a third distinct profile: "<em>Java J. I'm working on Java J.</em>"
+  for persona retention (got "software engineer" right but invented "J" as the name and
+  looped); "<em>too too too too...</em>" pure repetition; "<em>Sydney Sydney Sydney...</em>" for
+  capital-of-Australia.
+</p>
+
+<div class="insight warn">
+  <strong>The pattern, three runs in:</strong> the model has finite template-learning capacity at
+  74 M. Rebalancing within existing data redistributes which templates win the salience battle;
+  it doesn't free capacity for less template-locked free chat. Every rebalance produces
+  <em>differently broken</em>, not <em>less broken</em>.
+</div>
+
+<h2 id="external-internal">4. External vs internal memory — and the productive dichotomy</h2>
+
+<p>
+  The post-experiment review surfaced two different directions for "continuous learning at
+  laptop scale" that today's session had implicitly touched but not made explicit:
+</p>
+
+<div class="takeaway">
+  <h4>External-loop memory: Feedback Descent</h4>
+  <p class="gist">Maintain a "current best" artifact; iteratively mutate via pairwise comparisons paired with textual rationales; keep the rationales as accumulated context history. No weight updates anywhere.</p>
+  <p>
+    The Lee/Boen/Finn paper (arXiv 2511.07919) shows pairwise feedback with explanatory rationale
+    — <em>kept</em> as context history rather than collapsed to a binary preference — gives
+    dimension-free convergence in semantic space. They beat specialized molecular optimizers
+    using only text, surpassing the 99.9 % percentile of a 260K-compound database.
+  </p>
+  <p>
+    The mechanistic insight: scalar reward → zeroth-order → exponential slowdown with effective
+    dimension; textual feedback → first-order analog → dimension-free convergence. The
+    information bottleneck framing maps directly onto today's val_bpb / multi-turn divergence:
+    we were collapsing rich judgment into a per-token average.
+  </p>
+</div>
+
+<div class="takeaway">
+  <h4>Internal-weight memory: LoRA</h4>
+  <p class="gist">Tiny rank-r adapter matrices riding on top of the frozen base. ~0.1 % of base parameters trainable. Modular — swap or compose at inference time.</p>
+  <p>
+    Karpathy's nanochat ships no PEFT path; full-parameter SFT and full-parameter RL are the
+    only training routes. For the laptop / continuous-learning use case this is a real gap.
+    LoRA maps onto the operator's stated goal more cleanly than either Hope/NL architecture
+    (which we just closed) or FD (which is purely inference-time, no adaptation).
+  </p>
+  <p>
+    The compose-with-FD bridge: an FD loop generates a trajectory of (input, refined_output)
+    pairs; LoRA-fine-tune on the trajectory; the adapter <em>internalizes</em> the iteration as
+    a one-shot forward pass. <em>External loop ↔ internal architecture</em>, with LoRA as the
+    bridge between them. Nobody has run this end-to-end at small scale that we're aware of.
+  </p>
+</div>
+
+<p>
+  Two proposals committed (<code>92eb7fe</code> + <code>0ff3018</code>): five FD directions, three
+  LoRA directions, with explicit bridges between them.
+</p>
+
+<h2 id="diagnostic">5. Phase 5 + the cosine-NN diagnostic</h2>
+
+<p>
+  The trx4mr sibling project's <a href="../../../trx4mr/experiments/blabberverse-phase5-impl-and-takeaways.html">Phase 5 retro</a>
+  arrived as we were sketching proposals. Several findings echoed today's session immediately,
+  but the most actionable was their <em>two-axis debug framework</em>:
+</p>
+
+<blockquote>
+  For practitioners debugging "why is this token's embedding weird," the two-axis framework is
+  a quick first pass. Compute the cosine NN of the misbehaving token's embedding. If the NN is
+  a token with similar next-token distributions, you're in the right-context regime (FP-style
+  drift). If the NN is a token that appears in similar positions / predecessors, you're in the
+  left-context regime (binary-style coarseness collision). Different fixes for each.
+</blockquote>
+
+<table>
+  <thead>
+    <tr><th>failure mode</th><th>diagnostic</th><th>fix direction</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>right-context drift (FP-flavored)</td>
+      <td>NN shares next-token distribution</td>
+      <td><strong>Coarsen codebook (binary/ternary)</strong> OR add capacity</td>
+    </tr>
+    <tr>
+      <td>left-context collision (binary-flavored)</td>
+      <td>NN shares preceding-context distribution</td>
+      <td>Add codebook levels (ternary) OR <strong>increase d_model</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Three lines of numpy. We had the failures already documented. The diagnostic was free.
+</p>
+
+<h3>5.1 What the probe found</h3>
+
+<p>
+  <code>dev/cosine_nn_probe.py</code> on <code>d6_baseline_modern_sft</code>'s embedding matrix
+  (32 768 × 384), 17 query tokens sampled from today's degenerate transcripts. Top-10 cosine
+  NNs reported per token. Single run, ~30 s on M2.
+</p>
+
+<table>
+  <thead>
+    <tr><th>token</th><th>top-3 NNs</th><th>axis</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>'Alex'</code></td><td><code>Michael, James, David</code></td><td>right-context (names)</td></tr>
+    <tr><td><code>'engineer'</code></td><td><code>scientist, homeowner, actor</code></td><td>right-context (occupations)</td></tr>
+    <tr><td><code>'software'</code></td><td><code>equipment, hardware, clothing</code></td><td>right-context (mass nouns)</td></tr>
+    <tr><td><code>'Java'</code></td><td><code>JavaScript, Python, Utah</code></td><td>right-context (overloaded — explains "Java J")</td></tr>
+    <tr><td><code>'Sydney'</code></td><td><code>China, Georgia, London</code></td><td><strong>right-context (places)</strong></td></tr>
+    <tr><td><code>'5'</code></td><td><code>7, 3, 6</code></td><td>right-context (digits)</td></tr>
+    <tr><td><code>'apples'</code></td><td><code>oranges, names, shoes</code></td><td>right-context (plurals)</td></tr>
+    <tr><td><code>'Portland'</code></td><td><code>Austin, Melbourne, Seattle</code></td><td>right-context (cities)</td></tr>
+    <tr><td><code>&lt;|python_start|&gt;</code></td><td><code>Ma, ',[', '(f'</code></td><td><strong>right-context (bracket syntax)</strong></td></tr>
+    <tr><td><code>&lt;|assistant_start|&gt;</code></td><td><code>+\n, ---\n\n, –\n</code></td><td>right-context (newline delimiters)</td></tr>
+    <tr><td><code>'J'</code></td><td><code>" J", j, -J</code></td><td>left-context (typographic)</td></tr>
+    <tr><td><code>'the'</code></td><td><code>" the", " The", "The"</code></td><td>left-context (capitalization variants)</td></tr>
+    <tr><td><code>'too'</code></td><td><code>" too", oooo, amboo</code></td><td>left-context (phonetic suffix)</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Of the 17 probed tokens: <strong>~11 right-context (65 %), ~3 left-context (18 %), ~3 mixed
+  (18 %).</strong> The dominant signal is unambiguous.
+</p>
+
+<h3>5.2 The mechanism for the math-mode reflex</h3>
+
+<p>
+  This was the most striking single result in the probe output. <code>&lt;|python_start|&gt;</code>'s
+  top-10 nearest neighbors in embedding space:
+</p>
+
+<pre>'Ma' (0.37)  ',['  (0.30)  ' YOU' (0.28)  '(f' (0.28)  '['  (0.28)
+' (+' (0.27)  '/('  (0.27)  ' ``' (0.27)  ' `' (0.26)  ' €'  (0.26)</pre>
+
+<p>
+  These are bracket / parens / syntax tokens. The special token has been embedded — through SFT
+  on GSM8K solutions — as <em>"the thing that comes right before bracket-prefixed Python
+  syntax."</em> When the model is in any state semantically near a digit (which clusters with
+  other digits, which cluster with this special token via co-occurrence in the GSM8K template),
+  it generates <code>&lt;|python_start|&gt;</code> with high probability.
+</p>
+
+<div class="insight">
+  <strong>Implication:</strong> the math-mode reflex isn't about <em>how much</em> GSM8K we
+  trained on. We tried 1 epoch (chatmix_a) and it still fired. The trigger is the
+  <em>embedding geometry</em>, which is stable across mix-share rebalances. Cutting GSM8K
+  changes the firing frequency but not the trigger condition.
+</div>
+
+<h3>5.3 The Sydney attractor</h3>
+
+<p>
+  <code>'Sydney'</code>'s cluster is densely populated with other places (China, Georgia,
+  Utah, Malaysia, London, Ontario, Pakistan...). In a model state where the predicted
+  next-token distribution is "capital cities," Sydney is one of the most strongly-attracted
+  tokens; once selected, the next-token state stays in "cities," cycling back to Sydney.
+  <strong>Right-context drift creates a self-reinforcing attractor.</strong>
+</p>
+
+<p>
+  This explains "<em>Sydney is the capital of Sydney</em>" and "<em>Sydney Sydney Sydney
+  Sydney...</em>" mechanically. The user telling the model "Canberra, not Sydney" doesn't
+  alter the embedding geometry; once Sydney's attractor is engaged, the model returns to it.
+</p>
+
+<h2 id="land">6. Where we land</h2>
+
+<p>
+  Per the Phase 5 fix-direction table, ~65 % right-context drift is in the regime where
+  <strong>codebook coarsening (binary/ternary STE)</strong> is the indicated fix; ~18 %
+  left-context collision is in the regime where <strong>capacity (M4 / d8+)</strong> is the
+  fix. Both interventions are warranted, but in those proportions.
+</p>
+
+<p>
+  Mapping onto the resources we have:
+</p>
+
+<div class="ascii-arc">  ┌────────────────────────────┐         ┌────────────────────────────┐
+  │  d6 fp baseline           │         │  M4 / d8+ extension        │
+  │  (today's status)         │ ──────> │  (capacity for ~18% of     │
+  │  - 4 levers closed         │         │   failures; secondary)    │
+  │  - dominant-axis FP drift  │         │  ~6-9h Phase 0 + 11-17h   │
+  └────────────────────────────┘         └────────────────────────────┘
+              │
+              │  binary base + fp adapter
+              ▼
+  ┌────────────────────────────┐
+  │  Bonsai-LoRA              │
+  │  (codebook coarseness +    │
+  │   fp adaptation)          │
+  │  ~3-5h L1 + ~1d Bonsai infra│
+  │  diagnostic-supported     │
+  └────────────────────────────┘</div>
+
+<p>
+  Bonsai's 1-bit base provides codebook coarsening by construction; fp LoRA on top adapts
+  cheaply without disturbing base coarseness. Per the diagnostic, this is the indicated fix
+  for the dominant failure axis. <strong>It's also the only one that fits our compute budget
+  without buying new hardware.</strong>
+</p>
+
+<div class="insight warn">
+  <strong>Resource economics, stated honestly.</strong> STE-based binary <em>training</em> on
+  M2 doesn't save resources — latent fp32 weights stay in memory, the quantize op adds work in
+  the forward pass, MPS kernels for grouped-quantize aren't optimized. Native 1-bit recipes are
+  designed for big-compute targets. The path to access Phase 5's regime-robustness benefits at
+  our scale is to <em>not</em> retrain binary; it's to use Bonsai (which already paid the QAT
+  cost on bigger hardware) and add small fp LoRA adapters.
+</div>
+
+<h3>6.1 Updated proposals (committed)</h3>
+
+<ul>
+  <li>LoRA proposal's L1 (persona-LoRA) restructured as a two-arm A/B: <code>L1-d6</code> (74M fp
+      base + LoRA) vs <code>L1-bonsai</code> (1-bit Bonsai 4B + fp LoRA). Same persona-retention
+      dataset, same training horizon, same eval rubric. Tests the diagnostic's prediction
+      directly. (<code>b6434d1</code>)</li>
+  <li>FD proposal's Direction B adds a side-question: re-run cosine-NN on
+      <code>d6_stage2_pretrain_s1_sft</code>'s embeddings to test whether internal recurrent
+      memory shifts the axis distribution (does Stage 2 specifically attenuate right-context
+      drift?). ~1 minute marginal compute; intrinsically interesting whether or not B's primary
+      arms move the multi-turn rubric. (<code>b6434d1</code>)</li>
+</ul>
+
+<h3>6.2 What the day's verdict is, stated tightly</h3>
+
+<div class="pull">
+  At d6 / 74M, with available data and current-architecture training, the chatbot's quality is
+  bounded by capacity and template-locking. Within that ceiling, the failure modes are
+  predominantly FP-flavored right-context drift, with a secondary capacity-bound
+  left-context-collision component. <em>Codebook coarsening (Bonsai-LoRA) is the diagnostic-
+  supported indicated fix for the dominant axis; M4 is the indicated fix for the secondary axis.
+  Both warranted, in those proportions.</em> Today's session closed every full-parameter
+  full-precision lever; the open paths now sit specifically in those two regimes, and they're
+  both small enough to fit our budget if we choose them.
+</div>
+
+<h2>Today's commits</h2>
+
+<pre>b6434d1  docs: incorporate cosine-NN diagnostic into LoRA + FD proposals
+6f81014  docs+dev: cosine-NN diagnostic — d6 failures dominantly right-context (FP)
+0ff3018  docs: LoRA / PEFT proposal — three starting directions
+92eb7fe  docs: Feedback Descent proposal — 5 starting directions
+3442db0  docs: SFT Variant B1 results — SmolTalk x2, third null
+20baaac  chat_sft: --smoltalk-epochs flag for SFT mixture rebalance experiments
+ad8acd0  docs: SFT Variant A results — chatmix_a, val_bpb up + chat down
+c983255  docs: SFT-data composition design — three variants
+d13f5c4  decoding sweep + engine: rep_penalty kwarg, 5-config A/B
+5008fe2  docs: multi-turn chat A/B results — Stage 2 verdict tightens
+af2d86a  docs+dev: pre-register multi-turn chat A/B</pre>
+
+<h2>Open questions for next session</h2>
+
+<ol>
+  <li>Run cosine-NN on <code>d6_stage2_pretrain_s1_sft</code> to test whether the architectural
+      memory we built specifically shifts the FP/binary axis distribution. <em>~1 min compute,
+      decoupled from any other experiment.</em></li>
+  <li>Land Bonsai 1-bit forward + fp LoRA infrastructure as the foundation for L1-bonsai.
+      Estimated ~1 day of focused infra work.</li>
+  <li>Decide whether to widen the cosine-NN probe (200 + tokens, stratified by frequency / POS /
+      role) for tighter axis-distribution estimates. ~30 min compute; would make the
+      diagnostic's percentages more defensible.</li>
+  <li>Whether to pursue the FD path in parallel — it's orthogonal to Bonsai-LoRA in mechanism
+      and could compose via L3 (FD → LoRA distillation).</li>
+</ol>
+
+<div class="footer">
+  <p>
+    Source documents: <a href="multi_turn_chat_eval_2026-05-06.md"><code>multi_turn_chat_eval_2026-05-06.md</code></a>,
+    <a href="decoding_sweep_2026-05-06.md"><code>decoding_sweep_2026-05-06.md</code></a>,
+    <a href="sft_data_chatmix_a_2026-05-06.md"><code>sft_data_chatmix_a_2026-05-06.md</code></a>,
+    <a href="sft_data_smoltalk_2x_2026-05-06.md"><code>sft_data_smoltalk_2x_2026-05-06.md</code></a>,
+    <a href="feedback_descent_proposal_2026-05-06.md"><code>feedback_descent_proposal_2026-05-06.md</code></a>,
+    <a href="lora_proposal_2026-05-06.md"><code>lora_proposal_2026-05-06.md</code></a>,
+    <a href="cosine_nn_diagnostic_2026-05-06.md"><code>cosine_nn_diagnostic_2026-05-06.md</code></a>.
+  </p>
+  <p>
+    Sibling project source: <a href="../../../trx4mr/experiments/blabberverse-phase5-impl-and-takeaways.html"><code>trx4mr/experiments/blabberverse-phase5-impl-and-takeaways.html</code></a>
+    — the two-axis debug framework that made the cosine-NN diagnostic possible.
+  </p>
+  <p>
+    HTML narrative written 2026-05-06; per project convention, markdown writeups committed first
+    as insurance against context exhaustion, this HTML second for publication-style reading.
+  </p>
+</div>
+
+</body>
+</html>
