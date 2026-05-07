@@ -13,8 +13,9 @@ Per the trx4mr Phase 5 two-axis framework
 We probe ~10 tokens that appeared in today's degenerate chatbot outputs
 and report top-10 cosine NNs of each.
 
-Run: uv run python -m dev.cosine_nn_probe
+Run: uv run python -m dev.cosine_nn_probe [--model-tag d6_baseline_modern_sft]
 """
+import argparse
 import torch
 from nanochat.checkpoint_manager import load_model
 from nanochat.common import autodetect_device_type, compute_init
@@ -48,9 +49,15 @@ PROBE_TOKENS = [
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model-tag", default="d6_baseline_modern_sft",
+                        help="SFT checkpoint tag under chatsft_checkpoints/")
+    args = parser.parse_args()
+
     device_type = autodetect_device_type()
     _, _, _, _, device = compute_init(device_type)
-    model, tokenizer, _ = load_model("sft", device, phase="eval", model_tag="d6_baseline_modern_sft")
+    model, tokenizer, _ = load_model("sft", device, phase="eval", model_tag=args.model_tag)
+    print(f"Model tag: {args.model_tag}")
 
     # Get the token embedding matrix (B, d) where B is vocab_size.
     wte = model.transformer.wte.weight.detach()  # (vocab, d)
