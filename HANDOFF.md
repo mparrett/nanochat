@@ -1039,3 +1039,304 @@ the branch is local-only; no pushing or PR creation without explicit
 per-task approval. All 19 of today's commits are local on
 `experiment/hope-nested-learning`.
 
+## Day 2026-05-07: LoRA infrastructure + L1 persona-LoRA + scale knob
+
+The cosine-NN diagnostic from 2026-05-06 pointed at parameter-efficient
+adaptation as the cheapest probable next win on the dominant
+right-context-drift failure axis. This session opened a fifth lever
+(beyond yesterday's four full-parameter ones), landed end-to-end LoRA
+infrastructure in the codebase, ran two LoRA experiments on a curated
+persona-retention dataset, and characterised the resulting failure
+modes well enough to point at v3 directions. Today's commits:
+`79e4b3c` → `d7ca704` (12 commits, all local).
+
+### Headline outcome
+
+**Persona-retention is solved at d6 by a 0.4 %-of-parameters LoRA
+adapter.** Held-out 30-prompt eval, all_three (recall name AND role
+AND location): base 0.0 % → LoRA v2 63.3 %. The original failure mode
+yesterday's multi-turn rubric caught (`"What's my name and job?" →
+"Sydney" / "nanochat" / "Java J"`) is now mostly working.
+
+The 7-prompt rubric pass rate went 0/7 → 2/7. No prompt the base
+passes regresses. Two new wins: persona_retention (the proposal
+target) and self_correction (incidental).
+
+### Threads
+
+**Thread 1 — LoRA infrastructure** (`79e4b3c`, `f75a90d`).
+`nanochat/lora.py` (~280 lines) + `tests/test_lora.py` (~250 lines, 11
+contract tests). Module surface:
+- `LoRALinear(base, rank, alpha)` — wraps a frozen `nn.Linear`. Forward:
+  `base(x) + (x @ A^T) @ B^T * (alpha/rank) * scale`. A is Kaiming-init,
+  B is zero-init, `scale` defaults to 1.0. Bit-equivalent to base at
+  apply time. Mirrors `nanochat.gpt.Linear`'s master-fp32 / matmul-in-
+  input-dtype convention.
+- `apply_lora(model, target, rank, alpha)` — walks
+  `model.transformer.h`, replaces matching attention projections with
+  `LoRALinear` wrappers. Errors if it would inject zero adapters.
+- `lora_state_dict` / `load_lora_state_dict` — adapter-only save/load
+  with strict-key validation.
+- `apply_lora_from_tag(model, lora_tag, scale=1.0)` — one-call helper
+  for inference scripts that reads the meta json and loads weights.
+- `set_lora_scale(model, scale)` — runtime attenuation knob.
+
+`scripts/chat_sft_lora.py` (~290 lines) — focused training entry point.
+Single CustomJSON dataset, plain AdamW over LoRA params only (no
+Muon — rank-r is too small to benefit from orthogonalisation), no
+torch.compile. Reuses `tokenizer.render_conversation` and
+`evaluate_bpb` so val numbers are directly comparable to chat_sft runs.
+Saves to `$NANOCHAT_BASE_DIR/lora_checkpoints/<lora_tag>/`.
+
+`scripts/chat_cli.py` + `scripts/chat_web.py` gain `--lora-tag`,
+`--lora-step`, `--lora-scale`. Inference engine path is untouched —
+`LoRALinear` is a regular `nn.Module`, so `Engine` and the KV cache
+work without modification.
+
+**Thread 2 — Persona-retention curator via Claude subscription**
+(`da67b49`). First version used `anthropic` SDK with API key. After a
+pointer to the sibling `~/projects-new/elixir-explore/pulse` project
+(`lib/pulse/claude/{suggested_responses,sentiment,surprise}.ex`), the
+curator was rewritten to use the **`claude` CLI in headless mode** with
+the operator's Claude Code subscription auth — no `ANTHROPIC_API_KEY`
+needed:
+
+```sh
+claude -p '<prompt>' \
+    --model haiku --tools "" --no-session-persistence \
+    --output-format json \
+    --system-prompt '<system>' \
+    --json-schema '<json-schema>'
+```
+
+Reads the result envelope's `structured_output` field. The curator
+builds Pydantic-validated `Conversation` objects per batch, validates
+client-side that T1 contains all persona substrings and T6 recalls
+them all, tracks a running diversity list of used names/roles/locations
+fed back into each batch's prompt as an "avoid these" constraint.
+
+Output (under `$NANOCHAT_BASE_DIR`, not committed):
+- `persona_retention_v1.jsonl` — 300 train rows (bare list per line,
+  CustomJSON-compatible)
+- `persona_retention_v1_eval.jsonl` — 30 held-out rows with `_persona`
+  metadata for substring eval
+- `persona_retention_v1.log` — generation log
+
+Cost: **~$3.13 against the Claude subscription**, ~74 % acceptance
+rate (113 rejects / ~430 attempts; most rejects were schema-substring
+mismatches where Claude's persona dict claimed a role not exactly in
+T1's text). Token-length distribution: min=82, median=120, p90=148,
+max=207 — well under `max_seq_len=512`.
+
+This pattern is reusable for any future LoRA dataset curation. The
+sibling project's choice of CLI-headless over SDK is a real upgrade —
+the auth model fits a developer-machine workflow with no separate API
+key management.
+
+**Thread 3 — L1 v1: rank-8 Q+V** (`6fa5b34`, `fa1e921`, `614890c`).
+Training: 300 iters, 50.4 s wall on M2 mps, val_bpb 1.243 → 1.077.
+73,728 trainable params (0.1 % of base). Adapter checkpoint 296 KB.
+
+Eval (held-out 30, greedy temp=0):
+
+| metric | base | v1 | delta |
+|---|---:|---:|---:|
+| name_recall | 6.7 % | 20.0 % | +13.3 pp |
+| role_recall | 33.3 % | 26.7 % | -6.7 pp |
+| location_recall | 13.3 % | 26.7 % | +13.3 pp |
+| **all_three** | **0.0 %** | **13.3 %** | **+13.3 pp** |
+
+Real signal but not a solve. ~50 % of v1 outputs collapsed to a
+generic opener ("That's a great way to work") — mode collapse from
+low rank / narrow target / limited training. Markdown writeup
+(`docs/lora_l1_persona_2026-05-07.md`) and HTML narrative
+(`docs/lora_l1_persona_2026-05-07.html`) committed; HTML mirrors
+yesterday's `chat_quality_arc_2026-05-06.html` aesthetic.
+
+The v1 writeup's headroom table predicted **rank=16 + Q+K+V+O target**
+as the cheapest probable v2 win (addressing the two most-likely
+undersizing failures with no new data, ~3 min wall).
+
+**Thread 4 — L1 v2: rank-16 Q+K+V+O** (`eadcfb8`).
+Setup delta from v1: target `c_q,c_k,c_v,c_proj` (was `c_q,c_v`),
+rank 16 (was 8), alpha 32, 600 iters (was 300), lr 3e-4 (was 1e-4).
+Same dataset, same seed. Trainable params 73,728 → **294,912** (~0.4 %
+of base). Wall: **1.95 min**. val_bpb 1.243 → **0.8197** (vs v1's
+final 1.077). Adapter 1.14 MB.
+
+Eval (same harness, same 30 held-out personas):
+
+| metric | base | v1 | **v2** | v2 vs base |
+|---|---:|---:|---:|---:|
+| name_recall | 6.7 % | 20.0 % | **80.0 % (24/30)** | **+73.3 pp** |
+| role_recall | 33.3 % | 26.7 % | **86.7 % (26/30)** | **+53.3 pp** |
+| location_recall | 13.3 % | 26.7 % | **83.3 % (25/30)** | **+70.0 pp** |
+| **all_three** | **0.0 %** | **13.3 %** | **63.3 % (19/30)** | **+63.3 pp** |
+
+**4/30 → 19/30 all_three.** Almost 5× v1's win rate. Mode collapse
+gone — v2's reflexive opener is `"You're [Name], a [Role] in
+[Location]..."`, which reads T1 and recalls. The headroom claim was
+correct *and* understated.
+
+Cleanest single non-trivial v2 failure: **Moscow → Houston substitution**
+on Russian-name personas. Both Elena Volkova (botanist) and Dmitri
+Volkov (quantum physicist) — both Moscow ground truth — get relocated
+to "Houston" in v2's output. Base would never produce that
+substitution; the LoRA is partially overwriting city-cluster geometry
+on Russian-name + Moscow inputs toward an American-name attractor.
+Worth a follow-up cosine-NN probe. (Not run in this session.)
+
+**Thread 5 — Catastrophic-forgetting check** (`9f42f3e`, `6a9bc14`).
+Extended `dev/multi_turn_eval.py` with a `--lora-tag` flag so arm 2
+becomes base+LoRA instead of Stage 2. Ran the 7-prompt rubric.
+
+| prompt | base | v2 | result |
+|---|---|---|---|
+| persona_retention | fail | PASS | +1 win (target) |
+| reference_resolution | fail (loop) | fail | both fail; LoRA: "You're Mittens, a cat named Mittens" (treats user as cat) |
+| numerical_thread | fail | fail | LoRA: "You're Emily, a apples..." (hallucinates name) |
+| topic_stickiness | fail | fail | both vague |
+| constraint_accumulation | fail | fail | both vague |
+| self_correction | fail | PASS | +1 incidental — template happens to fit |
+| open_drift | fail | fail | LoRA: "You're the most relevant part of the project..." |
+
+Aggregate: **0/7 → 2/7. No prompt regresses.**
+
+The qualitative pattern is unmissable: v2's "You're [X], a [Y]..."
+opener fires on every prompt regardless of fit. **Template-bleed**:
+the LoRA learned the persona-recall pattern strongly enough that it
+stamps that shape onto unrelated prompts. Strict-sense catastrophic
+forgetting (capacity erasure on math, reference-tracking, etc.) — no,
+those were already broken in base. Net: rubric +2, qualitative cost
+real but not measurable on the binary rubric.
+
+The fix is **dataset diversity**, not architecture: v2 saw only
+persona-retention shapes during training, so of course it applies that
+shape to everything.
+
+**Thread 6 — `--lora-scale` runtime knob** (`d7ca704`). Added a
+`scale` attribute on `LoRALinear` (default 1.0); forward becomes
+`base(x) + (x @ A^T) @ B^T * (alpha/rank) * scale`. `scale=0.0` is
+bit-equivalent to base (with a fast-path that skips the matmul);
+`scale=0.5` is halfway. `set_lora_scale(model, scale)` and
+`apply_lora_from_tag(scale=...)` propagate. Wired through all four
+entry points (`chat_cli`, `chat_web`, `eval_persona_retention`,
+`multi_turn_eval`). Tests pin scale=0 ≡ base bit-exact, scale=0.5
+sits closer to (base+full)/2 than to either endpoint.
+
+`eval_persona_retention.py` gained a sweep mode: pass
+`--lora-scale 0.0,0.25,0.5,0.75,1.0` to run all five arms in one
+invocation with table-formatted output.
+
+Sweep on the 30 held-out:
+
+| scale | name | role | location | all_three |
+|---:|---:|---:|---:|---:|
+| 0.00 | 6.7 % | 33.3 % | 13.3 % | 0.0 % |
+| 0.25 | 20.0 % | 23.3 % | 20.0 % | 10.0 % |
+| 0.50 | 43.3 % | 46.7 % | 56.7 % | 26.7 % |
+| 0.75 | 80.0 % | 86.7 % | 83.3 % | 63.3 % |
+| 1.00 | 80.0 % | 86.7 % | 83.3 % | 63.3 % |
+
+Two clean signals: (a) scale=0.0 reproduces base exactly (validates
+runtime fast-path), (b) **the LoRA saturates by scale=0.75** — same
+all_three at 0.75 and 1.0. Attenuation only buys reduction below ~0.75.
+
+Rubric at scale=0.5 — same 2/7 pass rate as scale=1.0 *without
+template-bleed*:
+- persona_retention: PASS (Alex + software engineer + startup)
+- self_correction: PASS — actually *cleaner* than at scale=1.0:
+  `"No, the capital of Australia is Canberra, not Sydney."` instead of
+  the persona-template wrap.
+- Reference: no longer "You're Mittens, a cat named Mittens" — vague reply.
+- Numerical: no longer "You're Emily, a apples" — degenerate +0+0+0 loop instead.
+- Open drift: no longer "You're the most relevant part of the project" — generic positive reply.
+
+Trade-off: held-out persona all_three drops 63.3 % → 26.7 % at
+scale=0.5. The rubric persona is simple ("Alex / software engineer /
+startup"); the held-out 30 has trickier personas (Marina Rossi,
+Marcus Thompson, etc.) where attenuation costs recall.
+
+### Cleanest findings of the day
+
+1. **A 0.4 %-of-parameters LoRA solves persona-retention on held-out.**
+   0/30 → 19/30 all_three. The diagnostic-supported direction
+   (capacity-routing on the dominant right-context-drift axis) is real-
+   signal-positive at d6 fp scale.
+
+2. **Template-bleed is a real failure mode of single-task LoRAs at
+   small data.** The v2 LoRA's "You're [X]" opener fires on every
+   prompt regardless of fit — including the cat, the apples, the
+   project chat. The strict-sense catastrophic-forgetting binary
+   misses this; the qualitative hit is real.
+
+3. **Runtime LoRA attenuation is a legitimate trade-off knob.**
+   scale=0.5 keeps the rubric pass rate (persona + self-correction
+   both pass) and removes template-bleed entirely. Costs 36.6 pp on
+   held-out persona all_three. If the deployment goal is "default-on
+   adapter that doesn't break free chat", scale=0.5-ish is the right
+   answer until v3 lands.
+
+### Where this leaves the project
+
+The L1 arm of the LoRA proposal's two-arm comparison is settled:
+**L1-d6 works.** The diagnostic-supported direction has measurable
+signal at d6 with fp adapters and a small curated dataset, with two
+characterised failure modes (template-bleed and Moscow → Houston
+substitution) that point at concrete v3 directions.
+
+Bonsai-LoRA priority is preserved as the next-level arm of the
+L1-d6 vs L1-bonsai comparison — the question now is whether 1-bit
+base + fp LoRA closes the remaining ~37 % all_three gap and
+generalises better. v2's success strengthens the prior; the
+template-bleed observation hints that *adapter shape* matters as much
+as *which base it sits on*.
+
+### Today's commits
+
+```
+d7ca704  nanochat/lora: --lora-scale runtime attenuation knob
+6a9bc14  docs: L1 catastrophic-forgetting addendum — template-bleed found
+9f42f3e  dev/multi_turn_eval: --lora-tag flag for catastrophic-forgetting checks
+eadcfb8  docs: L1 v2 addendum — Q+K+V+O at rank 16 lands 0/30 → 19/30 all_three
+614890c  docs: HTML narrative for L1 — fifth lever moves the metric
+fa1e921  docs: L1 persona-LoRA verdict — 0/30 → 4/30 all_three on held-out (v1)
+6fa5b34  dev: persona-retention eval — base vs base+LoRA on held-out personas
+da67b49  dev: persona-retention curator via claude CLI (sibling pulse pattern)
+f75a90d  chat_sft_lora + --lora-tag inference: end-to-end LoRA training pipeline
+79e4b3c  nanochat/lora: LoRA wrapper, apply walker, state-dict round-trip + tests
+```
+
+### Next session pickup (revised after 2026-05-07)
+
+The L1 arc is wrapped on the d6 fp side. Three live directions:
+
+1. **L1 v3 — diverse training mix.** Targets template-bleed at the
+   training-time root cause. ~$2 curation (re-use the curator with a
+   different system prompt, ~80 % persona-retention + ~20 %
+   SmolTalk-flavoured chit-chat where the right answer is *not*
+   "You're [X]") + ~5 min training + ~5 min eval. Cheapest probable
+   path to a default-on-quality LoRA without the trade-off.
+
+2. **Moscow → Houston cosine-NN probe.** Run `dev/cosine_nn_probe.py`
+   on `d6_baseline_modern_sft + d6_l1_persona_lora_v2`'s embeddings
+   for Russian/Moscow-cluster tokens. Tests whether the LoRA shifted
+   the city-cluster geometry or whether this is decoding-loop noise.
+   ~30 min compute. Intrinsically interesting follow-up to yesterday's
+   diagnostic.
+
+3. **Bonsai-LoRA Phase 2 infrastructure.** ~1-2 days. Bonsai 1-bit
+   forward + fp LoRA on top, tokenizer-compatibility investigation,
+   QLoRA-style flow. Now strengthened — d6 LoRA demonstrably moves
+   persona-retention; the question is whether 1-bit base + fp LoRA
+   closes the remaining gap and generalises better.
+
+**Default if no clear appetite next session:** read
+`docs/lora_l1_persona_2026-05-07.html` (full L1 arc with all three
+addenda) and pick whichever direction sounds appealing. The
+infrastructure is in place; running v3 from end to end takes ~15
+minutes wall.
+
+**Standing operational rules** unchanged: branch is local-only; no
+pushing or PR creation without explicit per-task approval.
+

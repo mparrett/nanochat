@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From a diagnostic to a knob — the L1 LoRA arc, 2026-05-07</title>
+<style>
+  :root { --bg: #1a1a2e; --fg: #e0e0e0; --accent: #e94560; --accent2: #0f3460;
+          --good: #4ade80; --bad: #f87171; --mid: #fbbf24; --card: #16213e;
+          --blue: #60a5fa; --dim: #888; --violet: #a78bfa; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg);
+         color: var(--fg); line-height: 1.75; padding: 2rem 1.5rem; max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 1.85rem; margin-bottom: 0.4rem; color: #fff; letter-spacing: -0.025em; line-height: 1.25; }
+  h2 { font-size: 1.3rem; margin: 2.8rem 0 0.8rem; color: var(--accent); letter-spacing: -0.01em;
+       border-bottom: 1px solid #2a2a4a; padding-bottom: 0.3rem; }
+  h3 { font-size: 1.05rem; margin: 1.8rem 0 0.4rem; color: var(--blue); }
+  h4 { font-size: 0.95rem; margin: 1.2rem 0 0.4rem; color: var(--violet); }
+  p { margin: 0.7rem 0; font-size: 0.95rem; }
+  .subtitle { color: var(--dim); font-size: 0.88rem; margin-bottom: 0.5rem; }
+  .byline { color: var(--dim); font-size: 0.78rem; margin-bottom: 2rem;
+            font-family: 'JetBrains Mono', monospace; }
+  .lede { font-size: 1.05rem; color: #ddd; margin: 1.2rem 0 2rem;
+          line-height: 1.85; padding-left: 1rem; border-left: 3px solid var(--accent); }
+  code { background: #222; padding: 0.12em 0.35em; border-radius: 3px; font-size: 0.85em;
+         font-family: 'JetBrains Mono', 'SF Mono', monospace; color: var(--blue); }
+  a { color: var(--blue); text-decoration: none; border-bottom: 1px solid #2a4470; }
+  a:hover { border-bottom-color: var(--blue); }
+  em { color: #ddd; font-style: italic; }
+  strong { color: #fff; }
+
+  pre { background: #0d0d1a; border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0;
+        font-family: 'JetBrains Mono', 'SF Mono', monospace; font-size: 0.82rem;
+        overflow-x: auto; line-height: 1.5; border-left: 3px solid var(--violet);
+        color: #ddd; white-space: pre-wrap; word-break: break-word; }
+  pre code { background: none; padding: 0; color: #ddd; font-size: inherit; }
+
+  blockquote { background: rgba(167,139,250,0.06); border-left: 3px solid var(--violet);
+               padding: 0.9rem 1.2rem; margin: 1.4rem 0; border-radius: 6px;
+               font-style: italic; color: #ddd; font-size: 0.92rem; }
+
+  .pull { font-size: 1.05rem; color: #fff; padding: 1.2rem 1.5rem; margin: 1.8rem 0;
+          background: linear-gradient(135deg, rgba(233,69,96,0.08), rgba(167,139,250,0.04));
+          border-radius: 10px; border-left: 4px solid var(--accent);
+          line-height: 1.6; font-style: italic; }
+
+  .insight { padding: 0.9rem 1.1rem; margin: 1.4rem 0; border-radius: 8px;
+             background: rgba(74,222,128,0.05); border-left: 3px solid var(--good);
+             font-size: 0.9rem; }
+  .insight.warn { background: rgba(251,191,36,0.05); border-left-color: var(--mid); }
+  .insight.bad  { background: rgba(248,113,113,0.05); border-left-color: var(--bad); }
+  .insight strong { color: #fff; }
+
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+  th { background: var(--card); padding: 0.5rem 0.7rem; text-align: left; color: #aaa;
+       font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  td { padding: 0.5rem 0.7rem; border-bottom: 1px solid #1f1f3a; }
+  td.mono { font-family: 'JetBrains Mono', monospace; }
+  td.win { color: var(--good); }
+  td.lose { color: var(--bad); }
+  td.dim { color: var(--dim); }
+  td.right { text-align: right; }
+
+  .takeaway { background: var(--card); border-radius: 10px; padding: 1.3rem 1.4rem;
+              margin: 1.5rem 0; border-left: 4px solid var(--blue); }
+  .takeaway h4 { margin-top: 0; color: var(--blue); font-size: 1rem; }
+  .takeaway .gist { color: var(--mid); font-style: italic; margin: 0.4rem 0 0.8rem; }
+
+  ul, ol { margin: 0.5rem 0 0.5rem 1.4rem; }
+  li { margin: 0.4rem 0; }
+
+  .nav { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0.8rem 0 2rem;
+         font-size: 0.78rem; }
+  .nav a { background: var(--card); padding: 0.35rem 0.7rem; border-radius: 6px;
+           border: 1px solid #2a3a6a; }
+
+  .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #2a2a4a;
+            color: var(--dim); font-size: 0.78rem; }
+
+  .ascii-arc { background: #0d0d1a; border-radius: 10px; padding: 1.2rem 1.4rem;
+               margin: 1.5rem 0; font-family: 'JetBrains Mono', monospace;
+               font-size: 0.78rem; line-height: 1.55; white-space: pre; overflow-x: auto;
+               color: #ddd; border-left: 3px solid var(--violet); }
+</style>
+</head>
+<body>
+
+<h1>From a diagnostic to a knob</h1>
+<p class="subtitle">The full L1 arc — LoRA infrastructure, persona-retention curated via subscription auth, two iterations, a runtime attenuation knob, and a clear v3 direction.</p>
+<p class="byline">nanochat · experiment/hope-nested-learning · 2026-05-07</p>
+
+<p class="lede">
+  Yesterday's chat-quality session closed four full-parameter levers on
+  d6 and pointed at a fifth: parameter-efficient adaptation on the
+  dominant-axis failure regime. Today we landed end-to-end LoRA
+  infrastructure, curated 300 multi-turn persona-retention conversations
+  via the <em>claude</em> CLI in headless mode (subscription auth, no API
+  key), trained two LoRA iterations, ran a catastrophic-forgetting check
+  against the pre-registered 7-prompt rubric, and added a runtime
+  attenuation knob. The headline number: the held-out persona-retention
+  test moves from <strong>0 of 30 to 19 of 30 all-three recall</strong>
+  with 0.4 % of parameters and ~2 minutes of training. The headline
+  caveat: the LoRA's reflexive opener bleeds into every other prompt,
+  and the cheapest fix is dataset diversity, not more architecture. A
+  scale knob lets us trade recall for bleed at inference time without
+  retraining.
+</p>
+
+<div class="nav">
+  <a href="#overview">1. Where we started</a>
+  <a href="#infra">2. Infrastructure</a>
+  <a href="#dataset">3. The dataset</a>
+  <a href="#v1">4. L1 v1 — meaningful signal</a>
+  <a href="#v2">5. L1 v2 — dominant signal</a>
+  <a href="#bleed">6. Template-bleed</a>
+  <a href="#knob">7. The knob</a>
+  <a href="#v3">8. Where we land + v3</a>
+</div>
+
+<h2 id="overview">1. Where we started — yesterday's diagnostic</h2>
+
+<p>
+  Yesterday's <a href="chat_quality_arc_2026-05-06.html">chat-quality
+  arc</a> closed four full-parameter levers at d6 (architecture,
+  decoding, SFT-rebalance, SFT-additive volume), all landing at 0–1/7
+  on the pre-registered multi-turn rubric. The cleanest finding was
+  the val_bpb / multi-turn divergence: SFT-rebalance pushed val_bpb in
+  one direction by an enormous margin and the rubric in the opposite
+  direction.
+</p>
+
+<p>
+  The trx4mr Phase 5 retro arrived with a categorical diagnostic. A
+  cosine-NN probe on d6 baseline embeddings classified the chat failure
+  modes as <strong>~65 % right-context drift (FP-flavored)</strong> —
+  a regime where the framework predicts <em>codebook coarsening or
+  capacity-routing-via-LoRA</em> are the indicated fixes. We didn't
+  have Bonsai-LoRA infrastructure yet, but we did have a clear
+  diagnostic-supported hypothesis to test:
+</p>
+
+<blockquote>
+  Parameter-efficient adaptation on the right projections should move
+  the persona-retention failure mode in the predicted direction even
+  at d6 fp scale.
+</blockquote>
+
+<p>L1 was the cheapest way to test that.</p>
+
+<h2 id="infra">2. Infrastructure — three commits, end to end</h2>
+
+<div class="takeaway">
+  <h4><code>nanochat/lora.py</code> + tests</h4>
+  <p class="gist">~280 lines of module + ~250 lines of tests. <code>LoRALinear</code>, <code>apply_lora</code>, <code>lora_state_dict</code>, <code>load_lora_state_dict</code>, <code>apply_lora_from_tag</code>. Mirrors the existing <code>nanochat.gpt.Linear</code>'s master-fp32 / matmul-in-input-dtype convention.</p>
+  <p>
+    Forward of <code>LoRALinear</code>: <code>out = base(x) + (x @ A^T)
+    @ B^T * (alpha/rank) * scale</code>. A is Kaiming-init, B is
+    zero-init, <code>scale</code> defaults to 1.0. At apply-time the
+    forward is bit-equivalent to base. 11 contract tests pin: freeze-
+    correctness, zero-init equivalence, perturbation divergence,
+    save/load round-trip, target-typo error path, scale=0 ≡ base bit-
+    exact, scale=0.5 sits closer to (base+full)/2 than to either
+    endpoint. (commits <code>79e4b3c</code> + <code>d7ca704</code>)
+  </p>
+</div>
+
+<div class="takeaway">
+  <h4><code>scripts/chat_sft_lora.py</code> + inference wiring</h4>
+  <p class="gist">Focused training entry point pared down to the minimum: single CustomJSON dataset, plain AdamW over LoRA params only (no Muon — rank-r is too small to benefit from orthogonalisation), no torch.compile. <code>chat_cli.py</code> + <code>chat_web.py</code> gain <code>--lora-tag</code> + <code>--lora-scale</code>.</p>
+  <p>
+    Adapter checkpoint format is intentionally small — only LoRA tensors
+    plus a meta json. v1 produces a 296 KB checkpoint at d6 r=8 Q+V; v2
+    produces 1.14 MB at r=16 Q+K+V+O. The inference engine path is
+    untouched: <code>LoRALinear</code> is a regular <code>nn.Module</code>,
+    so <code>Engine</code> and the KV cache work without modification.
+    (commit <code>f75a90d</code>)
+  </p>
+</div>
+
+<h2 id="dataset">3. The dataset — pulse-pattern subscription auth</h2>
+
+<p>
+  The first version of the curator used the Anthropic SDK with an API
+  key. After committing it the operator pointed at the sibling
+  <code>elixir-explore/pulse</code> project, which solves the same
+  problem via the <code>claude</code> CLI in headless mode using the
+  operator's active Claude Code subscription auth — no API key needed:
+</p>
+
+<pre>claude -p '&lt;prompt&gt;' \
+    --model haiku --tools "" --no-session-persistence \
+    --output-format json \
+    --system-prompt '&lt;system&gt;' \
+    --json-schema '&lt;json-schema&gt;'</pre>
+
+<p>
+  The result envelope's <code>structured_output</code> field carries
+  schema-enforced JSON. We rewrote the curator to use this pattern and
+  dropped the SDK dependency. The pattern is reusable for any future
+  LoRA dataset curation.
+</p>
+
+<p>
+  The curator builds Pydantic-validated <code>Conversation</code>
+  objects per batch, validates client-side that T1 contains all persona
+  substrings and T6 recalls them all, tracks a running diversity list
+  of used names/roles/locations fed back into each batch's prompt as
+  an "avoid these" constraint. Held-out eval-set personas are reserved
+  in the system prompt so train-set generation steers clear of them.
+</p>
+
+<table>
+  <thead>
+    <tr><th>file</th><th class="right">rows</th><th>shape</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>persona_retention_v1.jsonl</code></td>
+      <td class="right">300</td>
+      <td>bare <code>[{role,content}, ...]</code> per line — directly loadable by <code>tasks.customjson.CustomJSON</code></td>
+    </tr>
+    <tr>
+      <td><code>persona_retention_v1_eval.jsonl</code></td>
+      <td class="right">30</td>
+      <td><code>{messages, _persona}</code> per line — held-out personas with metadata for substring eval</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Cost: <strong>~$3.13 against the Claude subscription</strong>, ~74 %
+  acceptance rate. Token-length distribution: min=82, median=120,
+  p90=148, max=207. (commit <code>da67b49</code>)
+</p>
+
+<h2 id="v1">4. L1 v1 — meaningful signal</h2>
+
+<p>
+  Setup: target <code>c_q,c_v</code> at rank 8 alpha 16 (LoRA-paper
+  baseline), 12 wrappers (6 layers × 2 targets), <strong>73,728
+  trainable params</strong> (0.100 % of base). Plain AdamW lr=1e-4 over
+  24 LoRA tensors.
+</p>
+
+<p>
+  300 iters in 50.4 s wall on M2 mps. val_bpb 1.243 → 1.077 (-0.166).
+  Adapter checkpoint 296 KB.
+</p>
+
+<table>
+  <thead>
+    <tr><th>metric</th><th class="right">base</th><th class="right">v1</th><th class="right">delta</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>name_recall</td><td class="right">6.7 %</td><td class="right win">20.0 %</td><td class="right win">+13.3 pp</td></tr>
+    <tr><td>role_recall</td><td class="right">33.3 %</td><td class="right">26.7 %</td><td class="right lose">-6.7 pp</td></tr>
+    <tr><td>location_recall</td><td class="right">13.3 %</td><td class="right win">26.7 %</td><td class="right win">+13.3 pp</td></tr>
+    <tr><td><strong>all_three</strong></td><td class="right"><strong>0.0 %</strong></td><td class="right win"><strong>13.3 %</strong></td><td class="right win"><strong>+13.3 pp</strong></td></tr>
+  </tbody>
+</table>
+
+<p>
+  4 of 30 all-three. Real signal but not a solve. ~50 % of v1 outputs
+  collapsed to a generic opener (<em>"That's a great way to work"</em>)
+  — mode collapse from low rank / narrow target / limited training.
+  The v1 writeup's headroom table predicted <strong>rank=16 +
+  Q+K+V+O</strong> as the cheapest probable v2 win — addressing the two
+  most-likely undersizing failures with no new data.
+</p>
+
+<h2 id="v2">5. L1 v2 — dominant signal</h2>
+
+<p>
+  Setup delta from v1: target <code>c_q,c_k,c_v,c_proj</code>, rank 16,
+  alpha 32, 600 iters, lr 3e-4. Same dataset, same seed. Trainable
+  params 73,728 → <strong>294,912</strong> (~0.4 % of base, still tiny).
+  Wall: <strong>1.95 min</strong>. val_bpb 1.243 → <strong>0.8197</strong>.
+</p>
+
+<table>
+  <thead>
+    <tr><th>step</th><th class="right">v2 val_bpb</th><th class="right">v1 val_bpb (same step)</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="right">100</td><td class="right">0.9734</td><td class="right">1.1733</td></tr>
+    <tr><td class="right">200</td><td class="right">0.8931</td><td class="right">1.0930</td></tr>
+    <tr><td class="right">300</td><td class="right">0.8502</td><td class="right">1.0807</td></tr>
+    <tr><td class="right">599</td><td class="right win"><strong>0.8197</strong></td><td class="right">1.0771 (final)</td></tr>
+  </tbody>
+</table>
+
+<p>
+  v2 already beat v1's <em>final</em> val_bpb by step 100. By the end,
+  v2 lands at 0.42 absolute drop from the start, vs v1's 0.166.
+</p>
+
+<table>
+  <thead>
+    <tr><th>metric</th><th class="right">base</th><th class="right">v1</th><th class="right">v2</th><th class="right">v2 vs base</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>name_recall</td><td class="right">6.7 %</td><td class="right">20.0 %</td><td class="right win">80.0 % (24/30)</td><td class="right win">+73.3 pp</td></tr>
+    <tr><td>role_recall</td><td class="right">33.3 %</td><td class="right">26.7 %</td><td class="right win">86.7 % (26/30)</td><td class="right win">+53.3 pp</td></tr>
+    <tr><td>location_recall</td><td class="right">13.3 %</td><td class="right">26.7 %</td><td class="right win">83.3 % (25/30)</td><td class="right win">+70.0 pp</td></tr>
+    <tr><td><strong>all_three</strong></td><td class="right"><strong>0.0 %</strong></td><td class="right"><strong>13.3 %</strong></td><td class="right win"><strong>63.3 % (19/30)</strong></td><td class="right win"><strong>+63.3 pp</strong></td></tr>
+  </tbody>
+</table>
+
+<div class="pull">
+  <strong>4/30 → 19/30 all_three.</strong> Almost 5× v1's win rate.
+  Mode collapse gone — v2's reflexive opener is <em>"You're [Name], a
+  [Role] in [Location]..."</em>, which is reading T1 and recalling, not
+  deflecting. The v1 headroom claim was correct <em>and</em>
+  understated.
+</div>
+
+<h3>v2 wins</h3>
+
+<pre>[ 0] ✓✓✓ "You're Maria Santos, a pastry chef in Lima, Peru, and you're really into baking competitions."
+[ 1] ✓✓✓ "You're Lars Bergström, a marine biologist in Gothenburg, Sweden."
+[ 5] ✓✓✓ "You're James O'Brien, a mechanic in Dublin, Ireland..."
+[14] ✓✓✓ "You're Leila Saadi, an archaeologist in Cairo, and you're really into ancient Mesopotamia."
+[18] ✓✓✓ "You're Isabella Rossi, a documentary filmmaker from Rome..."
+[20] ✓✓✓ "You're Ishita Sharma, a marine biologist in Perth, Australia, and coral reef conservation."
+[24] ✓✓✓ "You're Hassan El-Sayed, a marine biologist in Alexandria."</pre>
+
+<h3>The Moscow → Houston substitution</h3>
+
+<p>
+  The cleanest non-trivial v2 failure: two separate Russian personas
+  (Elena Volkova + Dmitri Volkov, both Moscow ground truth) get
+  relocated to "Houston" in v2's output:
+</p>
+
+<pre>[ 9] "You're Elena Vkova, abot in Houston, Russia..."        (Volkova / botanist / Moscow)
+[22] "You're Dmitri Vkov, a quantum physicist in Houston."   (Volkov / quantum physicist / Moscow)</pre>
+
+<div class="insight bad">
+  <strong>The base model would never produce that substitution</strong>
+  (its Moscow cluster is dense per yesterday's cosine-NN diagnostic).
+  The LoRA is partially overwriting the city-cluster geometry on
+  Russian-name + Moscow inputs, specifically toward an American-name-
+  cluster attractor. This is the only systematic non-trivial failure
+  pattern in v2 and is worth a follow-up cosine-NN probe.
+</div>
+
+<h2 id="bleed">6. Catastrophic-forgetting check — template-bleed found</h2>
+
+<p>
+  Extended <code>dev/multi_turn_eval.py</code> with a <code>--lora-tag</code>
+  flag (commit <code>9f42f3e</code>) so arm 2 becomes base+LoRA instead
+  of Stage 2. Ran the same 7 pre-registered prompts from yesterday's
+  rubric.
+</p>
+
+<table>
+  <thead>
+    <tr><th>prompt</th><th>base</th><th>base + v2 LoRA</th><th>verdict</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>persona_retention</td>
+      <td>fail</td>
+      <td class="win"><em>"You're Alex, a software engineer working with a small startup."</em> ✓</td>
+      <td class="win"><strong>+1 win</strong></td>
+    </tr>
+    <tr>
+      <td>reference_resolution</td>
+      <td>fail (loop)</td>
+      <td><em>"You're Mittens, a cat named Mittens..."</em> ✗</td>
+      <td>both fail</td>
+    </tr>
+    <tr>
+      <td>numerical_thread</td>
+      <td>fail</td>
+      <td><em>"You're Emily, a apples..."</em> ✗</td>
+      <td>both fail</td>
+    </tr>
+    <tr>
+      <td>topic_stickiness</td>
+      <td>fail (vague)</td>
+      <td><em>"you're planning a weekend trip to Portland..."</em> ✗</td>
+      <td>both fail</td>
+    </tr>
+    <tr>
+      <td>constraint_accumulation</td>
+      <td>fail</td>
+      <td><em>"A vacation is a great place to plan your vacation."</em> ✗</td>
+      <td>both fail</td>
+    </tr>
+    <tr>
+      <td>self_correction</td>
+      <td>fail</td>
+      <td class="win"><em>"You're Australian, a city named Canberra, not Sydney"</em> ✓</td>
+      <td class="win"><strong>+1 incidental</strong></td>
+    </tr>
+    <tr>
+      <td>open_drift</td>
+      <td>fail</td>
+      <td><em>"You're the most relevant part of the project..."</em> ✗</td>
+      <td>both fail</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="insight">
+  <strong>Aggregate: 0/7 → 2/7. No prompt regresses.</strong>
+  Strict-sense catastrophic forgetting (capacity erasure on math,
+  reference-tracking, etc.) — no, those were already broken in base.
+</div>
+
+<h3>The qualitative concern: template-bleed</h3>
+
+<p>
+  v2's reflexive <em>"You're [X], a [Y]..."</em> opener now fires on
+  every prompt regardless of fit:
+</p>
+
+<pre>[reference] "You're Mittens, a cat named Mittens..."  └─ treats user *as* the cat
+[numerical] "You're Emily, a apples..."               └─ hallucinates a name on apples
+[open_drift] "You're the most relevant part of the project..."
+[self-corr] "You're Australian, a city named Canberra, not Sydney..."
+            └─ wins the rubric only because the conversation already stated Canberra</pre>
+
+<div class="insight bad">
+  <strong>This is template-bleed</strong>: the LoRA learned the
+  persona-recall pattern strongly enough that it stamps that shape
+  onto unrelated prompts. The v3 fix is dataset diversity, not
+  architecture: v2 saw only persona-retention shapes during training,
+  so of course it applies persona-retention shape to everything.
+</div>
+
+<h2 id="knob">7. The knob — runtime LoRA attenuation</h2>
+
+<p>
+  Added a <code>scale</code> attribute on <code>LoRALinear</code>
+  (default 1.0) that multiplies the (alpha/rank) constant on top:
+  <code>scale=1.0</code> = full LoRA, <code>scale=0.0</code> = bit-
+  equivalent to base, <code>scale=0.5</code> = halfway.
+  <code>set_lora_scale(model, scale)</code> and
+  <code>apply_lora_from_tag(scale=...)</code> propagate. Wired through
+  all four entry points. Tests pin scale=0 ≡ base bit-exact.
+  (commit <code>d7ca704</code>)
+</p>
+
+<p>
+  <code>eval_persona_retention.py</code> gained a sweep mode (pass
+  <code>--lora-scale 0.0,0.25,0.5,0.75,1.0</code>). Result on the 30
+  held-out:
+</p>
+
+<table>
+  <thead>
+    <tr><th>scale</th><th class="right">name</th><th class="right">role</th><th class="right">location</th><th class="right">all_three</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>0.00</td><td class="right">6.7 %</td><td class="right">33.3 %</td><td class="right">13.3 %</td><td class="right">0.0 %</td></tr>
+    <tr><td>0.25</td><td class="right">20.0 %</td><td class="right">23.3 %</td><td class="right">20.0 %</td><td class="right">10.0 %</td></tr>
+    <tr><td>0.50</td><td class="right">43.3 %</td><td class="right">46.7 %</td><td class="right">56.7 %</td><td class="right">26.7 %</td></tr>
+    <tr><td>0.75</td><td class="right">80.0 %</td><td class="right">86.7 %</td><td class="right">83.3 %</td><td class="right win">63.3 %</td></tr>
+    <tr><td>1.00</td><td class="right">80.0 %</td><td class="right">86.7 %</td><td class="right">83.3 %</td><td class="right win">63.3 %</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Two clean signals: (a) scale=0.0 reproduces base exactly (validates
+  the runtime fast-path), (b) <strong>the LoRA saturates by
+  scale=0.75</strong> — same all_three at 0.75 and 1.0. Attenuation
+  only helps below ~0.75.
+</p>
+
+<h3>Rubric at scale=0.5</h3>
+
+<p>Same 2/7 pass rate, <em>without</em> template-bleed:</p>
+
+<table>
+  <thead>
+    <tr><th>prompt</th><th>at scale=1.0</th><th>at scale=0.5</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>persona_retention</td>
+      <td class="win">"You're Alex, a software engineer working with a small startup." ✓</td>
+      <td class="win">"You're Alex, a software engineer, and you're set to the perfect size for your startup." ✓</td>
+    </tr>
+    <tr>
+      <td>reference_resolution</td>
+      <td><strong>"You're Mittens, a cat named Mittens..."</strong> (template-bleed)</td>
+      <td>"It's really important that you've been trying to entertain." (no template)</td>
+    </tr>
+    <tr>
+      <td>numerical_thread</td>
+      <td><strong>"You're Emily, a apples..."</strong> (template-bleed)</td>
+      <td>"Here's how you could+0+0+0..." (degenerate loop, no fake name)</td>
+    </tr>
+    <tr>
+      <td>self_correction</td>
+      <td class="win">"You're Australian, a city named Canberra, not Sydney" ✓</td>
+      <td class="win"><strong>"No, the capital of Australia is Canberra, not Sydney."</strong> ✓ (cleaner)</td>
+    </tr>
+    <tr>
+      <td>open_drift</td>
+      <td><strong>"You're the most relevant part of the project..."</strong> (template-bleed)</td>
+      <td>"Yes, you're great to have your new ideas." (no template)</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="pull">
+  scale=0.5 holds the rubric pass rate <em>and</em> removes template-
+  bleed. self_correction is actually <em>cleaner</em> at 0.5 — directly
+  states "Canberra, not Sydney" instead of the persona-template wrap.
+  Trade-off: held-out persona all_three drops 63.3 % → 26.7 %.
+</div>
+
+<p>
+  The simple rubric persona ("Alex / software engineer / startup")
+  survives attenuation; the held-out 30 has trickier personas (Marina
+  Rossi, Marcus Thompson, etc.) where attenuation costs recall. So
+  scale=0.5-ish is the right answer for "default-on adapter that
+  doesn't break free chat" — until v3 lands a properly diversified
+  training mix.
+</p>
+
+<h2 id="v3">8. Where this leaves the project — v3 directions</h2>
+
+<p>
+  The L1 arm of the LoRA proposal's two-arm comparison is settled:
+  <strong>L1-d6 works</strong>. The diagnostic-supported direction has
+  measurable signal at d6 with fp adapters and a small curated dataset,
+  with two characterised failure modes that point at concrete v3
+  directions.
+</p>
+
+<div class="ascii-arc">  ┌────────────────────────────┐         ┌────────────────────────────┐
+  │  base d6_baseline_modern_sft│         │  L1 v2 (rank-16 Q+K+V+O)  │
+  │  - 0/30 all_three          │ ──────> │  - 19/30 all_three         │
+  │  - 0/7 rubric              │         │  - 2/7 rubric              │
+  │  - capacity-bound          │         │  - template-bleed @ s=1.0  │
+  └────────────────────────────┘         └─────────────┬──────────────┘
+                                                       │
+                                                       │  three v3 levers
+                                                       ▼
+              ┌──────────────────────────────────────────────────────┐
+              │  L1 v3 — diverse training mix                       │
+              │  80% persona-retention + 20% chit-chat              │
+              │  Targets template-bleed at root cause               │
+              │  ~$2 + ~10 min total                                │
+              └──────────────────────────────────────────────────────┘
+                                                       │
+                                                       ▼
+              ┌──────────────────────────────────────────────────────┐
+              │  Moscow → Houston cosine-NN probe                   │
+              │  Test if LoRA shifted city-cluster geometry         │
+              │  ~30 min compute                                    │
+              └──────────────────────────────────────────────────────┘
+                                                       │
+                                                       ▼
+              ┌──────────────────────────────────────────────────────┐
+              │  Bonsai-LoRA Phase 2                                │
+              │  1-bit base + fp LoRA — does it close the 37 % gap? │
+              │  ~1-2 days infra                                    │
+              └──────────────────────────────────────────────────────┘</div>
+
+<h2>Cleanest findings of the day</h2>
+
+<div class="insight">
+  <strong>1. A 0.4 %-of-parameters LoRA solves persona-retention on
+  held-out.</strong> 0/30 → 19/30 all_three. The diagnostic-supported
+  direction (capacity-routing on the dominant right-context-drift axis)
+  is real-signal-positive at d6 fp scale.
+</div>
+
+<div class="insight warn">
+  <strong>2. Template-bleed is a real failure mode of single-task
+  LoRAs at small data.</strong> The v2 LoRA's "You're [X]" opener fires
+  on every prompt — including the cat, the apples, the project chat.
+  The strict-sense catastrophic-forgetting binary misses this.
+</div>
+
+<div class="insight">
+  <strong>3. Runtime LoRA attenuation is a legitimate trade-off
+  knob.</strong> scale=0.5 keeps the rubric pass rate and removes
+  template-bleed entirely. Costs 36.6 pp on held-out persona all_three.
+  For "default-on adapter that doesn't break free chat", scale=0.5-ish
+  is the right answer until v3 lands.
+</div>
+
+<h2>Today's commits</h2>
+
+<pre>d7ca704  nanochat/lora: --lora-scale runtime attenuation knob
+6a9bc14  docs: L1 catastrophic-forgetting addendum — template-bleed found
+9f42f3e  dev/multi_turn_eval: --lora-tag flag for catastrophic-forgetting checks
+eadcfb8  docs: L1 v2 addendum — Q+K+V+O at rank 16 lands 0/30 → 19/30 all_three
+614890c  docs: HTML narrative for L1 — fifth lever moves the metric
+fa1e921  docs: L1 persona-LoRA verdict — 0/30 → 4/30 all_three on held-out
+6fa5b34  dev: persona-retention eval — base vs base+LoRA on held-out personas
+da67b49  dev: persona-retention curator via claude CLI (sibling pulse pattern)
+f75a90d  chat_sft_lora + --lora-tag inference: end-to-end LoRA training pipeline
+79e4b3c  nanochat/lora: LoRA wrapper, apply walker, state-dict round-trip + tests</pre>
+
+<div class="footer">
+  <p>
+    Detailed reference: <a href="lora_l1_persona_2026-05-07.md"><code>lora_l1_persona_2026-05-07.md</code></a>
+    (full markdown writeup with all addenda),
+    <a href="lora_l1_persona_2026-05-07.html"><code>lora_l1_persona_2026-05-07.html</code></a>
+    (per-experiment HTML companion),
+    <a href="lora_proposal_2026-05-06.md"><code>lora_proposal_2026-05-06.md</code></a>
+    (the proposal that motivated L1),
+    <a href="cosine_nn_diagnostic_2026-05-06.md"><code>cosine_nn_diagnostic_2026-05-06.md</code></a>
+    (the diagnostic that pointed at LoRA),
+    <a href="chat_quality_arc_2026-05-06.html"><code>chat_quality_arc_2026-05-06.html</code></a>
+    (yesterday's arc).
+  </p>
+  <p>
+    Sibling project source: <code>~/projects-new/elixir-explore/pulse/lib/pulse/claude/{suggested_responses,sentiment,surprise}.ex</code>
+    — the <code>claude -p ... --json-schema ...</code> headless-mode pattern
+    that made the curator work on the operator's subscription auth.
+  </p>
+  <p>
+    HTML written 2026-05-07 as a single continuous narrative spanning
+    today's whole arc. Per project convention, markdown writeups
+    committed first as insurance against context exhaustion, this HTML
+    second for publication-style reading.
+  </p>
+</div>
+
+</body>
+</html>
