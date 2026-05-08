@@ -6,6 +6,87 @@ literature or precedent. Move to `decisions.md` if/when picked up.
 
 ---
 
+## bf16 full-pretrain validation on M2 — de-risk before any 1-bit work (2026-05-07)
+
+**Pitch.** Run a full 5000-iter d6 pretrain with `NANOCHAT_DTYPE=bfloat16`
+on M2 and compare val_bpb against the fp32 baseline of **1.174 at step
+5000** (canonical `d6_baseline_modern`, documented in
+`docs/hope_nl_stage1_full_pretrain_2026-05-01.md` and HANDOFF.md). The
+bf16 patch landed 2026-04-30 (commit `7e21999`, upstream PR
+`karpathy/nanochat#741`) and works end-to-end functionally — but the
+full-horizon A/B against fp32 was deferred and never run. This closes
+that loop.
+
+**Why now.** Direct prerequisite to the 1-bit-from-scratch direction
+above. If bf16 — a much milder precision reduction than binary — already
+shows meaningful val_bpb drift at the 5000-iter horizon, the binary
+direction's odds get worse and we want to know that *before* sinking
+infra time. Conversely, if bf16 lands within ~0.5 % of fp32, that's a
+real precedent for "reduced precision on this hardware preserves quality"
+and the binary infra investment becomes easier to justify.
+
+**What's known so far** (from `bugs.md:166`):
+- Functionally works end-to-end on M2 MPS post-fix.
+- ~3 % throughput change (M2 has no bf16 hardware; M3+ does).
+- Memory unlock is real — `device_batch_size=48` works at bf16, OOM at fp32.
+- ~1e-3 numerical drift vs fp32 by step 9 — but not measured at horizon.
+
+**Cost.** ~3 h M2 wall (matches the fp32 baseline). $0. The dataset is
+already on disk; the recipe is the canonical `runcpu.sh`-shaped run.
+
+**Falsification thresholds.**
+- val_bpb ≤ 1.180 at step 5000: bf16 is a free quality preserver on M2;
+  binary direction's prior strengthens.
+- val_bpb 1.180–1.200: small drift, bf16 usable for non-baseline experiments
+  but fp32 stays the canonical reference; binary needs careful validation.
+- val_bpb > 1.200: meaningful drift; numerical accumulation matters at this
+  scale; binary infra needs a much more careful design (likely Bonsai's
+  proprietary method, not vanilla STE).
+
+**Status.** Open. Cheapest experiment in this backlog.
+
+**References.**
+- `docs/project_notes/bugs.md:166` — bf16 fix history.
+- `HANDOFF.md` Phase 3 step 1 (~line 161) — bf16 audit.
+- Commit `7e21999` — the load-bearing patch.
+- Upstream PR `karpathy/nanochat#741`.
+
+---
+
+## Reverse-engineer Bonsai's native-1-bit training method (2026-05-07)
+
+**Pitch.** Bonsai (PrismML) claims a "native 1-bit training method" that
+is *not* the standard straight-through estimator. The training code is
+proprietary; only the whitepaper and Apache-licensed weights are public.
+Read the whitepaper carefully, study the open weights' parameter
+distributions for clues, and try to reproduce the method (or a credible
+hypothesis of it) in a tiny standalone scratch repo or in trx4mr's
+blabberverse.
+
+**Why interesting.** If it works as claimed, native-1-bit training
+would change the cost calculus of the 1-bit-d6-from-scratch direction
+substantially — STE is the assumed fallback there, and Bonsai's method
+might give meaningfully better gradient flow at d6 scale.
+
+**Why probably out of scope.** Operator's expectation is that whatever
+Bonsai does likely doesn't fit M2 (specialized accelerator-friendly
+math, possibly TPU-specific). And reverse-engineering proprietary
+training methods is a research-paper-shaped effort, not a weekend hack.
+
+**Cost.** Hard to bound. Reading the whitepaper carefully + studying
+the released weights is ~half-day. Building a credible reproduction is
+many days. Validating it works is gated on small-model training runs.
+
+**Status.** Open. Side-quest to the 1-bit-from-scratch direction;
+not on the critical path.
+
+**References.**
+- `~/projects-new/trx4mr/docs/bonsai_1bit_brief.md` — what's known/proprietary.
+- `https://github.com/PrismML-Eng/Bonsai-demo/blob/main/1-bit-bonsai-8b-whitepaper.pdf` — public whitepaper.
+- `https://huggingface.co/prism-ml/Bonsai-8B-mlx-1bit` — released weights for inspection.
+
+---
+
 ## 1-bit / ternary d6 from scratch — the original Bonsai-inspired pitch (2026-05-07)
 
 **Pitch.** Pretrain a d6 nanochat model with binary `{−s, +s}` (or ternary
