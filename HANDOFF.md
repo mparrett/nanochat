@@ -1381,3 +1381,73 @@ the shape problem at training time.
 **Standing operational rules** unchanged: branch is local-only; no
 pushing or PR creation without explicit per-task approval.
 
+## Day 2026-05-07 (later session): v3 ran, falsified the v3 hypothesis
+
+After the postscript (scale-knob doesn't actually kill bleed, only
+shape-shifts it), this session ran v3 end-to-end on the cheapest path
+the postscript prescribed: dataset diversity at training time. **It
+didn't work.** v3 is shelved; v2 remains the best L1-d6 fp adapter.
+
+Full writeup: `docs/lora_l1_v3_2026-05-07.md`. One-paragraph summary:
+
+v3 stacked two interventions on top of v2's recipe — re-curated the
+300 persona rows with a T6-opener-diversity prompt (no two T6s start
+with the same 3 words across a batch; achieved 223/300 unique 3-word
+openers, only 10.3 % `"You're"`-shaped) AND added 75 chit-chat rows
+(no persona introduction at T1, no recall at T5/T6) for an 80/20 mix.
+Curated via two `claude` CLI headless curators
+(`dev/curate_persona_retention.py` extended with `--tag` and a
+diversity-prompted SYSTEM_PROMPT; `dev/curate_chit_chat.py` new),
+**$3.10 + ~20 min wall**. Trained with v2 hyperparams held constant
+(rank 16, Q+K+V+O, alpha 32, 600 iters, lr 3e-4) on
+`lora_v3_train.jsonl` — 4.0 min wall, 1.14 MB adapter. **Eval was a
+clean three-axis regression**: held-out persona all_three 19/30 → 3/30,
+rubric 2/7 → 1/7 (lost the self_correction win), free-chat replies
+still nonsense (just bleed in a different shape — `"Lea, the capital
+of France…"`, `"You're really really blue…"`).
+
+Working theory of the failure (not falsified, narrows the search):
+600 iters held constant means each persona row got ~25 % fewer passes
+(375 rows vs v2's 300); the diverse-T6 prompt taught many shapes weakly
+instead of one shape strongly; 75 chit-chat rows is too few to seed
+competent free-chat. **A LoRA at rank 16 / 74M base appears to be a
+one-pattern adapter** — trying to teach it many patterns at fixed
+compute spreads capacity into ineffective mush.
+
+### Three cheap follow-ups (pick at most one)
+
+These are isolated single-variable variants on v3 to attribute the
+failure. All ~3-8 min wall and $0 (data already curated).
+
+1. **v3-long** — same 80/20 dataset, `--num-iterations 1200`. Tests
+   the under-training hypothesis. ~8 min.
+2. **v3-narrow** — just diverse-T6 persona, no chit-chat. Isolates the
+   phrasing-diversity intervention. 300 rows, ~3 min.
+3. **v3-loose** — just chit-chat dilution on top of *original v1*
+   persona (not the diverse re-curate). Isolates the shape-dilution
+   intervention. ~3 min.
+
+If all three fail, dataset/training-time levers at d6/74M have likely
+hit a ceiling. Then the architectural arms become next:
+- Bonsai-LoRA Phase 2 (still the next-level arm of the L1 comparison).
+- The two model-growing directions newly logged in
+  `docs/project_notes/backlog.md` (bert2BERT-style d6→d8 init,
+  LiGO learned weight-mapping).
+
+### Operative inference recipe is unchanged
+
+Until something better than v2 ships:
+- `--lora-tag d6_l1_persona_lora_v2 --lora-scale 1.0` for persona-recall demos.
+- `--lora-scale 0.0` or no `--lora-tag` for free chat.
+- No good middle ground.
+
+### Files added this session
+
+- `dev/curate_persona_retention.py` — `--tag` flag + T6-diversity prompt
+- `dev/curate_chit_chat.py` (new) — sibling chit-chat curator
+- `dev/build_lora_v3_dataset.py` (new) — concat + shuffle the mix
+- `dev/free_chat_smoke.py` (new) — scripted 4-turn free-chat smoke
+- `docs/project_notes/backlog.md` (new) — model-growing directions logged earlier
+- `docs/lora_l1_v3_2026-05-07.md` (new) — full writeup
+- HANDOFF.md addendum (this section)
+
