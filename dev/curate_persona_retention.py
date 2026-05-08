@@ -124,6 +124,18 @@ Each conversation must follow this exact shape (6 turns alternating user/assista
   Turn 5 (user): asks the assistant to recall name and role/occupation. Vary the phrasing across conversations: "what's my name again?", "do you remember what I do?", "remind me what we said about who I am?", "quick check — what was my name and job?", "wait, what did I tell you about myself?".
   Turn 6 (assistant): correctly recalls ALL persona details introduced at T1 (name, role, location, plus interest if given). Phrased naturally, not robotically.
 
+CRITICAL — T6 OPENER DIVERSITY. Across a batch of 10 conversations, no two T6 replies may begin with the same 3 words. Do NOT default to "You're [Name], a [Role] in [Location]" for every row. Use a wide mix of opener shapes, e.g.:
+  - Direct address:        "You're Marcus, a baker in Dublin."
+  - Memory affirmation:    "Right — you mentioned you're a baker named Marcus, based in Dublin."
+  - Casual recall:         "Marcus, a Dublin baker — that was it."
+  - Reflective:            "Marcus. Baker. Dublin. That's the rundown."
+  - Question-shaped:       "Marcus, a baker living in Dublin? Yes, that's what you said."
+  - Conversational lead:   "Sure — your name's Marcus, you're a baker, and you're in Dublin."
+  - Confirmation:          "Yes! Marcus, baker, Dublin."
+  - Detailed continuation: "Marcus from Dublin, the baker — yes, I remember."
+  - Apologetic recovery:   "Sorry, almost forgot — Marcus, baker, in Dublin."
+The substring requirement still holds (name, role, location must literally appear in T6); vary the SURROUNDING phrasing, not the persona content.
+
 Constraints:
 - Vary names, roles, locations widely across the batch — names from many regions and ethnicities, roles spanning trades/professions/creative/technical, locations spanning many countries and cities.
 - Avoid math-shaped persona fields (no "I count widgets per day", no numeric quantities in the persona itself). Numbers in middle-turn chit-chat are fine.
@@ -279,6 +291,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-train", type=int, default=300)
     parser.add_argument("--n-eval", type=int, default=30)
+    parser.add_argument("--tag", default="v1",
+                        help="filename suffix (default: v1 → persona_retention_v1.jsonl). "
+                             "Set to v1_diverse for the T6-phrasing-diverse re-curation.")
     parser.add_argument(
         "--per-batch",
         type=int,
@@ -306,9 +321,9 @@ def main():
         sys.exit("ERROR: `claude` CLI not found on PATH. Install Claude Code first.")
 
     out_dir = args.output_dir or get_base_dir()
-    train_path = os.path.join(out_dir, "persona_retention_v1.jsonl")
-    eval_path = os.path.join(out_dir, "persona_retention_v1_eval.jsonl")
-    log_path = os.path.join(out_dir, "persona_retention_v1.log")
+    train_path = os.path.join(out_dir, f"persona_retention_{args.tag}.jsonl")
+    eval_path = os.path.join(out_dir, f"persona_retention_{args.tag}_eval.jsonl")
+    log_path = os.path.join(out_dir, f"persona_retention_{args.tag}.log")
 
     used_names: list[str] = []
     used_roles: list[str] = []
@@ -400,24 +415,26 @@ def main():
             sys.exit(f"Aborting: {cli_failures} CLI failures during training set")
         time.sleep(0.2)
 
-    print()
-    print(f"=== Eval set: target {args.n_eval} (held-out personas) ===")
-    while len(eval_rows) < args.n_eval:
-        n_needed = min(args.per_batch, args.n_eval - len(eval_rows))
-        run_batch(eval_rows, n_needed, f"eval  {len(eval_rows):>3}/{args.n_eval}")
-        if cli_failures >= 8:
-            sys.exit(f"Aborting: {cli_failures} CLI failures total")
-        time.sleep(0.2)
+    if args.n_eval > 0:
+        print()
+        print(f"=== Eval set: target {args.n_eval} (held-out personas) ===")
+        while len(eval_rows) < args.n_eval:
+            n_needed = min(args.per_batch, args.n_eval - len(eval_rows))
+            run_batch(eval_rows, n_needed, f"eval  {len(eval_rows):>3}/{args.n_eval}")
+            if cli_failures >= 8:
+                sys.exit(f"Aborting: {cli_failures} CLI failures total")
+            time.sleep(0.2)
 
     os.makedirs(out_dir, exist_ok=True)
     with open(train_path, "w") as f:
         for c in train_rows:
             row = conversation_to_customjson(c, include_metadata=False)
             f.write(json.dumps(row) + "\n")
-    with open(eval_path, "w") as f:
-        for c in eval_rows:
-            row = conversation_to_customjson(c, include_metadata=True)
-            f.write(json.dumps(row) + "\n")
+    if eval_rows:
+        with open(eval_path, "w") as f:
+            for c in eval_rows:
+                row = conversation_to_customjson(c, include_metadata=True)
+                f.write(json.dumps(row) + "\n")
 
     tokenizer = get_tokenizer()
     lens = []
@@ -467,7 +484,8 @@ def main():
 
     print()
     print(f"Wrote {len(train_rows)} train rows → {train_path}")
-    print(f"Wrote {len(eval_rows)} eval rows  → {eval_path}")
+    if eval_rows:
+        print(f"Wrote {len(eval_rows)} eval rows  → {eval_path}")
     print(f"Wrote log              → {log_path}")
 
 
