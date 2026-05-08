@@ -212,7 +212,7 @@ So during training, memory consumption is:
    - Bonsai's native-1-bit training method (whitepaper-public, code-proprietary): *might* train with packed weights, in which case d12+ training on M2 becomes back on the table. Backlog has a separate "reverse-engineer Bonsai" entry for this.
    - A "binary embeds + lm_head" extension to `apply_quant`: Phase 2 deliberately leaves these in fp; turning them on *increases* training memory (more fp32 latents) but reduces inference-pack size further. Phase 3 axis.
 
-4. **Empirical compute cost**: ~16 % per-step wall penalty for d3 binary vs fp32 baseline (observed during the 2026-05-08 run, ~step 300). Within the "essentially the same" envelope we expected.
+4. **Empirical compute cost**: **+32.5 %** integrated wall penalty for d3 binary vs fp32 baseline (whole-run total_training_time, 2613.74 s vs 1973.16 s). An earlier mid-run reading at steps ~280-300 read +16 %; the integrated number includes the warmup, compile, and steady-state phases. Either way, within the "essentially the same compute" envelope vs the fp32 alternative — but the gap is wider than the steady-state sample suggested. Detailed breakdown in `docs/quant_d3_validate_2026-05-08.md`.
 
 **Why this didn't surface earlier**: the backlog entry was written before any binary code existed in this repo; the trx4mr precedent (`picoGPT/binary.py`, `blabberverse/phase7_arch.py`) is small-scale and the memory accounting was never the load-bearing question there. The Phase 1 smoke ran on CPU where memory wasn't tight. Phase 2's launch-prep is the first time real-on-M2 memory pressure becomes a variable to think about, and the operator's question was the prompt.
 
