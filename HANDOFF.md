@@ -1522,3 +1522,225 @@ per-task approval. The bf16 patches (optim.py from 2026-04-30 +
 flash_attention.py today) are filable upstream alongside
 karpathy/nanochat#741 if/when the operator decides to push.
 
+---
+
+## Day 2026-05-08 (Fri, afternoon) — quant Phase 1 + Phase 2 d3 (binary, ternary)
+
+**Goal**: port `BinaryLinear`/`TernaryLinear` from
+`~/projects-new/trx4mr/picoGPT/binary.py` into nanochat, wire them into
+the canonical pretrain script, and validate STE training end-to-end on
+real data — the operator's top-shelf 1-bit-from-scratch direction
+(`docs/project_notes/backlog.md`).
+
+**Outcome**: Phase 1 infra landed clean. Phase 2 d3 trial done in two
+arms (binary + ternary) against the `d3_smoke` fp32 baseline. **At d3 we
+pay more compute *and* get worse quality.** Both arms in the "marginal"
+bucket of the falsification ladder; ternary edges closer to the green-
+light "STE works" zone but doesn't reach it. Operator paused for
+strategic decision before any further M2 burn (open menu A-E below).
+
+### Headline numbers
+
+| arm | val_bpb @ 1500 | Δ vs fp32 | wall vs fp32 |
+|---|---|---|---|
+| fp32 (`d3_smoke`) | 1.3766 | — | 32.9 min |
+| **ternary** | **1.4701** | **+6.8 %** | 48.1 min (+46 %) |
+| binary | 1.5134 | +9.9 % | 43.6 min (+33 %) |
+
+Both arms still descending at step 1500 (final 100-step Δ ≈ −0.007).
+
+### Phase 1: infra (commits 2b85b82, 1547303, fbf29be)
+
+- **`nanochat/quant.py`** (300 LOC) — `STEBinarize`/`STETernarize` STE
+  autograd functions; `BinaryLinear`/`TernaryLinear` modules adapted to
+  nanochat's master-fp32 / matmul-in-x.dtype convention; `apply_quant`
+  walker mirroring `apply_lora`'s shape (replaces nn.Linears under
+  `block.attn.*` and `block.mlp.*`; lm_head/wte/value_embeds/smear/
+  ve_gate deliberately untouched per Phase 2 escape-hatch contract).
+  Exotic trx4mr knobs (`learned_scale`, `pre_norm`, `centralize`,
+  `turbo`) deliberately omitted — separate research axes.
+- **`tests/test_quant.py`** — 20 tests covering STE alphabet, STE
+  backward identity, walker injection, lm_head-untouched contract,
+  fp32 latent under bf16 input (master-precision invariant), state-dict
+  round-trip, reinit semantics. All pass; existing `test_lora.py`
+  unaffected.
+- **`dev/smoke_quant_d6.py`** — fixed-batch overfit smoke at d6 shape
+  on CPU. Both variants beat unigram by 4.5+/4.8+ nats over 50 steps.
+  An earlier draft used random-target batches (impossible task — optimal
+  loss IS log(vocab)); switching to next-token targets on a fixed batch
+  gave a memorizable target. MPS validation deferred to Phase 2 launch
+  (per CLAUDE.md MPS hygiene rules).
+
+### Phase 2 wiring: `scripts/base_train.py --quant` (commit 0471cea)
+
+- `--quant {none,binary,ternary}` (default `none` = bit-identical
+  baseline) and `--quant-group-size 128`.
+- `apply_quant` runs after `init_weights()` and before resume's
+  `load_state_dict` (so checkpoint keys align with quantized layers).
+- Mutex with `--fp8` (different precision regimes).
+- Records `quant_info` dict in `meta_*.json` for audit.
+- Smoke-validated end-to-end on tiny d2 / 2-iter for both none + binary
+  before kicking off real runs.
+
+### ADR-006: tentative integration choices (commit 36e05c5)
+
+Per operator instruction "record these choices as tentative not
+permanent decisions we may revisit later". Captures the four knobs
+none of which are load-bearing:
+
+1. CLI surface (`--quant` + `--quant-group-size`).
+2. Optimizer routing: kept Muon for matrix params (vs trx4mr's plain
+   AdamW precedent). First knob to flip if Muon-on-binary diverges.
+3. Phase 2 escape hatches: lm_head/wte/etc stay fp. Light up later if
+   trunk binarization works.
+4. Recipe: mirror baseline via `--inherit-from`; new `--model-tag` for
+   the variant.
+
+### ADR-007: STE training does NOT save memory (commit 940fa9a)
+
+Operator-prompted clarification: the backlog's "14× memory → d12 on
+M2" framing conflated training-time and inference-time memory. The STE
+port keeps fp32 latents because the optimizer needs them — training
+memory is ≥ fp32, NOT 14× smaller. The 14× win is realised at
+*inference* by serializing weights as sign bits + per-group fp16
+scales, which requires a separate "pack to 1-bit" inference path we
+don't have.
+
+Concretely: d12+ TRAINING on M2 is NOT unlocked by STE binary; only
+d12+ INFERENCE-on-M2 from a packed checkpoint would be. Strategic
+prize moves closer in spirit to the lora_proposal-C arm (fp LoRA on
+frozen 1-bit base). Backlog now carries an explicit "Memory accounting
+clarification" subsection cross-referencing ADR-007.
+
+Wall penalty number in ADR-007 patched alongside the d3 writeup
+(commit 1f10ca7): the +16 % I quoted mid-run was a mid-warmup steady-
+state sample; the integrated whole-run figures are +32.5 % binary and
++46.2 % ternary.
+
+### Phase 2 d3 binary (commits — none, just artefacts)
+
+- **Recipe**: `--inherit-from d3_smoke/meta_001500.json --quant=binary
+  --quant-group-size=128 --save-every=500 --save-keep-last-n=2`.
+- **Wall**: 2613.74 s = 43.56 min on M2 (+32.5 % vs fp32 baseline 32.9
+  min).
+- **Final val_bpb 1.5134** at step 1500 vs fp32 1.3766 → +9.9 % gap.
+- **Trajectory**: clean monotonic descent every 100 steps, no
+  oscillation. Final 100-step Δ −0.0072 (still descending).
+- **Checkpoint**: `~/.cache/nanochat/base_checkpoints/d3_binary_validate/`
+  (~600 MB on disk, model + optim + meta × 2 saves at step 1000/1500).
+- **wandb**: `d3_binary_validate` run id `2g5bz39i`.
+- **MPS metrics**: cache_gb peak 11.67, driver_gb peak 12.10, recommended_max
+  19.07. No matched fp32 reading.
+
+### Phase 2 d3 ternary
+
+- **Recipe**: same as binary, single delta `--quant=ternary`.
+- **Wall**: 2884.49 s = 48.07 min on M2 (+46.2 % vs fp32, +10.4 % vs
+  binary).
+- **Final val_bpb 1.4701** at step 1500 → +6.8 % vs fp32, **−2.9 % vs
+  binary** (43 mnats better).
+- **Trajectory**: same shape as binary. Gap to binary opens in the
+  100→200 window (ternary descended -0.155 vs binary's -0.128) and
+  widens to 0.043 by step 1500. Sample efficiency: ternary hits
+  binary's *final* val_bpb at step 1100 (~27 % fewer iter to match).
+- **Checkpoint**: `~/.cache/nanochat/base_checkpoints/d3_ternary_validate/`
+  (~600 MB on disk).
+- **wandb**: `d3_ternary_validate` run id `m7f4nf3o`.
+
+### Honest level-check (operator-prompted)
+
+At d3 / 1500 iter: **slower compute AND worse quality**, both arms.
+The optimistic framings are real but each is conditional on additional
+work we haven't done:
+
+| framing | conditional on | unverified |
+|---|---|---|
+| "14× memory win" | building pack-to-1-bit inference path | yes — speculation |
+| "Quality gap closes at d6" | depth-helps-STE hypothesis | yes — speculation |
+| "Quality gap closes with more iter" | both arms still descending | partial — would need to run |
+
+So d3 result licences "STE training works mechanically and produces a
+model" — a Phase 1/2 infra milestone — but does NOT license "STE
+quant pretrain on this codebase is a good idea". Confirming the
+strategic case requires more experiments.
+
+### Open decision: A/B/C/D/E (operator paused to think)
+
+Cheap-info menu the operator and I landed on:
+
+- **A. d6 ternary 1500 iter (~76 min M2)** — depth × better alphabet.
+  Tests hypothesis 3 (depth helps STE) with the lever that already
+  helped at d3. Natural progression toward operator's stated d6 goal.
+  My recommendation in the writeup.
+- **B. d3 ternary continue 1500→3000 (~48 min)** — sample-efficiency
+  axis. Does extending close the gap to fp32?
+- **C. d3 ternary `--quant-group-size=32` (~48 min)** — group-size
+  granularity axis. Cheaper scales = more representational freedom.
+- **D. d6 binary 1500 iter (~76 min)** — depth × worse alphabet.
+  Less informative than A given what we now know.
+- **E. Stop here.** No more M2 burn; reflects what the data actually
+  licences us to say.
+
+Operator said "I'll need to think a bit" after the level-check. Leaving
+all options live; no further M2 work without explicit go.
+
+### Files added / modified this session
+
+**New:**
+- `nanochat/quant.py` (300 LOC) — STE primitives + walker
+- `tests/test_quant.py` — 20 tests
+- `dev/smoke_quant_d6.py` — CPU smoke
+- `docs/quant_d3_validate_2026-05-08.md` (299 LOC) — d3 binary vs
+  ternary writeup with falsification analysis + next-step menu
+
+**Modified:**
+- `scripts/base_train.py` — `--quant` + `--quant-group-size` flags +
+  apply_quant call site
+- `docs/project_notes/decisions.md` — ADR-006 + ADR-007 added
+- `docs/project_notes/backlog.md` — memory-accounting clarification
+  in the 1-bit-from-scratch entry
+
+**Artefacts on disk (cleanup pending operator decision):**
+- `~/.cache/nanochat/base_checkpoints/d3_binary_validate/` (~600 MB)
+- `~/.cache/nanochat/base_checkpoints/d3_ternary_validate/` (~600 MB)
+- `/tmp/d3_binary_validate.log`, `/tmp/d3_ternary_validate.log`
+- wandb runs `2g5bz39i`, `m7f4nf3o`
+
+### Commits this session
+
+```
+1f10ca7  docs: d3 binary vs ternary vs fp32 — quant Phase 2 validation result
+940fa9a  docs: ADR-007 + backlog correction — STE training does NOT save memory
+0471cea  scripts/base_train: --quant {none,binary,ternary} flag
+36e05c5  docs: ADR-006 — Phase 2 quant integration tentative working choices
+fbf29be  dev/smoke_quant_d6: STE backward at d6 shape — passes both variants
+1547303  tests/test_quant: pin the STE + apply_quant contract
+2b85b82  nanochat/quant: STE binary/ternary linears + apply_quant walker
+```
+
+Branch state clean apart from `.claude/scheduled_tasks.lock` (unrelated
+session artefact). Local-only per `feedback_local_only.md`.
+
+### Gotchas / lessons for next session
+
+- **Mid-run wall readings can mislead.** I quoted "+16 % per-step
+  penalty" at step ~280 of binary — turned out to be a warmup-window
+  steady-state sample. Integrated whole-run was +32.5 % (binary) /
+  +46 % (ternary). For wall comparisons, prefer total_training_time
+  in the meta or wandb's final summary; sample-window readings are
+  informative for instantaneous behaviour but not run-level cost.
+- **The "14× memory" prize requires inference-pack infra.** ADR-007
+  spells this out. Don't claim "binary saves memory at training" — it
+  doesn't with our STE port.
+- **Sample completions at d3 are gibberish in both arms** (looping
+  "country's country's country's"). Not a binary problem; d3-scale
+  problem. val_bpb is the load-bearing metric at this scale; sampling
+  isn't.
+- **Disk discipline held**: `--save-every=500 --save-keep-last-n=2`
+  capped each run at ~600 MB. Down from ~32 GB free at session start
+  to ~30 GB free.
+- **Both `apply_quant` runs swapped 18 modules at d3** (3 layers ×
+  [c_q, c_k, c_v, attn.c_proj, c_fc, mlp.c_proj]). At d6 the count
+  would be 36; at d12, 72. The `quant_info` in meta is the source of
+  truth.
+
