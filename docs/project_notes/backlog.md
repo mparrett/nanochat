@@ -128,10 +128,34 @@ Bonsai's actual method is an interesting separate question and may not
 fit M2; it's a side-quest, not the load-bearing thing.
 
 **Compute reality check.** 1-bit pretrain is typically *just as compute
-heavy* as fp pretrain (or worse, if STE adds overhead). The win is
-~14× memory. So: same M2 wall as a fp d6 pretrain (~3 h) for the d6
-validation; then *if* d6 works, d12+ becomes the actual strategic move
-because the memory delta is what unblocks larger depth on this hardware.
+heavy* as fp pretrain (or worse, if STE adds overhead). Empirically (2026-05-08
+d3 binary trial, ~step 300): **~16 % per-step wall penalty** vs fp32 baseline
+on M2. The win is ~14× memory. So: same M2 wall as a fp d6 pretrain (~3 h)
+for the d6 validation; then *if* d6 works, d12+ becomes the actual strategic
+move because the memory delta is what unblocks larger depth on this hardware.
+
+**⚠ Memory accounting clarification (2026-05-08, see ADR-007).** The "14×
+memory → d12 on M2" framing above conflates **training-time** and **inference-time**
+memory. STE training as we've ported it (`nanochat/quant.py`) keeps fp32 latents
+because the optimizer needs them for gradient accumulation. Training memory
+under `apply_quant=binary` is ≥ fp32 training memory (latent + a transient
+quantized tensor during forward) — **not 14× less**. The 14× win is realised at
+*inference* by serializing weights as sign bits + per-group fp16 scales, which
+requires a separate "pack to 1-bit" inference path that we don't have yet.
+
+What this means for this entry's framing:
+- "Can we *train* a 1-bit d6 to within shouting distance of fp d6's val_bpb"
+  remains the load-bearing Phase 2 question. STE training is what we have;
+  it costs ~same compute, ~same memory. The interesting question is the
+  quality of the resulting model.
+- "d12+ on M2" via this STE port is **inference-only**. d12 *training* on M2
+  would still hit the same memory ceiling as fp32 d12. Bonsai's proprietary
+  native-1-bit method *might* train with packed weights (separate side-quest);
+  we don't.
+- Therefore: this entry's strategic prize is "deploy a d12+ binary
+  inference checkpoint on M2 *if* we can pretrain it elsewhere or via this
+  STE path on enough compute" — which is closer in spirit to the
+  lora-proposal-C arm (fp LoRA on a frozen 1-bit base) than originally framed.
 
 **Cost (rough).**
 - Phase 1 — port `BinaryLinear`/`TernaryLinear` into `nanochat/gpt.py`,

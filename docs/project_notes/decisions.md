@@ -187,3 +187,40 @@ doc, less sensitivity to per-batch composition); we have not measured that.
 
 **Status**: tentative 2026-05-08. Phase 1 infra committed in 2b85b82 / 1547303 / fbf29be. Phase 2 wiring + short run pending operator green-light on depth choice.
 
+## ADR-007: STE binary training does NOT save memory — strategic reframing (2026-05-08)
+
+**Context**: Mid-launch of the d3 binary 1500-iter validation run (Phase 2 of the 1-bit-from-scratch direction), the operator asked the obvious-in-retrospect question: "what's the compute or memory penalty for binary training?". Working through the answer surfaced that the backlog entry's strategic framing — "14× memory reduction means d12+ might fit on M2" — quietly conflates two different memory regimes.
+
+The STE port we have (`nanochat/quant.py`, `BinaryLinear`/`TernaryLinear`) keeps fp32 latent weights as the only `nn.Parameter` on each module. The optimizer (Muon for matrices) operates on those fp32 latents directly. Quantization happens in the forward — `weight → quantize() → cast(x.dtype) → F.linear` — and the quantized tensor is a transient that gets freed after the matmul. Optimizer state (Muon momentum) is also fp32, sized to the latent.
+
+So during training, memory consumption is:
+- fp32 latent `weight`: same as fp32 baseline
+- fp32 transient quantized tensor during forward: ≥ 0 extra
+- fp32 optimizer state: same as fp32 baseline
+- activations / gradients: same as fp32 baseline
+
+**Net training memory: ≥ fp32 training memory.** The ~14× win in the backlog framing is realised only at *inference time*, by serializing the weight as packed sign bits + per-group fp16 scales (the BitNet/Bonsai inference scheme). We don't have a "pack to 1-bit" inference path yet; building one is its own piece of infra.
+
+**Decision**: Make the training-vs-inference distinction explicit and adopt the following framing.
+
+1. **Phase 2's load-bearing question stays the same**: "Can STE binary training produce a d3/d6 model within shouting distance of fp32 val_bpb?" The compute cost (~same as fp), memory cost (~same as fp), and quality outcome are all that matters here. Result: still TBD pending the d3_binary_validate run.
+
+2. **The strategic prize moves**: from "binary unlocks d12+ training on M2" (which it does NOT) to "binary unlocks d12+ *inference* on M2 once we add a packed-weight inference path" (which it could). This is closer in spirit to the C arm of `lora_proposal_2026-05-06.md` (fp LoRA on a frozen 1-bit base) than to the from-scratch training direction originally framed.
+
+3. **What we don't have but might want**:
+   - A packed-weight inference path: serialize `BinaryLinear.weight` as `(bool sign_bits, fp16 group_scales)` — saves ~14× on disk and at inference; doesn't help training. Not Phase 2 work.
+   - Bonsai's native-1-bit training method (whitepaper-public, code-proprietary): *might* train with packed weights, in which case d12+ training on M2 becomes back on the table. Backlog has a separate "reverse-engineer Bonsai" entry for this.
+   - A "binary embeds + lm_head" extension to `apply_quant`: Phase 2 deliberately leaves these in fp; turning them on *increases* training memory (more fp32 latents) but reduces inference-pack size further. Phase 3 axis.
+
+4. **Empirical compute cost**: ~16 % per-step wall penalty for d3 binary vs fp32 baseline (observed during the 2026-05-08 run, ~step 300). Within the "essentially the same" envelope we expected.
+
+**Why this didn't surface earlier**: the backlog entry was written before any binary code existed in this repo; the trx4mr precedent (`picoGPT/binary.py`, `blabberverse/phase7_arch.py`) is small-scale and the memory accounting was never the load-bearing question there. The Phase 1 smoke ran on CPU where memory wasn't tight. Phase 2's launch-prep is the first time real-on-M2 memory pressure becomes a variable to think about, and the operator's question was the prompt.
+
+**What this changes for the active d3 run**: nothing. The val_bpb result is independent of memory framing. We're still going to learn whether STE training produces a sensible model.
+
+**What this changes for next steps**:
+- Don't promise "d12+ on M2 via this code path" without qualifying training vs inference.
+- Phase 3 of the original plan (d12+ on M2 *if* d6 works) needs to be split into "d12+ training on M2" (still gated on memory ceiling, no win from binary STE) and "d12+ inference on M2 from a packed checkpoint" (live as soon as someone produces a d12 binary checkpoint — own training, Bonsai's, etc.).
+
+**Status**: accepted 2026-05-08. Captured in backlog.md's 1-bit-from-scratch entry as a "Memory accounting clarification" subsection cross-referencing this ADR.
+
