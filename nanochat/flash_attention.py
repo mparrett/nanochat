@@ -71,6 +71,13 @@ def _sdpa_attention(q, k, v, window_size, enable_gqa):
     SDPA attention with sliding window support.
     q, k, v are (B, H, T, D) format.
     """
+    # MPS SDPA hard-rejects mixed-dtype q/k/v (CUDA implicitly promotes; MPS does not).
+    # The KV cache is allocated at fp32 by default, so when NANOCHAT_DTYPE=bfloat16
+    # the model forward produces bf16 q against fp32 k/v. Cast at the call site.
+    if k.dtype != q.dtype:
+        k = k.to(q.dtype)
+    if v.dtype != q.dtype:
+        v = v.to(q.dtype)
     Tq = q.size(2)
     Tk = k.size(2)
     window = window_size[0]
