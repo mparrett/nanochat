@@ -90,6 +90,11 @@ parser.add_argument("--save-keep-last-n", type=int, default=None, help="rolling 
 # Output
 parser.add_argument("--model-tag", type=str, default=None, help="override model tag for checkpoint directory name (default: d<depth>, which is the canonical baseline location — see --force-overwrite)")
 parser.add_argument("--force-overwrite", action="store_true", help="permit overwriting an existing trained checkpoint at <model_tag>/. Default: abort startup if model_<step>.pt exists in the target dir.")
+# Low-bit quantization (Phase 2 of 1-bit-from-scratch direction; see ADR-006).
+# Default 'none' is bit-identical to the fp baseline. apply_quant runs after
+# init_weights so resume's state_dict keys align with the quantized layers.
+parser.add_argument("--quant", type=str, default="none", choices=["none", "binary", "ternary"], help="low-bit weight quantization for transformer-block linears. 'none' (default) keeps fp32 latent + fp matmul. 'binary' = {-s,+s} STE. 'ternary' = {-s,0,+s} STE. Phase 2 keeps lm_head/wte/value_embeds/smear/ve_gate in fp.")
+parser.add_argument("--quant-group-size", type=int, default=128, help="per-group scale block size for STE quantization (default 128, matches Bonsai brief).")
 # If --inherit-from is set, apply the reference run's user_config as parser
 # defaults BEFORE parse_args() — CLI flags then override only what's
 # intentionally different. Excludes per-run + operational fields.
@@ -193,6 +198,18 @@ model_config_kwargs = asdict(model_config)
 print0(f"Model config:\n{json.dumps(model_config_kwargs, indent=2)}")
 model.to_empty(device=device) # 2) All tensors get storage on target device but with uninitialized (garbage) data
 model.init_weights() # 3) All tensors get initialized
+
+# 4) Phase 2: optionally swap transformer-block Linears for quantized variants.
+# Runs before resume so the loaded state_dict's keys align with BinaryLinear /
+# TernaryLinear modules. Phase 2 contract (ADR-006): only block.attn.* and
+# block.mlp.* are touched; lm_head / wte / value_embeds / smear / ve_gate stay fp.
+if args.quant != "none":
+    if args.fp8:
+        raise ValueError("--quant and --fp8 are mutually exclusive (different precision regimes)")
+    from nanochat.quant import apply_quant
+    quant_info = apply_quant(model, variant=args.quant, group_size=args.quant_group_size, reinit=True)
+    print0(f"Applied --quant={args.quant} group_size={args.quant_group_size}: {quant_info}")
+    user_config["quant_info"] = quant_info  # record in meta_*.json for audit
 
 # If we are resuming, overwrite the model parameters with those of the checkpoint
 base_dir = get_base_dir()
