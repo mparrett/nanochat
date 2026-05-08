@@ -1451,3 +1451,74 @@ Until something better than v2 ships:
 - `docs/lora_l1_v3_2026-05-07.md` (new) — full writeup
 - HANDOFF.md addendum (this section)
 
+## Day 2026-05-07 (third session): bf16 d6 5000-iter validation lands at fp32 parity
+
+After clarifying the operator's original 1-bit/Bonsai vision (three
+distinct directions logged in `docs/project_notes/backlog.md`: native
+1-bit/ternary d6 from scratch, local Bonsai 4B/8B as helper models, and
+the disambiguating note re: lora_proposal's "L1-bonsai" frame), this
+session ran the cheapest prerequisite experiment for the 1-bit
+direction: **does bf16 preserve quality at the 5000-iter horizon on
+M2?** It does.
+
+Full writeup: `docs/bf16_d6_validate_2026-05-07.md`. Headlines:
+
+- **bf16 final val_bpb at step 5000: 1.169138.** fp32 baseline:
+  1.168621. **Delta: +0.000517 (+0.044 %)** — within sampling noise.
+  Lands in the "clean" bin of the pre-registered falsification
+  thresholds (≤1.180).
+- **Run wall: 4 h 25 m** (vs ~3 h fp32 baseline). Most of the overhead
+  was a crash + resume; bf16 itself adds ~3 % wall per the original
+  audit.
+- **One new MPS-bf16 audit patch shipped** during this run:
+  `nanochat/flash_attention.py` `_sdpa_attention` cast k/v to q.dtype
+  (commit `0e2d781`). Same root-cause family as the 2026-04-30 optim.py
+  patch — CUDA implicitly promotes mixed-dtype operands; MPS hard-rejects.
+  This crash fired at step 2000 in the post-eval sample-generation
+  path; training itself ran clean bf16 forward+backward+optimizer
+  through step 1999.
+- **Resumed from step 1000** (saved checkpoint intact). Lost ~50 min
+  wall but no data: the resume's step-2000 val_bpb (1.279397) matches
+  the original first run's 1.279209 to within bf16 quantization noise,
+  confirming faithful optimizer-state reload.
+
+### What this implies for the 1-bit-from-scratch direction
+
+The operator's top-shelf direction in `backlog.md` (native 1-bit/ternary
+d6 from scratch, leveraging trx4mr's `BinaryLinear`/`TernaryLinear`
+primitives) has its load-bearing assumption empirically supported:
+**MPS doesn't catastrophically corrupt low-precision math at the d6
+5000-iter horizon.** bf16 (16-bit mantissa-truncated) hit fp32 parity.
+Binary is more aggressive (1.125 effective bits per weight vs bf16's 16),
+but the extrapolation now has a foothold rather than being speculative.
+
+Expect more MPS-bf16-style audit gaps on the binary path — `BinaryLinear`
+will have its own boundaries where CUDA implicitly promotes and MPS
+does not. We've now patched two such boundaries (optim.py 2026-04-30,
+flash_attention.py today); pattern-matching on this for the binary
+infra build-out will save time.
+
+### Operative defaults unchanged
+
+NANOCHAT_DTYPE auto-detect on MPS still defaults to fp32 (only CUDA
+SM 80+ auto-promotes). Setting `NANOCHAT_DTYPE=bfloat16` is opt-in.
+This experiment is a strong precedent for making bf16 the M2 default,
+but that's a separate decision (would need a single follow-up SFT
+A/B to confirm bf16 doesn't drift through chat fine-tuning either).
+
+### Files added this session
+
+- `nanochat/flash_attention.py` — `_sdpa_attention` k/v→q.dtype casts (`0e2d781`)
+- `docs/bf16_d6_validate_2026-05-07.md` (new) — full bf16 vs fp32 writeup
+- `docs/project_notes/backlog.md` — three new entries (bf16 validation as a
+  prerequisite, Bonsai-method reverse-engineering as a side-quest, plus
+  the original 1-bit/ternary vision and disambiguation logged earlier)
+- HANDOFF.md addendum (this section)
+
+### Standing rules
+
+Branch is local-only; no pushing or PR creation without explicit
+per-task approval. The bf16 patches (optim.py from 2026-04-30 +
+flash_attention.py today) are filable upstream alongside
+karpathy/nanochat#741 if/when the operator decides to push.
+
