@@ -167,3 +167,23 @@ doc, less sensitivity to per-batch composition); we have not measured that.
 
 **Status**: accepted 2026-05-06. Capability committed in 2173dab + 2c2c54e. Default behaviour unchanged.
 
+## ADR-006: Phase 2 quant integration — tentative working choices (2026-05-08)
+
+**Context**: Phase 1 of the 1-bit-from-scratch direction landed (`nanochat/quant.py` — `BinaryLinear`/`TernaryLinear` + `apply_quant`, all CPU-validated). Phase 2 wires `apply_quant` into `scripts/base_train.py` for an actual short pretrain. Several integration knobs need a default before launch; none of them have a load-bearing rationale yet, but all need *some* answer to run.
+
+**Decision**: Adopt the following **tentative** working defaults for Phase 2 short-validation runs. Each is "good enough to learn from now" and explicitly revisable once we have empirical data from the first short run.
+
+1. **CLI surface in `scripts/base_train.py`**: add `--quant {none,binary,ternary}` (default `none` = bit-identical to current baseline) and `--quant-group-size 128` (matches Bonsai brief and trx4mr precedent). `apply_quant` runs after `init_weights()` and before `setup_optimizer()`.
+
+2. **Optimizer routing for quantized latents**: keep nanochat's existing `setup_optimizer` shape — quantized latent weights go to **Muon** by virtue of being 2D matrix params, the same as the fp baseline. trx4mr/blabberverse precedent uses plain AdamW, but Muon-on-binary-latent is mathematically defensible (gradient flows through STE unchanged; Muon orthogonalizes the latent gradient before applying it). If the short run shows Muon-on-binary-latent diverges or stalls, this is the first knob to flip — switch matrix params to AdamW for binary runs.
+
+3. **Phase 2 escape hatches**: keep `lm_head`, `transformer.wte`, `value_embeds`, `smear_gate`, `ve_gate` in fp. Bonsai's "no escape hatches anywhere" claim is interesting but not load-bearing for the d6 trunk-binary smoke test. Lighting up embeddings/lm_head is a separate axis we can light on a follow-up if and only if trunk-binary lands clean.
+
+4. **Recipe**: mirror `d6_baseline_modern` for apples-to-apples comparison. Differences: `--model-tag=d6_binary_validate_short` (or d3 equivalent), `--num-iterations` reduced for short validation, `--save-every` matches `--num-iterations` so we keep only the final checkpoint, `--save-keep-last-n=2` for disk discipline. bf16 (already validated as parity-safe at d6 in commit `129c219`).
+
+**Why tentative not load-bearing**: each of these is a "value for current phase, flexible later" choice. The *interesting* questions about quant integration (Muon vs AdamW for binary, escape hatches yes/no, group_size sweep) are research questions the short-validation runs will inform. Picking defaults too early — before any pretrain wall-clock data — would lock in answers we don't have.
+
+**Revisit when**: the first short binary run (d3 1500-iter or d6 1000-iter) produces a val_bpb. If it tracks fp32 baseline, defaults stand. If not, the diagnostic table tells us which knob (optimizer, group_size, escape hatches, init scale) to flip first.
+
+**Status**: tentative 2026-05-08. Phase 1 infra committed in 2b85b82 / 1547303 / fbf29be. Phase 2 wiring + short run pending operator green-light on depth choice.
+
