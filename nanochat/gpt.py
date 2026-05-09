@@ -364,6 +364,20 @@ class Block(nn.Module):
         return x, memory_state
 
 
+def enable_block_grad_checkpoint() -> None:
+    """Wrap Block.forward with torch.utils.checkpoint (idempotent). See docs/mlx_lm_pattern_audit_2026-05-08.md (idea #3)."""
+    import torch.utils.checkpoint as cp
+    if getattr(Block.forward, "_grad_checkpoint_wrapped", False):
+        return
+    original_forward = Block.forward
+
+    def checkpointed_forward(self, *args, **kwargs):
+        return cp.checkpoint(original_forward, self, *args, use_reentrant=False, **kwargs)
+
+    checkpointed_forward._grad_checkpoint_wrapped = True
+    Block.forward = checkpointed_forward
+
+
 class GPT(nn.Module):
     def __init__(self, config, pad_vocab_size_to=64):
         """
