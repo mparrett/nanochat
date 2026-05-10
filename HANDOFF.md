@@ -1912,3 +1912,92 @@ From `docs/mlx_lm_pattern_audit_2026-05-08.md`:
   Possible angles: chunked cross-entropy, fp16 logits, gradient
   checkpointing extended past Block.
 
+## Day 2026-05-10 (Sun) — d8 overnight pretrain (in flight at writing)
+
+**Goal**: first d8 pretrain on M2. Operator chose option C from the
+"best d8 baseline in one night" framing (probe ceiling, run at largest
+feasible batch). Capacity probe found `compile + --grad-checkpoint +
+batch=8` works cleanly; batch=12 fits but is paging-strangled
+(~125 s/step), batch=16 OOMs at the 30 GiB MPS watermark. Sub-Chinchilla
+by design: single-grad-accum keeps wall time tractable.
+
+**Run config:**
+
+```
+scripts/base_train.py --depth=8 --num-iterations=5000 \
+  --device-batch-size=8 --total-batch-size=16384 \
+  --grad-checkpoint --eval-every=1000 --eval-tokens=5242880 \
+  --core-metric-every=-1 --sample-every=-1 \
+  --save-every=1000 --save-keep-last-n=2 \
+  --model-tag=d8_overnight
+```
+
+- **Total tokens trained**: 5000 × 16,384 = **82 M** (vs d8 canonical
+  Chinchilla budget ~1.5 B). Sub-Chinchilla. Use this for "does d8
+  train cleanly on this hardware" + a learning-curve eyeball, not for
+  baseline-quality claims.
+- **PID**: 52354 → `/tmp/d8_overnight.pid`. Started 02:54:31 PDT.
+- **Log**: `/tmp/d8_overnight.log` (ephemeral). Final val numbers will
+  be captured in the meta JSON.
+- **Checkpoint dir**: `~/.cache/nanochat/base_checkpoints/d8_overnight/`,
+  final at `model_005000.pt`.
+
+**Status at handoff write time** (16:30 PDT, ~13.5 h into the run):
+step 3828/5000 (76.6 %), loss 3.60 descending normally, ETA ~19:25
+PDT. Process state survives session end via `nohup`.
+
+### Lessons from today
+
+- **Brief benchmarks under-predict long-run pace on a noisy M2.** A
+  pre-launch 8-iter bench measured 6 s/step steady; the actual long
+  run averaged ~10-25 s/step depending on competing-process load. The
+  bench was run during a quiet moment; the long run wasn't. **For
+  future overnight launches, run the bench AFTER killing the
+  background workloads** to get a representative number.
+- **Memory pressure from background workloads is the dominant
+  variable.** Two cleanups during the run moved pages active+inactive
+  from 13 GB → 2.8 GB → back to 11.5 GB → 3.7 GB after operator killed
+  Docker daemon + others. Step times tracked memory pressure closely:
+  spike rate goes from ~0 (quiet system) to ~10% of steps (with all
+  the daemons), with spikes themselves running 38-65 s. The 30 GiB
+  MPS watermark is the OOM ceiling; OS-level paging cost on the
+  remaining ~24 GB physical is the throughput ceiling.
+- **The dataloader's `rg` field grew from 0→80 then back down to
+  ~35 by step 3828.** This is the "remainder discard" counter; the
+  reuse pattern is healthy.
+
+### Open follow-ups for next session
+
+1. **Wire `--grad-checkpoint` into `scripts/chat_sft.py`.** Same
+   monkey-patch pattern as in `nanochat/gpt.py:enable_block_grad_checkpoint()`.
+   ~10 min of work. Needed before SFT-ing the d8 checkpoint, since
+   d8/SFT will hit similar memory pressure to d8 pretrain. The flag
+   sits opt-in, default off, just like the pretrain side.
+2. **SFT estimate**: d6 SFT was ~79 min on M2; d8 has ~2.4× the
+   per-token compute, so expect **~3-4 h for d8 SFT** at the canonical
+   375-step recipe. Add 30 % buffer if memory pressure spikes.
+3. **CORE eval on final d8 ckpt.** Disabled during the run to save
+   wall time. Run separately on `model_005000.pt` whenever pretrain
+   completes. d6 baseline CORE is documented in earlier HANDOFF
+   sections.
+4. **Tomorrow's pretrain hygiene**: before launching, kill Docker /
+   server.py / faprox.py / dashboard / crypto_bot — anything not
+   load-bearing for the training run. Confirmed today that even
+   "dry-run" daemons cost paging spikes. The clean-bench number is
+   ~6 s/step; with competing daemons it's ~10-25 s/step (1.7-4×
+   slower). Worth ~5 min of cleanup for the throughput win.
+5. **P1 (`learned_scale`) was paused mid-design** to free time for
+   the d8 overnight run. The trx4mr port reference is at
+   `~/projects-new/trx4mr/picoGPT/binary.py`; the scope sketch I
+   proposed is binary-only (matching trx4mr coverage), validated by
+   d3 smoke A/B against existing binary baseline (val_bpb 1.5134 at
+   d3/1500 iter). Pick back up whenever the d8 thread settles.
+
+### Branch state
+
+Today's only commits added the d12 overnight feasibility note and the
+d10 capacity sidebar (both yesterday, dated 2026-05-09 in commit log).
+No code changes today — just the d8 overnight run launch. The
+`.claude/scheduled_tasks.lock` untracked file remains; local-only per
+`feedback_local_only.md`.
+
