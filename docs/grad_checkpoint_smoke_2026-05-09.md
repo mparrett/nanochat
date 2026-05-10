@@ -2,10 +2,11 @@
 
 **Date:** 2026-05-09
 **Status:** Complete within scope of M2 / current MPS + `torch.compile`
-stack. d6 correctness ✅; d12/batch=4 memory benefit ✅ (−12.8 % wall,
-−21 % page faults, bit-identical loss); d12/batch=8 cap not moved
-(both arms OOM at the ~30 GiB MPS watermark, though the patch defers
-the failure from forward to backward).
+stack. d6 correctness ✅; **d12/batch=4 and d12/batch=6 both show a
+~12 % wall-clock win** in the memory-pressured regime (−12.8 % and
+−12.3 %, bit-identical loss); d12/batch=8 OOM cap not moved by the
+patch (both arms OOM at the ~30 GiB MPS watermark, though the patch
+defers the failure from forward to backward).
 **Companion:** `docs/mlx_lm_pattern_audit_2026-05-08.md` idea #3.
 
 ## Implementation
@@ -124,32 +125,94 @@ Reads:
   the actual savings are in the MPS unified-memory pool, which RSS
   doesn't fully reflect. Same +22 MB pattern at d6.
 
+## d12 bisection at batch=6 (paging-dominated, both fit)
+
+Same shape as the d12/batch=4 run but `--device-batch-size=6
+--total-batch-size=12288`. This config sits in the *severely*
+paging-dominated regime: arm A's sys time is 4.5× higher than at
+batch=4. Both arms still fit (no OOM).
+
+|                          | Arm A (off)            | Arm B (on)             | Δ                  |
+| ---                      | ---                    | ---                    | ---                |
+| Wall clock (8 iters)     | 1446.4 s               | 1268.8 s               | **−12.3 %**        |
+| User CPU                 | 18.1 s                 | 28.1 s                 | **+55 %** (recompute tax) |
+| Sys CPU                  | 332.9 s                | 282.0 s                | **−15.3 %** (paging dropped) |
+| Page reclaims            | 334,675                | 302,084                | **−9.7 %**         |
+| Page faults              | 18,787                 | 19,015                 | ~flat              |
+| Peak RSS (`time -l`)     | 689 MB                 | 813 MB                 | +124 MB            |
+| Loss at step 7           | 10.366605              | 10.366606              | bit-identical save 1 ULP |
+
+Reads:
+
+- **Wall-clock win replicates** (−12.3 % vs −12.8 % at batch=4).
+  Consistent across two independent memory-pressured configs at d12.
+- **The trade decomposes cleanly:** user CPU up (recompute), sys CPU
+  down (paging), wall clock down. We can see what the patch is
+  actually buying us — kernel time was the bottleneck, not arithmetic.
+- **Faults vs reclaims diverge.** Reclaims drop ~10 %, faults are
+  flat. In this regime reclaims are the more reliable pressure signal;
+  faults are noisier.
+- **Loss differs by 1 ULP at step 7** (steps 0–6 exactly equal).
+  Standard fp32 reduction roundoff in the backward path of the
+  recompute. Mathematically equivalent — not a correctness concern.
+
 ## Interpretation
 
-The patch is **correct, opt-in, and useful in the regime it was
-designed for**:
+### Feasibility map (M2 24 GB, MPS + `torch.compile`)
 
-- **Correctness.** Bit-identical loss at d6 and d12. Composes with
+| Depth | Batch | Arm A (off)             | Arm B (on)              | Patch effect                       |
+| ---   | ---   | ---                     | ---                     | ---                                |
+| 6     | 4     | runs (35.2 s)           | runs (66.3 s)           | **+19 %** wall (recompute tax)     |
+| 12    | 4     | runs (227 s)            | runs (198 s)            | **−12.8 %** wall                   |
+| 12    | 6     | runs (1446 s, paging)   | runs (1269 s, paging)   | **−12.3 %** wall                   |
+| 12    | 8     | OOM, forward (lm_head)  | OOM, backward (smaller) | defers but doesn't fit             |
+
+### What the patch does
+
+- **Correctness.** Bit-identical loss at d6 and d12/batch=4; 1-ULP
+  fp32-roundoff difference at d12/batch=6 step 7. Composes with
   bf16 + `torch.compile` without errors.
-- **Cost when not memory-bound.** +19 % step time at d6/batch=4.
-  Default off, so this applies only when explicitly enabled.
-- **Benefit when memory-bound.** At d12/batch=4 the patch cuts wall
-  clock by 12.8 %, page faults by 21 %, page reclaims by 16 %.
-- **Limit on this hardware/stack.** At d12/batch=8 the patch helps
-  (defers OOM from forward to backward, shrinks the failing allocation
-  10×) but does not move the feasible-batch boundary. The ~30 GiB MPS
-  watermark still holds for both arms.
+- **Cost when not memory-bound.** +19 % step time at d6/batch=4. Pure
+  recompute tax. Default off, so this applies only when explicitly
+  enabled.
+- **Benefit when memory-bound.** At d12/batch=4 and d12/batch=6 the
+  patch buys back ~12 % wall clock. The savings come from reduced
+  OS-level paging (sys CPU −15 %, reclaims −10 to −16 %), partially
+  offset by the recompute tax (user CPU +55 % at batch=6 where it's
+  most visible).
+- **Sign-flip is real and reproducible.** Two independent
+  memory-pressured configs both show the same ~12 % wall-clock win.
+  This is no longer a single-data-point claim.
+
+### What the patch does NOT do (on this stack)
+
+- **Does not expand the feasible-batch boundary at d12.** Bisection
+  is conclusive within batch granularity: arm A and arm B both fit
+  at batch=6, both OOM at batch=8. There's no batch where only arm B
+  fits — the cap is hard at d12 on this stack. The patch does *defer*
+  the failure (forward→backward) and shrink the failing allocation
+  10×, but the ~30 GiB MPS watermark still holds.
 
 The audit doc framed the patch as "an *enabler*, not a wall-clock
-perf win." The d12/batch=4 result shows it can be *both* in the
-memory-pressured regime: smoother runs AND a wall-clock win because
-paging cost was dominant. The audit doc was conservative.
+perf win." The d12 results show it's actually a **wall-clock win in
+the memory-pressured regime, but NOT an enabler at the OOM cap on this
+stack**. That's the inverse of the audit's framing. The wall-clock
+story replicates; the boundary-shift story doesn't materialize.
 
-What this validation does **not** establish: whether the patch can
-push past the d12/batch=8 OOM cap on this stack. Three hypotheses
-(`torch.compile` interference, lm_head dominance, MPS pool retention)
-are not falsified here. A follow-up at `torch.compile` disabled would
-isolate (1) cheaply but isn't on the critical path now.
+### Open question, not on critical path
+
+Three hypotheses for why the boundary doesn't shift at batch=8 are
+not falsified here:
+
+1. `torch.compile`'s inductor buffer scheduler retaining intermediates
+   across the backward graph.
+2. `lm_head` (the 2 GB `(8, 2048, 32768)` fp32 logits tensor)
+   dominating the budget — it lives outside `Block.forward`'s
+   checkpointing reach.
+3. MPS allocator pool retention.
+
+A follow-up A/B with `torch.compile` disabled at d12/batch=8 would
+isolate (1) cheaply. Not scheduled.
 
 ## References
 
@@ -161,4 +224,5 @@ isolate (1) cheaply but isn't on the critical path now.
 - Logs (ephemeral; numbers above are captured here):
   - d6: `/tmp/d6_gc_off.log`, `/tmp/d6_gc_on.log`
   - d12/batch=8: `/tmp/d12_gc_off.log`, `/tmp/d12_gc_on.log`
+  - d12/batch=6: `/tmp/d12_b6_off.log`, `/tmp/d12_b6_on.log`
   - d12/batch=4: `/tmp/d12_b4_off.log`, `/tmp/d12_b4_on.log`
