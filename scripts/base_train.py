@@ -69,6 +69,7 @@ parser.add_argument("--target-flops", type=float, default=-1.0, help="calculate 
 parser.add_argument("--target-param-data-ratio", type=float, default=12, help="calculate num_iterations to maintain data:param ratio (Chinchilla=20, -1 = disable)")
 # Optimization
 parser.add_argument("--grad-checkpoint", action="store_true", help="enable activation/gradient checkpointing on transformer Block forwards. Trades ~30%% step time for activation-memory savings, enabling larger --device-batch-size at depth 12+ on memory-bound machines (M2 24GB). Idempotent. See docs/mlx_lm_pattern_audit_2026-05-08.md.")
+parser.add_argument("--no-compile", action="store_true", help="skip torch.compile(model). Debugging probe — useful when isolating whether inductor buffer scheduling interacts with other features (e.g. --grad-checkpoint). Default: compile enabled.")
 parser.add_argument("--device-batch-size", type=int, default=32, help="per-device batch size. good number to reduce to 16,8,4,... if you OOM on VRAM.")
 parser.add_argument("--total-batch-size", type=int, default=-1, help="total batch size in tokens. decent numbers are e.g. 524288. (-1 = auto-compute optimal)")
 parser.add_argument("--embedding-lr", type=float, default=0.3, help="learning rate for embedding parameters (Adam)")
@@ -316,7 +317,10 @@ if args.grad_checkpoint:
 # Compile the model
 
 orig_model = model # original, uncompiled model, for saving raw model state_dict and for inference/evaluation (because the shapes may change shape)
-model = torch.compile(model, dynamic=False) # the inputs to model will never change shape so dynamic=False is safe
+if args.no_compile:
+    print0("⚠ torch.compile skipped (--no-compile)")
+else:
+    model = torch.compile(model, dynamic=False) # the inputs to model will never change shape so dynamic=False is safe
 
 # -----------------------------------------------------------------------------
 # Scaling laws and muP extrapolations to determine the optimal training horizon, batch size, learning rates, weight decay.

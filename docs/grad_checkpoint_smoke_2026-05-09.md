@@ -1,12 +1,15 @@
 # Activation checkpointing — smoke validation
 
 **Date:** 2026-05-09
-**Status:** Complete within scope of M2 / current MPS + `torch.compile`
-stack. d6 correctness ✅; **d12/batch=4 and d12/batch=6 both show a
-~12 % wall-clock win** in the memory-pressured regime (−12.8 % and
-−12.3 %, bit-identical loss); d12/batch=8 OOM cap not moved by the
-patch (both arms OOM at the ~30 GiB MPS watermark, though the patch
-defers the failure from forward to backward).
+**Status:** Complete. d6 correctness ✅; **d12/batch=4 and d12/batch=6
+both show a ~12 % wall-clock win** in the memory-pressured regime
+(−12.8 % and −12.3 %, bit-identical loss); d12/batch=8 with
+`torch.compile` enabled does not fit (the patch defers OOM from
+forward to backward but doesn't clear the cap); **d12/batch=8 with
+`--no-compile` + `--grad-checkpoint` *does* fit** — torch.compile's
+inductor was retaining backward intermediates and masking the patch's
+savings (audit doc hypothesis #1, now confirmed). Capacity unlock,
+not speed unlock at batch=8.
 **Companion:** `docs/mlx_lm_pattern_audit_2026-05-08.md` idea #3.
 
 ## Implementation
@@ -156,16 +159,91 @@ Reads:
   Standard fp32 reduction roundoff in the backward path of the
   recompute. Mathematically equivalent — not a correctness concern.
 
+## d12/batch=8 with `--no-compile`: hypothesis (1) confirmed
+
+The original d12/batch=8 A/B (compile on) showed both arms OOM. The
+audit doc and earlier interpretation listed three non-falsified
+hypotheses for why the patch couldn't move the cap:
+
+1. `torch.compile`'s inductor buffer scheduler retaining intermediates
+   across the backward graph.
+2. `lm_head` (the 2 GB `(8, 2048, 32768)` fp32 logits tensor)
+   dominating the budget — outside `Block.forward`'s checkpointing
+   reach.
+3. MPS allocator pool retention.
+
+Re-ran d12/batch=8 with the new `--no-compile` flag (introduced in
+`scripts/base_train.py` for exactly this kind of probe) to isolate (1):
+
+| Compile | grad-checkpoint | Result                                       |
+| ---     | ---             | ---                                          |
+| ON      | OFF             | OOM forward (lm_head 2 GB on top of 29.73 GiB pooled) |
+| ON      | ON              | OOM backward (192 MB on top of 30.10 GiB pooled) — defers but doesn't fit |
+| OFF     | OFF             | OOM forward (lm_head 2 GB on top of 29.38 GiB pooled) — same failure mode |
+| **OFF** | **ON**          | **fits — runs to completion**                  |
+
+**Hypothesis (1) confirmed.** With `torch.compile` enabled, inductor's
+buffer scheduler retains intermediates across the backward graph,
+defeating `cp.checkpoint`'s discard semantics and masking the patch's
+memory savings. With compile off, the patch frees enough activation
+memory to clear the lm_head allocation and the run succeeds.
+
+Note that **arm A no-compile still OOMs**, with the same lm_head 2 GB
+allocation as the compile case. Earlier I read this as evidence
+*against* hypothesis (1) — wrongly. Arm A doesn't have the patch, so
+the lm_head allocation will fail regardless of compile state once
+activation memory accumulates. The clean test of (1) is whether the
+*patch* unmasks when compile is off, and the answer is yes.
+
+**Caveat: capacity unlock, not speed unlock at batch=8.** Eager mode
+pays per-op overhead, so the no-compile + grad-checkpoint path at
+batch=8 is slower *per token* than compile + grad-checkpoint at
+batch=4. The framing should be: `--no-compile --grad-checkpoint`
+*enables* training at d12/batch=8 on M2 24 GB where it would
+otherwise OOM, not that it's the fastest path.
+
+**Step times stabilize.** A longer 8-iter run confirmed the run is
+sustainable, not just a 4-iter delay before OOM:
+
+| Step | dt (s) |
+| ---  | ---    |
+| 0    | 30     |
+| 1    | 74     |
+| 2    | 109    |
+| 3    | 100    |
+| 4    | 121    |
+| 5    | 120    |
+| 6    | 120    |
+| 7    | 119    |
+
+Steady state ≈ 120 s/step from step 4 onward; RSS held flat at
+~575 MB, page reclaims grew linearly with wall time (no acceleration).
+At 137 tok/s steady-state throughput vs ~331 tok/s for d12/batch=4 +
+compile + grad-checkpoint, eager+gc at batch=8 is about **42 %** the
+per-token throughput of the compile path at the smaller feasible
+batch. That's the actual cost of trading compile for capacity.
+
+**Pareto note:** d12/batch=6 (compile, gc) was 77 tok/s under heavy
+paging — slower than d12/batch=8 (no-compile, gc) at 137 tok/s. So
+the eager+gc batch=8 path is **strictly better than** the
+compile+gc batch=6 path: more tokens per step, more tokens per second,
+no paging cliff. The relevant comparison is against batch=4 + compile,
+not batch=6 + compile.
+
 ## Interpretation
 
-### Feasibility map (M2 24 GB, MPS + `torch.compile`)
+### Feasibility map (M2 24 GB)
 
-| Depth | Batch | Arm A (off)             | Arm B (on)              | Patch effect                       |
-| ---   | ---   | ---                     | ---                     | ---                                |
-| 6     | 4     | runs (35.2 s)           | runs (66.3 s)           | **+19 %** wall (recompute tax)     |
-| 12    | 4     | runs (227 s)            | runs (198 s)            | **−12.8 %** wall                   |
-| 12    | 6     | runs (1446 s, paging)   | runs (1269 s, paging)   | **−12.3 %** wall                   |
-| 12    | 8     | OOM, forward (lm_head)  | OOM, backward (smaller) | defers but doesn't fit             |
+Default rows are with `torch.compile` enabled (production path). The
+last row shows the `--no-compile` probe at d12/batch=8.
+
+| Depth | Batch | Compile | Arm A (off)             | Arm B (on)              | Patch effect                       |
+| ---   | ---   | ---     | ---                     | ---                     | ---                                |
+| 6     | 4     | ON      | runs (35.2 s)           | runs (66.3 s)           | **+19 %** wall (recompute tax)     |
+| 12    | 4     | ON      | runs (227 s)            | runs (198 s)            | **−12.8 %** wall                   |
+| 12    | 6     | ON      | runs (1446 s, paging)   | runs (1269 s, paging)   | **−12.3 %** wall                   |
+| 12    | 8     | ON      | OOM, forward (lm_head)  | OOM, backward (smaller) | defers but doesn't fit             |
+| 12    | 8     | **OFF** | OOM, forward (lm_head)  | **runs to completion**  | **capacity unlock**                |
 
 ### What the patch does
 
@@ -184,35 +262,39 @@ Reads:
   memory-pressured configs both show the same ~12 % wall-clock win.
   This is no longer a single-data-point claim.
 
-### What the patch does NOT do (on this stack)
+### Capacity behavior depends on `torch.compile`
 
-- **Does not expand the feasible-batch boundary at d12.** Bisection
-  is conclusive within batch granularity: arm A and arm B both fit
-  at batch=6, both OOM at batch=8. There's no batch where only arm B
-  fits — the cap is hard at d12 on this stack. The patch does *defer*
-  the failure (forward→backward) and shrink the failing allocation
-  10×, but the ~30 GiB MPS watermark still holds.
+- **With `torch.compile` ON**: the patch does *not* expand the
+  feasible-batch boundary at d12. Bisection is conclusive: both arms
+  fit at batch=6, both OOM at batch=8. The patch defers failure
+  (forward → backward) and shrinks the failing allocation 10×, but
+  the ~30 GiB MPS watermark still holds.
+- **With `torch.compile` OFF**: the patch *does* unlock d12/batch=8
+  on M2 24 GB — eager mode lets `cp.checkpoint`'s discard semantics
+  actually free activation memory across the backward pass, where
+  inductor's scheduler retains it.
 
 The audit doc framed the patch as "an *enabler*, not a wall-clock
-perf win." The d12 results show it's actually a **wall-clock win in
-the memory-pressured regime, but NOT an enabler at the OOM cap on this
-stack**. That's the inverse of the audit's framing. The wall-clock
-story replicates; the boundary-shift story doesn't materialize.
+perf win." The d12 results show it's **both, but in different
+configurations**: a wall-clock win in the memory-pressured regime
+(batch=4, batch=6, compile on) AND a capacity enabler at the OOM cap
+(batch=8, compile off). The audit framing was a single-mode picture;
+the reality is two-mode, and which mode you get depends on whether
+`torch.compile` is in the way.
 
-### Open question, not on critical path
+### Resolved hypothesis, remaining unknowns
 
-Three hypotheses for why the boundary doesn't shift at batch=8 are
-not falsified here:
+The d12/batch=8 `--no-compile` A/B above resolved hypothesis (1):
+`torch.compile`'s inductor scheduler IS the reason the cap doesn't
+move with compile on. The patch's memory savings are real but get
+masked by inductor's buffer retention.
 
-1. `torch.compile`'s inductor buffer scheduler retaining intermediates
-   across the backward graph.
-2. `lm_head` (the 2 GB `(8, 2048, 32768)` fp32 logits tensor)
-   dominating the budget — it lives outside `Block.forward`'s
-   checkpointing reach.
-3. MPS allocator pool retention.
-
-A follow-up A/B with `torch.compile` disabled at d12/batch=8 would
-isolate (1) cheaply. Not scheduled.
+Hypotheses (2) and (3) — `lm_head` dominance and MPS pool retention —
+remain non-falsified but are now secondary. They'd matter if we
+wanted to push past d12/batch=8 to even larger batch sizes; for the
+current question ("does the patch enable d12/batch=8 at all") (1) was
+the only relevant blocker and it's been removed by the eager-mode
+path.
 
 ## References
 
@@ -226,3 +308,5 @@ isolate (1) cheaply. Not scheduled.
   - d12/batch=8: `/tmp/d12_gc_off.log`, `/tmp/d12_gc_on.log`
   - d12/batch=6: `/tmp/d12_b6_off.log`, `/tmp/d12_b6_on.log`
   - d12/batch=4: `/tmp/d12_b4_off.log`, `/tmp/d12_b4_on.log`
+  - d12/batch=8 no-compile: `/tmp/d12_b8_nocompile_off.log`,
+    `/tmp/d12_b8_nocompile_on.log`, `/tmp/d12_b8_nc_on_long.log`
