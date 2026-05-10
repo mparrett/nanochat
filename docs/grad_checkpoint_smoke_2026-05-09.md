@@ -296,6 +296,68 @@ current question ("does the patch enable d12/batch=8 at all") (1) was
 the only relevant blocker and it's been removed by the eager-mode
 path.
 
+The d10 sidebar below provides supporting evidence for (2): at
+d10/batch=24 the lm_head allocation alone (6 GB at that batch) is
+what kills the run, even in eager mode. The structural cost of the
+lm_head logits is independent of `Block.forward`'s checkpointing
+reach.
+
+## Sidebar: d10 capacity sweep (M2, --no-compile + --grad-checkpoint)
+
+Ran a small ascending-batch probe at d10 to map the feasibility
+envelope for a smaller depth where the patch should have more
+headroom:
+
+| Batch | Tokens/step | Steady step time | Steady tok/s | Verdict          |
+| ---   | ---         | ---              | ---          | ---              |
+| 8     | 16,384      | ~50 s            | ~330         | usable           |
+| 12    | 24,576      | ~190 s           | ~127         | usable, paging-heavy |
+| 16    | 32,768      | ~1000 s          | ~33          | nominal fit, **operationally dead** |
+| 24    | 49,152      | OOM at iter 0    | —            | hard cap (lm_head 6 GB) |
+
+Two thresholds, not one:
+
+- **Operational ceiling: batch=12.** Last config that's actually
+  useful for training. At batch=16 the run nominally fits but
+  throughput collapses to ~33 tok/s — paging cost dominates so
+  thoroughly that a real pretrain would take weeks.
+- **Hard ceiling: 16 < batch ≤ 24.** OOM at batch=24 is on a single
+  6 GB lm_head allocation `(24, 2048, 32768)` fp32. lm_head scales
+  linearly with batch and is outside `Block.forward`'s checkpointing
+  reach. This is direct evidence for the audit doc's hypothesis (2)
+  as a structural blocker independent of the gc patch.
+
+The gap between the two ceilings is where this configuration is
+nominally feasible but practically useless. Worth knowing: the
+"capacity unlock" of `--no-compile --grad-checkpoint` extends the
+*hard* fit boundary much further than it extends the *useful* one.
+
+## Open question — for a later session
+
+**Is a full d12 pretrain feasible overnight on M2?** Today's data
+suggests **no** in the canonical-Chinchilla shape. Best per-step
+config (compile + gc + batch=4) measured at ~25 s/step for a single
+grad-accum step. A full Chinchilla pretrain (~5000 optimizer steps
+with the standard total-batch ~524 K tokens, i.e. grad-accum ≈ 64
+micro-batches per optimizer step) would be ~165 s/optimizer-step ×
+5000 = ~230 hours. Not overnight by any margin.
+
+A *truncated* d12 pretrain might fit:
+- 8 hours / 165 s ≈ 175 optimizer steps with full Chinchilla batch.
+- Or 8 hours / 25 s ≈ 1150 optimizer steps at single grad-accum
+  (much smaller effective batch, sub-Chinchilla, gradient quality
+  degraded).
+
+Whether either is worth running depends on the goal — a smoke /
+sanity-check d12 run is feasible overnight; a baseline-quality d12
+pretrain is not. To analyze properly when we revisit:
+1. Decide whether sub-Chinchilla d12 has scientific value.
+2. Test compile + gc + batch=8 throughput at single grad-accum (we
+   couldn't, that config OOMs without --no-compile).
+3. Profile the 25 s/step number — what fraction is forward+backward
+   vs optimizer? Optimizer-bound steps don't speed up linearly with
+   smaller batch.
+
 ## References
 
 - `docs/mlx_lm_pattern_audit_2026-05-08.md` — origin of the pattern,
@@ -310,3 +372,5 @@ path.
   - d12/batch=4: `/tmp/d12_b4_off.log`, `/tmp/d12_b4_on.log`
   - d12/batch=8 no-compile: `/tmp/d12_b8_nocompile_off.log`,
     `/tmp/d12_b8_nocompile_on.log`, `/tmp/d12_b8_nc_on_long.log`
+  - d10 sweep: `/tmp/d10_b8_nc_gc.log`, `/tmp/d10_b12_nc_gc.log`,
+    `/tmp/d10_b16_nc_gc.log`, `/tmp/d10_b24_nc_gc.log`
