@@ -1744,3 +1744,171 @@ session artefact). Local-only per `feedback_local_only.md`.
   would be 36; at d12, 72. The `quant_info` in meta is the source of
   truth.
 
+## Day 2026-05-09 (Sat) — MLX-LM pattern audit + `--grad-checkpoint` validation + `--no-compile` probe
+
+**Goal**: pivoted off the binary/ternary thread to spend a day on
+training-loop / training-perf improvements. Operator surfaced the
+angle (antirez `ds4`, then Apple's `mlx-examples` and `mlx-lm` repos
+as siblings on disk). The audit produced three borrowable patterns
+(`docs/mlx_lm_pattern_audit_2026-05-08.md`); today implemented and
+validated #3 (activation/gradient checkpointing on `Block.forward`)
+end-to-end.
+
+**Outcome**: `--grad-checkpoint` flag landed and validated as opt-in,
+correct, and useful. Bonus discovery: `torch.compile`'s inductor
+scheduler masks the patch's memory savings — added `--no-compile`
+flag to isolate, which then unlocked d12/batch=8 training where
+every other config OOMs. **Six commits today**, all on
+`experiment/hope-nested-learning`.
+
+### Headline findings
+
+The patch is **two patches in one**, gated by `torch.compile`:
+
+| Compile | grad-checkpoint | Effect on M2 24 GB                           |
+| ON      | ON              | ~12 % wall-clock win in memory-pressured-but-feasible configs (d12/batch=4, batch=6). Boundary doesn't shift. |
+| OFF     | ON              | Capacity unlock — runs d12/batch=8 cleanly where every other config OOMs. ~42 % the per-token throughput of compile+gc batch=4, but Pareto-better than compile+gc batch=6 (which was paging-strangled). |
+
+The audit doc framed the patch as "an *enabler*, not a wall-clock
+perf win." Today's evidence shows it's **both, in different
+configurations** — wall-clock win when compile is on, capacity
+enabler when compile is off. Audit framing was conservative.
+
+### What unlocked the dual-mode picture
+
+The d12/batch=8 OOM under `compile + gc` was originally chalked up
+to one of three open hypotheses: (1) `torch.compile` inductor
+scheduler retaining backward intermediates, (2) lm_head dominance
+outside `Block.forward`'s reach, (3) MPS pool retention. Adding
+`--no-compile` and re-running the same A/B isolated (1): with
+compile off, the gc patch's discard semantics actually free
+activation memory, the run succeeds. (1) confirmed; (2) and (3)
+become secondary (and (2) got direct evidence of its own from the
+d10 sweep — see below).
+
+### Wall-clock sign-flip across regimes
+
+| Depth | Batch | Compile | Patch effect on wall              |
+| 6     | 4     | ON      | **+19 %** (recompute tax, no memory pressure) |
+| 12    | 4     | ON      | **−12.8 %** (memory-pressured)    |
+| 12    | 6     | ON      | **−12.3 %** (paging-pressured)    |
+| 12    | 8     | ON      | OOM (both arms)                   |
+| 12    | 8     | OFF     | runs (gc on); OOM (gc off)        |
+
+The crossover happens where OS-level paging cost (sys CPU) exceeds
+the recompute tax (user CPU). Two independent confirmations of the
+~12 % win in pressured-but-feasible regimes (batch=4 and batch=6).
+
+### d10 capacity sweep (capacity-envelope sidebar)
+
+Ascending-batch probe at `--no-compile --grad-checkpoint`:
+
+| Batch | Steady tok/s | Verdict                              |
+| 8     | ~330         | usable                               |
+| 12    | ~127         | usable, paging-heavy                 |
+| 16    | ~33          | nominal fit, **operationally dead** (paging dominates) |
+| 24    | OOM          | hard cap (lm_head 6 GB allocation)   |
+
+Two thresholds, not one. The "capacity unlock" of `--no-compile
+--grad-checkpoint` extends the *hard* fit boundary much further
+than it extends the *useful* one. Operational ceiling at d10 is
+batch=12; hard ceiling somewhere in (16, 24]. The OOM at batch=24
+on a single 6 GB lm_head allocation is direct evidence for
+hypothesis (2) as a structural blocker independent of `Block.forward`.
+
+### Files added / modified this session
+
+**New:**
+- `docs/mlx_lm_pattern_audit_2026-05-08.md` (~10 KB) — audit of
+  `mlx-examples` (@ `09aa7f8`) and `mlx-lm` (@ `df1d3f3`); three
+  transferable patterns ranked by expected payoff.
+- `docs/grad_checkpoint_smoke_2026-05-09.md` (~13 KB) — full validation
+  doc: d6 correctness A/B, d12 batch-8/6/4 sweep, no-compile probe,
+  d10 capacity sidebar, d12-overnight feasibility note.
+
+**Modified:**
+- `nanochat/gpt.py` — added `enable_block_grad_checkpoint()` after
+  the `Block` class (~12 LOC, idempotent monkey-patch on
+  `Block.forward`).
+- `scripts/base_train.py` — `--grad-checkpoint` flag + call site
+  before `torch.compile`. `--no-compile` flag + conditional skip of
+  `torch.compile`.
+
+**Artefacts on disk:** none — all smoke checkpoint dirs cleaned up
+intra-session. `/tmp/d6_gc_*.log`, `/tmp/d12_*nc*.log`,
+`/tmp/d10_b*_nc_gc.log` are still on disk (ephemeral; numbers
+captured in the validation doc).
+
+### Commits this session
+
+```
+a25b79b  docs: grad_checkpoint validation — d10 capacity sidebar + d12 overnight feasibility note
+6034ad1  base_train: --no-compile flag; docs: hypothesis (1) confirmed (compile masks the gc patch)
+baf3a0a  docs: grad_checkpoint d12/batch=6 bisection — wall-clock win replicates, boundary shift falsified
+c1d914b  docs: grad_checkpoint validation — wall-clock flips sign when memory-bound, batch-cap unchanged
+1be94e3  nanochat/gpt + base_train: --grad-checkpoint flag (audit doc idea #3)
+7e1933c  docs: MLX-LM pattern audit — three borrowable training-loop ideas
+```
+
+Branch state clean apart from `.claude/scheduled_tasks.lock`. Local
+only per `feedback_local_only.md`.
+
+### Open question for a later session
+
+**Is a full d12 pretrain feasible overnight on M2?**
+[`docs/grad_checkpoint_smoke_2026-05-09.md` § Open question]
+covers the back-of-envelope: compile + gc + batch=4 measured at
+~25 s/step single grad-accum; canonical-Chinchilla 5000-step
+pretrain ≈ 230 hours (no). A truncated 1150-step single-grad-accum
+fits in ~8 hours but is sub-Chinchilla. Worth deciding whether
+sub-Chinchilla d12 has scientific value before scheduling.
+
+### Other backlog items still standing
+
+From `docs/mlx_lm_pattern_audit_2026-05-08.md`:
+
+- **#1 (`learned_scale` re-introduction)** — extends the active
+  binary/ternary thread; trx4mr port already exists at
+  `~/projects-new/trx4mr/picoGPT/binary.py`; DWQ from mlx-lm
+  provides external validation. Cost: <1 day dev + 1-4 h wall.
+  Operator's natural next pivot per yesterday's priority ranking.
+- **#2 (length-stratified SFT batching)** — ~half day dev + 1-2 h
+  wall. Lower priority; SFT is the small part of the pipeline.
+
+### Gotchas / lessons for next session
+
+- **`torch.compile` and activation checkpointing interact non-trivially.**
+  With compile on, inductor's buffer scheduler retains intermediates
+  across the backward graph, defeating `cp.checkpoint`'s discard
+  semantics. The patch's full memory benefit only materializes in
+  eager mode. Document this surprise in any future activation-memory
+  work.
+- **RSS doesn't fully reflect MPS unified-memory pressure.** Across
+  every A/B today, RSS *grew* with `--grad-checkpoint` on (~22 MB at
+  d6, ~113 MB at d12/batch=4) even when paging signals (faults,
+  reclaims) dropped substantially. The wrap's Python-side overhead
+  (closures, hooks) shows in RSS; the actual savings are in the MPS
+  pool. **Use page faults / reclaims, not RSS, as the memory-pressure
+  proxy on MPS.**
+- **Operational ≠ hard ceiling on MPS.** d10/batch=16 nominally fit
+  (no OOM) but ran at ~33 tok/s due to paging. Don't conflate "fits"
+  with "feasible to train." `time -l`'s sys-time fraction is a clean
+  signal — if sys time is >20% of wall, you're in the paging-strangled
+  zone.
+- **Fast-fail in eager mode.** OOM at iter 0 takes ~14s without
+  compile vs ~50-60s with compile (compile-time overhead before the
+  crash). For capacity probing where OOM is a likely outcome, prefer
+  `--no-compile` to keep iteration cost low.
+- **Capacity probing strategy that worked**: ascending batch +
+  short-circuit. Sequence batches 8 → 12 → 16 → 24, run with
+  `--no-compile` for fast-fail, stop on first OOM (memory grows
+  monotonically with batch — anything bigger will also OOM).
+  Today's d10 sweep took ~70 min total, dominated by the
+  operationally-dead batch=16 run.
+- **The 2 GB lm_head logits tensor is a recurring memory wall on M2.**
+  At d12 it's the OOM trigger; at d10 it scales linearly with batch
+  (6 GB at batch=24). Any future memory-reduction work on this stack
+  should treat lm_head as a first-class concern, not an afterthought.
+  Possible angles: chunked cross-entropy, fp16 logits, gradient
+  checkpointing extended past Block.
+
