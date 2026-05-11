@@ -1946,6 +1946,30 @@ scripts/base_train.py --depth=8 --num-iterations=5000 \
 step 3828/5000 (76.6 %), loss 3.60 descending normally, ETA ~19:25
 PDT. Process state survives session end via `nohup`.
 
+### Final results (post-run, written 22:35 PDT)
+
+Run finished cleanly at **21:00 PDT, 18 h 6 m wall**. Full writeup at
+**`docs/d8_baseline_2026-05-10.md`**.
+
+| Metric              | Value     | Reference            |
+| ---                 | ---       | ---                  |
+| Training loss @5000 | 3.512     | descending normally  |
+| **val_bpb (min)**   | **1.076** | d6 baseline: 1.174   |
+| **CORE (quick)**    | **0.0811**| GPT-2 target: 0.257  |
+
+**Headline:** d8 at 5000 iters / 82 M tokens (sub-Chinchilla, single
+grad-accum) is **−8.4 % val_bpb vs d6 baseline at the same iter
+count**. Caveats: matched-iter isn't matched-compute (d8 iters cost
+less than d6 canonical), and CORE quick mode has per-task variance
+~5-10 %. See the dated writeup for the full breakdown, the 22-task
+CORE table, and what this run did/didn't answer.
+
+Operationally, today landed two durable wins beyond the run itself:
+the `wandb.init` defensive-wrap fix (was a real defect) and the
+`dev/preflight_memory.py` pre-launch check (encodes the noisy-M2
+lesson). Both committed in `1d06e6d`. Wandb is now the default for
+non-trivial runs; preflight is the rule before any long launch.
+
 ### Lessons from today
 
 - **Brief benchmarks under-predict long-run pace on a noisy M2.** A
