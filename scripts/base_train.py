@@ -140,7 +140,14 @@ print0(f"COMPUTE_DTYPE: {COMPUTE_DTYPE} ({COMPUTE_DTYPE_REASON})")
 
 # wandb logging init
 use_dummy_wandb = args.run == "dummy" or not master_process
-wandb_run = DummyWandb() if use_dummy_wandb else wandb.init(project="nanochat", name=args.run, config=user_config)
+if use_dummy_wandb:
+    wandb_run = DummyWandb()
+else:
+    try:
+        wandb_run = wandb.init(project="nanochat", name=args.run, config=user_config)
+    except Exception as e:
+        print0(f"⚠ wandb.init failed ({type(e).__name__}: {e}); falling back to DummyWandb. Training continues with local logging only.")
+        wandb_run = DummyWandb()
 
 # Flash Attention status
 from nanochat.flash_attention import USE_FA3

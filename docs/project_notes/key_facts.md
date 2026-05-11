@@ -13,9 +13,20 @@
 - Override via `NANOCHAT_DTYPE=bfloat16|float16|float32`
 - Master weights stay fp32; `Linear` casts in forward pass
 
-## Logging
-- wandb optional. `--run dummy` (default) → `DummyWandb` (no-op)
-- Enable: `WANDB_RUN=<name>` env var or `--run=<name>` (run `wandb login` first)
+## Logging — wandb preferred for any non-trivial run
+
+- **Operator preference: use wandb by default.** Cost is near zero; telemetry
+  benefit (remote monitoring, GPU/memory stats, comparable curves across
+  runs) is high — especially for unattended long runs. Pass `--run=<name>`
+  on any pretrain / SFT / RL that's longer than a few minutes.
+- Init is now defensive (commit landed 2026-05-10): `wandb.init()` is
+  wrapped in `try/except` in all four training scripts (`base_train.py`,
+  `chat_sft.py`, `chat_rl.py`, `chat_sft_lora.py`). On auth / network
+  failure it logs a warning and falls back to `DummyWandb` — the training
+  run continues with local-only logging. So "wandb might kill an overnight
+  run" is no longer a real failure mode; default to passing `--run=`.
+- `--run dummy` (default if unset) → `DummyWandb` (no-op). Only use this
+  for micro-smokes that don't need a wandb run polluting the project.
 
 ## Key Metrics
 - CORE (DCLM) on base model — headline number
@@ -46,6 +57,23 @@ in `meta_*.json` automatically via `vars(args).copy()`.
 **Source of these numbers:** seed=42 d6_stage2 SFT meta
 (`chatsft_checkpoints/d6_stage2/meta_000375.json`) is the canonical reference;
 SFT recipe story is captured in `docs/sft_oom_investigation_2026-05-03.md`.
+
+## Pre-launch hygiene — memory consumer check
+
+**Always run `python3 dev/preflight_memory.py` before kicking off a long
+training run on M2.** It reports vm_stat summary, top-10 RSS processes,
+and flags known offenders (Docker daemon, server.py, faprox.py, etc.).
+Returns exit 1 if free memory < 1 GB, so it can gate launches in a shell
+wrapper.
+
+Why this matters: the 2026-05-10 d8 overnight run started with a Docker
+daemon + several Python utilities (dashboard, crypto_bot dry-run,
+server.py) running. Step times averaged 10-25 s/step with 38-65 s
+spikes. After the operator killed the offenders mid-run, step time
+dropped to ~6 s/step (clean steady state from the pre-launch bench).
+The wall difference is 1.7-4× — worth the ~5 min of cleanup. The
+preflight script encodes the list of usual offenders so we don't have
+to remember.
 
 ## Launch patterns on M2
 

@@ -108,7 +108,11 @@ torch.manual_seed(args.seed)
 # Wandb (optional, dummy by default)
 if ddp_rank == 0 and args.run != "dummy":
     import wandb
-    wandb_run = wandb.init(project="nanochat-lora", name=args.run, config=user_config)
+    try:
+        wandb_run = wandb.init(project="nanochat-lora", name=args.run, config=user_config)
+    except Exception as e:
+        print0(f"⚠ wandb.init failed ({type(e).__name__}: {e}); falling back to DummyWandb. Training continues with local logging only.")
+        wandb_run = DummyWandb()
 else:
     wandb_run = DummyWandb()
 

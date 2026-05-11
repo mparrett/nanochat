@@ -114,7 +114,14 @@ else:
 
 # wandb logging init
 use_dummy_wandb = args.run == "dummy" or not master_process
-wandb_run = DummyWandb() if use_dummy_wandb else wandb.init(project="nanochat-sft", name=args.run, config=user_config)
+if use_dummy_wandb:
+    wandb_run = DummyWandb()
+else:
+    try:
+        wandb_run = wandb.init(project="nanochat-sft", name=args.run, config=user_config)
+    except Exception as e:
+        print0(f"⚠ wandb.init failed ({type(e).__name__}: {e}); falling back to DummyWandb. Training continues with local logging only.")
+        wandb_run = DummyWandb()
 
 # Flash Attention status
 if not HAS_FA3:
