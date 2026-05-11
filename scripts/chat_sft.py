@@ -24,6 +24,7 @@ from nanochat.loss_eval import evaluate_bpb
 import torch.distributed as dist
 from nanochat.flash_attention import HAS_FA3
 from nanochat.engine import Engine
+from nanochat.gpt import enable_block_grad_checkpoint
 from scripts.chat_eval import run_chat_eval
 
 from tasks.common import TaskMixture
@@ -57,6 +58,8 @@ parser.add_argument("--num-iterations", type=int, default=-1, help="number of op
 parser.add_argument("--max-seq-len", type=int, default=None, help="max context length (default: inherit from pretrain)")
 parser.add_argument("--device-batch-size", type=int, default=None, help="per-device batch size (default: inherit from pretrain)")
 parser.add_argument("--total-batch-size", type=int, default=None, help="total batch size in tokens (default: inherit from pretrain)")
+# Memory / perf
+parser.add_argument("--grad-checkpoint", action="store_true", help="enable activation/gradient checkpointing on transformer Block forwards. Trades ~30%% step time for activation-memory savings, enabling larger --device-batch-size at depth 8+ on memory-bound machines (M2 24GB). Idempotent. Pass explicitly — not auto-inherited from base meta. See docs/mlx_lm_pattern_audit_2026-05-08.md.")
 # Optimization (default: inherit from pretrained checkpoint)
 parser.add_argument("--embedding-lr", type=float, default=None, help="learning rate for embedding parameters (Adam) (default: inherit from pretrain)")
 parser.add_argument("--unembedding-lr", type=float, default=None, help="learning rate for unembedding parameters (Adam) (default: inherit from pretrain)")
@@ -150,6 +153,12 @@ for name, fallback, source in [
         print0(f"NOTE: --{name.replace('_', '-')}={arg_val} overrides pretrained value of {pretrain_val}")
     else:
         print0(f"Using {name}={arg_val}")
+
+# Activation checkpointing (must run before torch.compile so the patched
+# Block.forward is what the compile graph captures). Mirrors base_train.py.
+if args.grad_checkpoint:
+    enable_block_grad_checkpoint()
+    print0("✓ Activation checkpointing enabled on Block.forward")
 
 orig_model = model
 model = torch.compile(model, dynamic=False)
