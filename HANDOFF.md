@@ -2025,3 +2025,104 @@ No code changes today — just the d8 overnight run launch. The
 `.claude/scheduled_tasks.lock` untracked file remains; local-only per
 `feedback_local_only.md`.
 
+## Day 2026-05-11 (Mon, early AM) — d8 SFT first-pass + ChatCORE + A2 launch
+
+Continuation of the d8 thread. Step 1 (chat_sft `--grad-checkpoint`
+port) and Step 2 (d8 SFT) and Step 4 (ChatCORE eval) from yesterday's
+kickoff queue executed end-to-end. First-pass result is **below the
+0.15 ChatCORE threshold the kickoff doc set as the "something's off"
+mark.** A2 retry launched to test the under-tokened-SFT hypothesis.
+Full writeup at `docs/d8_sft_2026-05-11.md`.
+
+### What got done
+
+**Step 1 — `--grad-checkpoint` ported to `chat_sft.py`** (commit
+`7e5f974`). Three minimal edits mirroring `base_train.py` byte-for-byte:
+import `enable_block_grad_checkpoint`, add the argparse flag in a new
+"Memory / perf" group, call before `torch.compile`. Smoke-validated
+(2 iter, batch=4, no eval, no wandb) before the real run. Help-text
+notes the flag is NOT auto-inherited from base meta — pass explicitly.
+
+**Step 2 — d8 SFT** (`/tmp/d8_sft.log`, wandb
+`ggrx6i41`). 375 opt steps, batch=8, total=16384, single grad-accum,
+`--grad-checkpoint` on. Finished **48.5 min wall**, far below the
+3-4 h kickoff estimate — system stayed quiet, 10.5 % sys-CPU paging
+share vs the d8 pretrain's 26 %. **Final val_bpb 0.7724.**
+
+Trajectory: warm-start bump from 0.8674 (step 0) up to 0.9440 (step
+50), then steady descent through warmdown, accelerating to −0.040 in
+the steps 250-300 eval, settling at 0.7724 by step 374. The
+no-warmup-ratio schedule plus a warm-started optimizer was the bump's
+cause; warmdown recovered it and went past baseline. Net SFT improvement
+−0.095 bpb (10.9 % relative), but absolute floor 0.7724 is well above
+d6 references (d6_b_iso 0.6639, d6_stage2 0.6518).
+
+**Step 4 — ChatCORE quick (`-x 100`)** (`/tmp/d8_chatcore.log`, report
+card `~/.cache/nanochat/report/chat-evaluation-sft.md`). 24.3 min wall.
+
+| Task          | Acc    | Centered  | d6_stage2 ref |
+| ---           | ---:   | ---:      | ---:          |
+| ARC-Easy      | 22.00% | −0.0400   | 25.80%        |
+| ARC-Challenge | 16.00% | −0.1200   | 28.67%        |
+| MMLU          | 19.00% | −0.0800   | 26.98%        |
+| GSM8K         |  0.00% |  0.0000   |  0.76%        |
+| HumanEval     |  0.00% |  0.0000   |  0.00%        |
+| **SpellingBee** | **69.00%** | **+0.6900** | **95.31%** |
+| **ChatCORE**  | —      | **0.0750** | **0.1744**    |
+
+**Diagnosis**: 92 % of the gap to d6_stage2's 0.1744 lives in SFT-recipe
+levers, not architecture. SpellingBee template under-memorized
+(69 % vs 95 %); categorical tasks drifted below random because the
+SFT mixture shifted output distribution without enough signal to learn
+MCQ-letter format. Underlying cause: d8 SFT used `--total-batch-size=16384`
+single-grad-accum vs d6 canonical's 65536 with grad-accum=4 — **4× fewer
+effective training tokens** (6.1 M vs 24.6 M). Kickoff doc flagged
+this trade-off ("single-grad-accum is fine for a first pass"); the
+cost is now visible.
+
+### A2 retry — d8 SFT at total-batch=65536 (in flight)
+
+Most direct test of the under-tokened hypothesis. Same base ckpt
+(`d8_overnight/model_005000.pt`), same 375 opt steps, but
+`--total-batch-size=65536` → grad-accum=4. Saves under
+`--sft-tag=d8_overnight_a2` to keep the first-pass ckpt intact for
+the A/B comparison.
+
+Run config (deltas from first pass shown bold):
+```
+scripts/chat_sft.py --model-tag=d8_overnight --model-step=5000 \
+  --sft-tag=d8_overnight_a2 \    # was: d8_overnight
+  --num-iterations=375 \
+  --device-batch-size=8 --total-batch-size=65536 \  # was: 16384
+  --eval-every=50 --eval-tokens=524288 \
+  --chatcore-every=-1 \
+  --save-every=100 --save-keep-last-n=2 \
+  --grad-checkpoint \
+  --run=d8_sft_overnight_a2
+```
+
+Wall estimate: 4× single-accum = **~3.2 h** + eval/save overhead ≈ 3.3 h.
+Disk ceiling: same ~2.7 GB rolling (save policy unchanged).
+
+If ChatCORE clears the 0.15 threshold and SpellingBee hits ≥90 %, the
+recipe-budget diagnosis is confirmed. If it doesn't, the bottleneck
+is base-model quality (sub-Chinchilla d8 at 82 M tokens).
+
+### Open follow-ups
+
+1. **A2 result** — eval + ChatCORE on the A2 ckpt when SFT finishes.
+   Same `-x 100` invocation for direct comparability with today's
+   first-pass numbers.
+2. **If A2 still misses the threshold**: queue an extended d8 base
+   pretrain (~500 M-1 B tokens, ~5-10 h) to lift the SFT floor.
+3. **Canonical CORE (`--max-per-task=500`) on the d8 base ckpt** — still
+   independent of the SFT thread; queued from yesterday.
+4. **`learned_scale` (P1)** — still paused.
+
+### Branch state
+
+Two new commits today: `7e5f974` (chat_sft `--grad-checkpoint` wiring)
+and `24f1d9b` (`docs/d8_sft_2026-05-11.md` writeup). Local-only per
+`feedback_local_only.md`. The HANDOFF.md entry will be amended/extended
+with the A2 result once the run lands.
+
