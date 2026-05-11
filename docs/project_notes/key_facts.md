@@ -58,6 +58,39 @@ in `meta_*.json` automatically via `vars(args).copy()`.
 (`chatsft_checkpoints/d6_stage2/meta_000375.json`) is the canonical reference;
 SFT recipe story is captured in `docs/sft_oom_investigation_2026-05-03.md`.
 
+## Training recipes — d8 on M2 24GB
+
+Same shape as the d6 recipe with `--grad-checkpoint` mandatory because
+d8 forward+backward exceeds the 24 GB MPS watermark without it.
+
+**Pretrain:** `--depth=8 --device-batch-size=8 --total-batch-size=16384
+--grad-checkpoint`. The capacity probe (`docs/d8_baseline_2026-05-10.md`)
+found batch=8 works cleanly with compile+gc; batch=12 fits but is
+paging-strangled; batch=16 OOMs at the 30 GiB watermark. Single
+grad-accum at this batch size delivers ~5 % of the Chinchilla token
+budget for the canonical 5000 iters — call this "sub-Chinchilla d8"
+until a longer pretrain lands. Wall on quiet M2: ~10-12 h.
+
+**SFT:** `--total-batch-size=65536 --device-batch-size=8 --grad-checkpoint`
+(accum=4 — same as d6 canonical SFT). **Do NOT use single grad-accum
+for d8 SFT comparisons.** The 2026-05-11 first-pass at total=16384
+(single-accum) lost 0.087 ChatCORE relative to matched-token A2; the
+gap was fully recoverable by switching grad-accum from 1 to 4. Both
+runs used the same base ckpt — confirmation that the deficit was
+recipe-driven, not architecture-driven. Always use total=65536
+accum=4 for any d8 SFT variant. Wall on quiet M2: ~2.0-2.7 h.
+
+**Memory pressure note:** d8 SFT at accum=4 pages harder than at
+single-accum (4 microbatches of activations held per opt step). Even
+with `--grad-checkpoint` the heap pressure is real. Pre-launch hygiene
+(below) is non-optional for d8 long runs.
+
+**Source of these numbers:** `chatsft_checkpoints/d8_overnight_a2/meta_000375.json`
+for SFT canon, `base_checkpoints/d8_overnight/meta_005000.json` for
+pretrain. Full writeups: `docs/d8_baseline_2026-05-10.md`,
+`docs/d8_sft_2026-05-11.md` (first-pass — what NOT to do), and
+`docs/d8_sft_a2_2026-05-11.md` (canonical A2 result with ChatCORE).
+
 ## Pre-launch hygiene — memory consumer check
 
 **Always run `python3 dev/preflight_memory.py` before kicking off a long

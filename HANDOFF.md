@@ -2126,3 +2126,70 @@ and `24f1d9b` (`docs/d8_sft_2026-05-11.md` writeup). Local-only per
 `feedback_local_only.md`. The HANDOFF.md entry will be amended/extended
 with the A2 result once the run lands.
 
+### A2 result — landed 2026-05-11 07:15 PDT
+
+A2 SFT finished cleanly at **val_bpb 0.6218** (vs first-pass 0.7724,
+d6_stage2 0.6518, d6_b_iso 0.6639). **A2 beats d6_stage2 by 0.030
+bpb.** Wall 2 h 41 min. Heavier paging than first-pass (17.9 % sys vs
+10.5 %), but no anomalies. Trajectory matched first-pass shape but at
+a uniformly lower floor — A2 already beat first-pass FINAL val_bpb
+by step 50 of its own run.
+
+ChatCORE eval landed **0.1622** (vs first-pass 0.0750, d6_stage2 0.1744).
+**Clears the 0.15 threshold; essentially matches d6_stage2.** Per-task:
+
+| Task          | A2     | First-pass | d6_stage2 |
+| ---           | ---:   | ---:       | ---:      |
+| ARC-Easy      | 27.00% | 22.00%     | 25.80%    |
+| ARC-Challenge | 26.00% | 16.00%     | 28.67%    |
+| MMLU          | 29.00% | 19.00%     | 26.98%    |
+| GSM8K         |  0.00% |  0.00%     |  0.76%    |
+| HumanEval     |  0.00% |  0.00%     |  0.00%    |
+| SpellingBee   | 88.00% | 69.00%     | 95.31%    |
+| **ChatCORE**  | 0.1622 | 0.0750     | 0.1744    |
+
+All three categoricals recovered above 25 % baseline (first-pass had
+them all below — MCQ-letter drift fully resolved by matched tokens).
+SpellingBee climbed from 69 % → 88 %; d6_stage2's 95 % may be
+reachable with a canonical (`-x` unset) eval. wandb:
+https://wandb.ai/matt-parrett/nanochat-sft/runs/3hn84gc7.
+
+### Headline takeaway
+
+**The under-tokened-SFT hypothesis from the first-pass writeup is
+fully confirmed.** d8 at matched SFT token budget (24.6 M vs first-pass
+6.1 M) is competitive with d6_stage2 (Hope/NL Stage 2): beats it on
+val_bpb, essentially ties on ChatCORE. The "d8 is worse than d6 with
+Hope" first-pass impression was an artifact of single-grad-accum, not
+architecture. Encoded into `docs/project_notes/key_facts.md` so future
+sessions don't redo the comparison.
+
+### Branch state (updated)
+
+Five new commits today:
+- `7e5f974` — chat_sft `--grad-checkpoint` wiring
+- `24f1d9b` — `docs/d8_sft_2026-05-11.md` writeup (first-pass)
+- `15d13ee` — HANDOFF entry (first-pass + A2 launch)
+- A2 writeup + key_facts update + this HANDOFF extension (pending commit)
+
+Local-only per `feedback_local_only.md`. Five intentional commits,
+one untracked `.claude/scheduled_tasks.lock`.
+
+### Open follow-ups for next session
+
+1. **Canonical ChatCORE on A2** (`-x` unset, ~1.5 h wall) if a precise
+   d8-vs-d6_stage2 headline is wanted. `-x 100` puts the 0.012 gap to
+   d6_stage2 within stderr, so canonical resolves whether the
+   architectures are truly tied.
+2. **Canonical CORE on d8 base** (`--max-per-task=500`, ~5 h) —
+   still queued from yesterday, independent of the SFT thread.
+3. **`learned_scale` (P1)** — the d8 thread has settled; pick up the
+   trx4mr port that was paused mid-design.
+4. **(Lower priority)** Extended d8 base pretrain at higher token
+   budget. The A2 result lifts the floor enough that this is no
+   longer the urgent diagnostic — only worth doing if pursuing a
+   "d8 best possible" headline.
+5. **(Optional cleanup)** Drop the first-pass d8 SFT ckpt
+   (`chatsft_checkpoints/d8_overnight/`) once the A2 result is
+   trusted. Frees ~2.7 GB.
+
