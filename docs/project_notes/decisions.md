@@ -224,3 +224,31 @@ So during training, memory consumption is:
 
 **Status**: accepted 2026-05-08. Captured in backlog.md's 1-bit-from-scratch entry as a "Memory accounting clarification" subsection cross-referencing this ADR.
 
+## ADR-008: Pause Hope/NL from-scratch thread; shift memory-mechanism research to a small synthetic harness (2026-05-13)
+
+**Context**: After d8 SFT A2 landed cleanly on 2026-05-11 (val_bpb 0.6218, ChatCORE 0.1622 — matched d6_stage2), the immediate diagnostic question was settled and we stepped back to reconsider the broader research trajectory. Two framings collided.
+
+(1) The Hope/NL paper's structure assumes from-scratch pretrains of architecturally-modified transformers. nanochat-d6/d8 was the right vehicle for that as long as "own every parameter" was the load-bearing requirement. (2) The operator's larger vision is closer to LoRA in spirit than to from-scratch architecture design: continuous-learning components grafted onto a pretrained "bonsai" 4–8B running locally. Pretraining a 4–8B from scratch is not in the budget on this machine and never will be.
+
+For the LoRA-class direction, owning every parameter is unnecessary; the 3–18 h pretrain cost we've been paying is buying something the long arc doesn't need. The architectural-signal question is also better served by **synthetic diagnostic tasks** (MQAR, selective copy, induction heads) at d=2–4 — iteration in minutes rather than hours — than by chasing val_bpb deltas at d6/d8 where most architectural changes sit within seed noise.
+
+A separate near-term interest the operator surfaced: using existing local small-model inference (1-bit / quantized) as a *tool* in feedback loops or as a distillation source. Modeling the base isn't ours to do here; *using* the base is. This is a distinct thread, possibly outside this repo entirely.
+
+**Decision**: Pause the from-scratch nanochat Hope/NL thread. Future memory-mechanism research moves into a separate, small synthetic harness (depth 2–4, dim 64–128, cycle time < 5 min per variant). The d6 baseline, d6_stage2, d8_overnight, and d8_overnight_a2 results stand as captured; no further full-depth pretrains until compute is materially cheaper (workstation, GPU box, hosted run).
+
+The "graft onto frozen pretrained base" framing that came up in the strategic-pivot conversation is **not** the chosen path — the operator's interest in local bonsai inference is downstream (feedback loops, distillation) rather than as a graft target for new memory layers. That framing is parked, not pursued.
+
+**Alternatives**:
+- *Continue with d6 / d8 Hope/NL variants.* Already at the noise floor on val_bpb at d6; would need to invest in better diagnostics or larger scale to learn more, and larger scale is the thing we just decided we don't have. ChatCORE at d6/d8 is informative but expensive (~1.5–5 h per canonical eval) and dominated by SpellingBee anyway.
+- *Pivot to "graft onto Qwen-1.5B" research.* Tractable, real prior art (TTT, Titans, Mamba grafting), real chatbot quality "for free." Rejected because (a) operator's interest in 1-bit / bonsai inference is downstream of those models, not bolted onto them, and (b) splitting attention between three research arcs (from-scratch, synthetic, graft) is worse than two.
+- *Wrap fully and switch repos.* The synthetic harness benefits from `nanochat/gpt.py` (Block, LinearAttentionMemory, Muon, the conditional memory-state plumbing from Stage 0); rebuilding elsewhere is wasted work. Pause-not-close is the right shape.
+
+**Consequences**:
+- No new d6+ pretrain or SFT runs from this branch until further notice.
+- Memory-mechanism work, when picked up, builds a `bench/` harness reusing existing model code with synthetic-task dataloaders. MQAR seed already in `dev/stage1_5_mqar*.py`.
+- Bonsai-inference-as-tool is flagged as an active interest but no concrete next step in this repo yet.
+- Strategic-pivot writeup at `docs/strategic_pivot_2026-05-13.md` carries the narrative and the open-options list.
+- Canonical d8 base CORE eval (queued from 2026-05-10) is independent of this pivot and remains available if a future writeup needs the headline; not actively scheduled.
+
+**Status**: accepted 2026-05-13. Branch `experiment/hope-nested-learning` enters a paused state.
+
