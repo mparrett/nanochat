@@ -2193,3 +2193,76 @@ one untracked `.claude/scheduled_tasks.lock`.
    (`chatsft_checkpoints/d8_overnight/`) once the A2 result is
    trusted. Frees ~2.7 GB.
 
+## Day 2026-05-13 (Wed) — Strategic pivot, branch enters paused state
+
+Full narrative at **`docs/strategic_pivot_2026-05-13.md`**. Decision record
+at **ADR-008** in `docs/project_notes/decisions.md`. Short version below.
+
+### What was decided
+
+The Hope/NL from-scratch thread on nanochat is **paused**. Future
+memory-mechanism research moves to a small synthetic harness
+(depth 2–4, MQAR + selective copy + induction heads, cycle < 5 min).
+No new d6+ pretrain or SFT runs until compute is materially cheaper.
+
+The "graft onto frozen pretrained base" framing that surfaced in the
+pivot conversation is **not** the chosen path — operator's interest in
+local bonsai inference is downstream (feedback loops, distillation)
+rather than as a graft target for new memory layers.
+
+### Why
+
+After d8 SFT A2 settled the under-tokened diagnostic on 2026-05-11,
+the larger vision came into focus: continuous-learning components
+grafted onto a pretrained 4–8B model running locally. "Own every
+parameter" only earns its 3–18 h pretrain cost when the change
+requires from-scratch retraining; for LoRA-class additions it doesn't.
+And val_bpb at d6/d8 sits at the noise floor for most architectural
+changes anyway — synthetic diagnostics give cleaner signal in minutes.
+
+### What was cleaned up today
+
+- Dropped `chatsft_checkpoints/d8_overnight/` (first-pass d8 SFT,
+  2.6 GB). The A2 result is the canonical d8 SFT; first-pass is
+  fully captured in writeups and `key_facts.md`.
+
+### What is preserved
+
+- All d6 baselines (`base_checkpoints/d6/`, `chatsft_checkpoints/d6/`).
+- d6_stage2 (best-of-d6 SFT: val_bpb 0.6518, ChatCORE 0.1744).
+- d8_overnight base + d8_overnight_a2 SFT (best-of-d8: val_bpb 0.6218,
+  ChatCORE 0.1622).
+- All `docs/hope_nl_*`, `docs/d8_*`, `docs/project_notes/*` writeups.
+- Infrastructure: `dev/preflight_memory.py`, `--grad-checkpoint`,
+  `--inherit-from`, wandb defaults, ChatCORE harness, `dev/stage1_5_mqar*.py`
+  (MQAR seed for the future synthetic harness).
+
+### Possible next steps (no commitment, in priority order if picked up)
+
+1. **Memory-mechanism playground.** Build a `bench/` harness reusing
+   `nanochat/gpt.py` + `LinearAttentionMemory` + Muon. Generalize the
+   Stage 1.5 MQAR probe (`dev/stage1_5_mqar*.py`) into `bench/tasks.py`
+   with a `--task=` flag. Add selective copy (Mamba-style) and induction
+   heads. Cycle < 5 min per architectural variant. Can live on this
+   branch or a fresh one.
+2. **Local bonsai inference as a tool.** Survey existing 1-bit / quantized
+   small-model projects (operator has seen XOR-swap weights and similar).
+   Frame: feedback loops, distillation source, multi-step inference.
+   Likely lives outside this repo.
+3. **Revisit from-scratch chatbot-as-testbed** if/when compute changes
+   (workstation, GPU box, hosted). The d6/d8 results and infra carry
+   forward.
+4. **Canonical d8 base CORE** (`--max-per-task=500`, ~5 h) — still
+   queued from 2026-05-10. Independent of the pivot. Worth doing only
+   if a precise d8 headline matters for a future writeup.
+5. **`learned_scale` (P1)** — trx4mr port paused mid-design. Probably
+   absorbed into the synthetic harness if the playground gets built;
+   otherwise dormant.
+
+### Branch state
+
+`experiment/hope-nested-learning` enters paused state. Three commits
+landing today: this HANDOFF extension, the strategic pivot narrative,
+and ADR-008. No code changes. Local-only per `feedback_local_only.md`.
+Untracked `.claude/scheduled_tasks.lock` remains as documented.
+
