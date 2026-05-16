@@ -60,6 +60,12 @@ cpu = [
 gpu = [
     "torch==2.11.0",
 ]
+# Apple Silicon only. Used by scripts/chat_eval_mlx.py to evaluate
+# externally-trained MLX models (e.g. PrismML's Ternary-Bonsai) against
+# nanochat's eval suite. Pulls in mlx, transformers>=5, sentencepiece.
+mlx = [
+    "mlx-lm>=0.31.2",
+]
 
 [tool.uv]
 default-groups = []
