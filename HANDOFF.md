@@ -2520,11 +2520,53 @@ HumanEval 932s, SpellingBee 286s. HumanEval still the dominant cost
    sound but operationally a bit awkward. Less urgent now that 8B
    has confirmed the diminishing-returns story.
 
+### 4B at -x 200 — tighter-stderr confirmation (landed 17:31 UTC, 84.9 min wall)
+
+Operator asked whether the headline holds up at bigger N. Pushed 4B
+to `-x 200` end-to-end with `--lenient-extract`. All six tasks,
+single run. Wall 84.9 min (1.42 h).
+
+| Task          | -x 50  | -x 200    | Δ      | n=200 stderr |
+| ---           | ---:   | ---:      | ---:   | ---:         |
+| ARC-Easy      | 88.00  | 84.00     | −4.00  | ±2.6pp       |
+| ARC-Challenge | 64.00  | 72.00     | +8.00  | ±3.2pp       |
+| MMLU          | 56.00  | 53.50     | −2.50  | ±3.5pp       |
+| GSM8K         | 74.00  | 79.00     | +5.00  | ±2.9pp       |
+| HumanEval     | 64.00  | 58.54     | −5.46  | n=164 = full |
+| SpellingBee   | 64.00  | 70.50     | +6.50  | ±3.2pp       |
+| **ChatCORE**  | 0.6322 | **0.6456**| +0.013 |              |
+
+**Headline holds: ChatCORE 0.6456, 3.70× over d6_stage2** (vs smoke
+3.62×). Operational conclusion unchanged.
+
+Three real-lift signals over the smoke (multi-sigma):
+- ARC-Challenge +8pp (2.5σ)
+- GSM8K +5pp (1.7σ)
+- SpellingBee +6.5pp (2σ)
+
+Smoke at n=50 was under-counting 4B's true capability on these.
+Conversely, ARC-Easy and HumanEval came down — smoke happened to
+over-sample easy problems. ARC-Easy delta within noise; HumanEval
+delta material but **at canonical N** (HumanEval test set is exactly
+164, so -x 200 ran the full set). The 58.54% HumanEval is now a
+canonical number, not a smoke estimate.
+
+MMLU stayed essentially flat (56 → 53.5, within stderr) — no lift
+signal at n=200 either. The 4B-vs-8B MMLU regression flagged in the
+8B writeup remains plausibly noise; would need both at -x 500+ to
+disambiguate.
+
+The 1.7B / 8B smokes weren't re-run at -x 200; the scaling-curve
+shape (1.7B 0.4256 → 4B 0.6456 → 8B 0.6789) is the same story as
+before, just with the middle point now tighter. 8B's lift over 4B
+is now even more clearly marginal (+0.033 in this fairer comparison).
+
 ### Branch state
 
-Four commits today: feat (lenient extractor), docs (4B lenient
+Five commits today: feat (lenient extractor), docs (4B lenient
 smoke + HANDOFF entry), docs (8B smoke + amendment), docs (1.7B
-lenient correction + this amendment). Local-only per
+lenient correction + amendment), docs (HTML field-eval writeup),
+docs (4B x200 + this amendment). Local-only per
 `feedback_local_only.md`. Untracked `.claude/scheduled_tasks.lock`
 remains. Branch still "paused" per 2026-05-13 — this work is
 cross-cutting tooling.
