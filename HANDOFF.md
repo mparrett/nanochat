@@ -2305,15 +2305,29 @@ the regex extractor requires. Same root cause for GSM8K 0%.
 Categorical evals (ARC-E/C, MMLU) are immune since single-token
 argmax doesn't depend on output formatting.
 
-### What's running
+### Bonsai-4B result (landed 22:39 PDT, 21.4 min wall)
 
-Bonsai-Ternary-4B smoke (same args, `-x 50`, `--no-system-prompt`)
-launched in background at 22:18-ish PDT. Estimated wall ~25 min on
-M2 24GB; 4B runs at ~58 tok/s vs 1.7B's ~110. ADR-001 in bonsai's
-project notes says 4B matches 1-bit-8B quality, so expect ARC/MMLU
-to lift further; generative tasks will still hit the format-mismatch
-ceiling until the lenient extractor lands. Output:
-`docs/bonsai_4b_chatcore_smoke_2026-05-15.md`. Log: `/tmp/bonsai_4b_smoke.log`.
+| Task          | 1.7B   | **4B**    | d6_stage2 | d8_a2  |
+| ---           | ---:   | ---:      | ---:      | ---:   |
+| ARC-Easy      | 74.00  | **88.00** | 25.80     | 27.00  |
+| ARC-Challenge | 44.00  | **64.00** | 28.67     | 26.00  |
+| MMLU          | 36.00  | **56.00** | 26.98     | 29.00  |
+| GSM8K         |  0.00  |  0.00     |  0.76     |  0.00  |
+| HumanEval     | 44.00  | **64.00** |  0.00     |  0.00  |
+| SpellingBee   |  0.00  |  0.00     | 95.31     | 88.00  |
+| **ChatCORE**  | 0.2489 | **0.4022**| 0.1744    | 0.1622 |
+
+Uniform lift on every immune-to-format-mismatch task: ARC-E +14,
+ARC-C +20, MMLU +20, HumanEval +20. 4B-at-2bit is a serious critic /
+source / judge for any feedback-loop or distillation use case. The
+format-mismatch ceiling on GSM8K/SpellingBee remains the only thing
+between this and a clean cross-arch ChatCORE story — the lenient
+extractor (open follow-up #1) is now clearly the highest-value
+unlock.
+
+Per-task wall: ARC-E 15.6s, ARC-C 16.8s, MMLU 27.7s, GSM8K 275s,
+HumanEval 695s, SpellingBee 245s. Generative scaled ~2× as expected
+from the 4B's ~58 tok/s vs 1.7B's ~110.
 
 ### Open follow-ups
 
