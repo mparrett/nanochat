@@ -2461,6 +2461,44 @@ for marginal lift. For feedback-loop / distillation use cases on
 this M2, the 4B's 21-minute six-task pass at ChatCORE 0.6322 is the
 performance envelope.
 
+### 1.7B lenient correction (landed 15:50 UTC, 3.8 min wall)
+
+Realised after the 8B run that the 1.7B's GSM8K/SpellingBee 0% was
+under strict-extract, not lenient — making the 1.7B-vs-larger
+comparison unfair (the strict scores hid real capability the same
+way they did on 4B). Re-ran just those two tasks under
+`--lenient-extract`:
+
+| Task          | 1.7B strict | 1.7B lenient |
+| ---           | ---:        | ---:         |
+| GSM8K         |  0.00       | **60.00**    |
+| SpellingBee   |  0.00       | **46.00**    |
+
+**1.7B lenient ChatCORE = 0.4256** (computed by merging strict
+categoricals with lenient generatives — same approach as the 4B
+correction). Up from 0.2489 strict; 1.71× lift.
+
+**Updated cross-arch scaling curve (all lenient, all -x 50):**
+
+|              | 1.7B   | 4B     | 8B     | d6_stage2 | d8_a2  |
+| ---          | ---:   | ---:   | ---:   | ---:      | ---:   |
+| **ChatCORE** | 0.4256 | 0.6322 | 0.6789 | 0.1744    | 0.1622 |
+
+Diminishing returns gentler than the 8B-time read:
+- 1.7B → 4B: +0.21 (1.49×), was reported as 2.5× pre-correction
+- 4B → 8B: +0.05 (1.07×), unchanged
+
+**Even the smallest Bonsai (473 MB on disk, 0.64 GB peak mem,
+110 tok/s) beats nanochat's best d6_stage2 by 2.44× on ChatCORE.**
+For ultra-low-memory feedback loops where wall matters more than
+peak accuracy, 1.7B is now in the conversation, not below it.
+
+Bonsai's own ADR-001 reads "1.7B fails on instruction-following"
+— but that conclusion came from an eval that used a system prompt,
+which ADR-002 later showed degrades 1.7B specifically. Under
+`--no-system-prompt` (which we've used throughout), 1.7B is genuinely
+competitive.
+
 Per-task wall on 8B: ARC-E 29s, ARC-C 30s, MMLU 53s, GSM8K 474s,
 HumanEval 932s, SpellingBee 286s. HumanEval still the dominant cost
 (longer code completions hit max_new_tokens more often). Confirms the
@@ -2484,9 +2522,10 @@ HumanEval 932s, SpellingBee 286s. HumanEval still the dominant cost
 
 ### Branch state
 
-Three commits today: feat (lenient extractor), docs (4B lenient
-smoke + HANDOFF entry), docs (8B smoke + this amendment).
-Local-only per `feedback_local_only.md`. Untracked
-`.claude/scheduled_tasks.lock` remains. Branch still "paused" per
-2026-05-13 — this work is cross-cutting tooling.
+Four commits today: feat (lenient extractor), docs (4B lenient
+smoke + HANDOFF entry), docs (8B smoke + amendment), docs (1.7B
+lenient correction + this amendment). Local-only per
+`feedback_local_only.md`. Untracked `.claude/scheduled_tasks.lock`
+remains. Branch still "paused" per 2026-05-13 — this work is
+cross-cutting tooling.
 
