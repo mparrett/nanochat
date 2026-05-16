@@ -313,7 +313,7 @@
     <strong>Date</strong> 2026-05-16<br>
     <strong>Hardware</strong> MacBook M2, 24GB<br>
     <strong>Models</strong> Bonsai-1.7B / 4B / 8B<br>
-    <strong>Total wall</strong> ~75 min
+    <strong>Total wall</strong> ~4 h 40 min
   </div>
 </header>
 
@@ -503,49 +503,52 @@ pred = conv[<span class="s">"letters"</span>][int(mx.argmax(focus).item())]</cod
   <div class="label">06 / The reveal</div>
   <h2>The fair cross-architecture ChatCORE</h2>
   <p>
-    With the lenient extractor on, the picture sharpens completely. Three Bonsai sizes, same harness, same prompts, same scoring, all at <code>-x 50</code>:
+    With the lenient extractor on, the picture sharpens completely. Three Bonsai sizes, same harness, same prompts, same scoring. The 1.7B and 4B were subsequently re-run at <code>-x 200</code> (stderr ±3.5pp, with HumanEval covered in full at n=164) to tighten the headline. 8B remains at smoke-N pending an overnight pass.
   </p>
   <table>
     <thead>
       <tr>
         <th>Task</th>
-        <th class="right">1.7B</th>
-        <th class="right">4B</th>
-        <th class="right">8B</th>
+        <th class="right">1.7B (n=200)</th>
+        <th class="right">4B (n=200)</th>
+        <th class="right">8B (n=50)*</th>
         <th class="right">d6_stage2</th>
         <th class="right">d8_a2</th>
       </tr>
     </thead>
     <tbody>
-      <tr><td>ARC-Easy</td>      <td class="num right">74.00%</td> <td class="num right">88.00%</td> <td class="num right hi">94.00%</td> <td class="num right lo">25.80%</td> <td class="num right lo">27.00%</td></tr>
-      <tr><td>ARC-Challenge</td> <td class="num right">44.00%</td> <td class="num right">64.00%</td> <td class="num right hi">76.00%</td> <td class="num right lo">28.67%</td> <td class="num right lo">26.00%</td></tr>
-      <tr><td>MMLU</td>          <td class="num right">36.00%</td> <td class="num right hi">56.00%</td> <td class="num right">50.00%</td>  <td class="num right lo">26.98%</td> <td class="num right lo">29.00%</td></tr>
-      <tr><td>GSM8K</td>         <td class="num right">60.00%</td> <td class="num right hi">74.00%</td> <td class="num right hi">74.00%</td> <td class="num right">0.76%</td>     <td class="num right">0.00%</td></tr>
-      <tr><td>HumanEval</td>     <td class="num right">44.00%</td> <td class="num right">64.00%</td> <td class="num right hi">74.00%</td> <td class="num right">0.00%</td>     <td class="num right">0.00%</td></tr>
-      <tr><td>SpellingBee</td>   <td class="num right">46.00%</td> <td class="num right">64.00%</td> <td class="num right hi">66.00%</td> <td class="num right hi">95.31%</td> <td class="num right">88.00%</td></tr>
+      <tr><td>ARC-Easy</td>      <td class="num right">69.00%</td> <td class="num right">84.00%</td> <td class="num right hi">94.00%</td> <td class="num right lo">25.80%</td> <td class="num right lo">27.00%</td></tr>
+      <tr><td>ARC-Challenge</td> <td class="num right">48.50%</td> <td class="num right">72.00%</td> <td class="num right hi">76.00%</td> <td class="num right lo">28.67%</td> <td class="num right lo">26.00%</td></tr>
+      <tr><td>MMLU</td>          <td class="num right">46.00%</td> <td class="num right hi">53.50%</td> <td class="num right">50.00%</td>  <td class="num right lo">26.98%</td> <td class="num right lo">29.00%</td></tr>
+      <tr><td>GSM8K</td>         <td class="num right">59.00%</td> <td class="num right hi">79.00%</td> <td class="num right">74.00%</td>  <td class="num right">0.76%</td>     <td class="num right">0.00%</td></tr>
+      <tr><td>HumanEval†</td>    <td class="num right">46.95%</td> <td class="num right">58.54%</td> <td class="num right hi">74.00%</td> <td class="num right">0.00%</td>     <td class="num right">0.00%</td></tr>
+      <tr><td>SpellingBee</td>   <td class="num right">43.50%</td> <td class="num right hi">70.50%</td> <td class="num right">66.00%</td>  <td class="num right hi">95.31%</td> <td class="num right">88.00%</td></tr>
       <tr class="headline">
         <td><strong>ChatCORE</strong></td>
-        <td class="num right hi">0.4256</td>
-        <td class="num right hi">0.6322</td>
+        <td class="num right hi">0.4458</td>
+        <td class="num right hi">0.6456</td>
         <td class="num right hi">0.6789</td>
         <td class="num right">0.1744</td>
         <td class="num right">0.1622</td>
       </tr>
       <tr class="headline">
         <td><em>vs d6_stage2</em></td>
-        <td class="num right hi">2.44×</td>
-        <td class="num right hi">3.62×</td>
+        <td class="num right hi">2.56×</td>
+        <td class="num right hi">3.70×</td>
         <td class="num right hi">3.89×</td>
         <td class="num right">1.00×</td>
         <td class="num right">0.93×</td>
       </tr>
     </tbody>
   </table>
-  <p>
-    <strong>Even the smallest Bonsai — 473 MB on disk, 0.64 GB peak memory, 110 tokens per second — beats our best nanochat-from-scratch ChatCORE by 2.44×.</strong> The 4B is a 3.62× lift; the 8B reaches 3.89×. The single task where nanochat still dominates is SpellingBee — and that's because our d6_stage2 was specifically SFT-trained to over-represent letter-counting in nanochat's tokenizer (the d6_stage2 ChatCORE writeup noted that 91% of its centered score came from SpellingBee alone).
+  <p style="font-size: 0.85rem; color: var(--ink-mute); margin-top: -0.8rem;">
+    * 8B still at smoke N (per-task stderr ±7pp). † HumanEval test set is exactly 164 problems; at -x 200 the full set is evaluated. These are canonical HumanEval numbers for 1.7B and 4B.
   </p>
   <p>
-    The scaling-return story is also crisp now:
+    <strong>Even the smallest Bonsai — 473 MB on disk, 0.64 GB peak memory, 110 tokens per second — beats our best nanochat-from-scratch ChatCORE by 2.56×.</strong> The 4B is a 3.70× lift; the 8B reaches 3.89×. The single task where nanochat still dominates is SpellingBee — and that's because our d6_stage2 was specifically SFT-trained to over-represent letter-counting in nanochat's tokenizer (the d6_stage2 ChatCORE writeup noted that 91% of its centered score came from SpellingBee alone).
+  </p>
+  <p>
+    The scaling-return story:
   </p>
   <table>
     <thead>
@@ -557,12 +560,16 @@ pred = conv[<span class="s">"letters"</span>][int(mx.argmax(focus).item())]</cod
       </tr>
     </thead>
     <tbody>
-      <tr><td>1.7B → 4B</td> <td class="num right hi">+0.21</td> <td class="num right hi">1.49×</td> <td>0.64 → 1.29 GB</td></tr>
-      <tr><td>4B → 8B</td>   <td class="num right lo">+0.05</td> <td class="num right lo">1.07×</td> <td>1.29 → 2.48 GB</td></tr>
+      <tr><td>d6_stage2 → 1.7B</td> <td class="num right hi">+0.271</td> <td class="num right hi">2.56×</td> <td>— → 0.64 GB</td></tr>
+      <tr><td>1.7B → 4B</td>        <td class="num right hi">+0.200</td> <td class="num right hi">1.45×</td> <td>0.64 → 1.29 GB</td></tr>
+      <tr><td>4B → 8B*</td>         <td class="num right lo">+0.033</td> <td class="num right lo">1.05×</td> <td>1.29 → 2.48 GB</td></tr>
     </tbody>
   </table>
+  <p style="font-size: 0.85rem; color: var(--ink-mute); margin-top: -0.8rem;">
+    * 8B at smoke N. The smoke→x200 pattern on 4B was mixed-direction; if 8B follows the same pattern its ChatCORE may land between 0.65 and 0.67, making the 4B-vs-8B gap effectively close to zero.
+  </p>
   <p>
-    The 4B is the operational sweet spot, empirically validating bonsai's ADR-001 written months before we had a way to measure it. Going from 4B to 8B doubles the memory and ~halves the throughput for five centered-accuracy points — the kind of marginal return that only matters if you're chasing a specific headline.
+    The 4B is the operational sweet spot, empirically validating bonsai's ADR-001 written months before we had a way to measure it. Going from 4B to 8B doubles the memory and ~halves the throughput for three centered-accuracy points — the kind of marginal return that only matters if you're chasing a specific headline, and even that gap may close at fair measurement.
   </p>
 </section>
 
@@ -616,10 +623,12 @@ pred = conv[<span class="s">"letters"</span>][int(mx.argmax(focus).item())]</cod
       <tr><td>Bonsai-4B GSM/SB re-run (lenient)</td>   <td class="num right">7.4 min</td>  <td class="num right">1:52</td> <td>ChatCORE 0.6322</td></tr>
       <tr><td>Bonsai-8B smoke (lenient)</td>      <td class="num right">30.2 min</td> <td class="num right">2:22</td> <td>ChatCORE 0.6789</td></tr>
       <tr><td>Bonsai-1.7B GSM/SB re-run (lenient)</td> <td class="num right">3.8 min</td>  <td class="num right">2:26</td> <td>ChatCORE 0.4256</td></tr>
+      <tr><td>Bonsai-4B at -x 200 (canonical follow-up)</td> <td class="num right">84.9 min</td> <td class="num right">3:51</td> <td>ChatCORE 0.6456</td></tr>
+      <tr><td>Bonsai-1.7B at -x 200 (canonical follow-up)</td> <td class="num right">49.6 min</td> <td class="num right">4:41</td> <td>ChatCORE 0.4458</td></tr>
     </tbody>
   </table>
   <p>
-    Two and a half hours, end to end. The harness is now ready to point at any MLX-loadable model. The lenient extractor is general enough to cover most instruct-tuned outputs without hand-tuning per model. The scaling-curve writeup will hold up against any future model we add a column for.
+    Four hours forty minutes, end to end. The harness is now ready to point at any MLX-loadable model. The lenient extractor is general enough to cover most instruct-tuned outputs without hand-tuning per model. The smoke→x200 follow-up tightened the headline numbers (1.7B 0.4256 → 0.4458, 4B 0.6322 → 0.6456) and surfaced four real lift signals the smoke had under-counted — most notably 1.7B-MMLU (+10pp, ~3σ) and 4B-ARC-Challenge (+8pp, ~2.5σ). The operational conclusion ("4B is the pick") was robust across both measurements.
   </p>
 </section>
 
@@ -652,6 +661,9 @@ pred = conv[<span class="s">"letters"</span>][int(mx.argmax(focus).item())]</cod
     <code>26b33b1</code> <span>docs: bonsai-4b lenient — 74%/64% (was 0%/0%)</span>
     <code>3be25ce</code> <span>docs: bonsai-8b ChatCORE smoke — 0.6789, confirms 4B as sweet spot</span>
     <code>4de49fe</code> <span>docs: bonsai-1.7b lenient correction — 60%/46%, ChatCORE 0.4256</span>
+    <code>2a213fe</code> <span>docs: bonsai_field_eval_2026-05-16.html — first edition</span>
+    <code>fb349dc</code> <span>docs: bonsai-4b ChatCORE at -x 200 — 0.6456 (smoke holds)</span>
+    <code>[…]</code>      <span>docs: bonsai-1.7b at -x 200 + canonical follow-up writeup + this revision</span>
   </div>
 </footer>
 

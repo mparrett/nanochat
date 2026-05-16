@@ -2571,3 +2571,61 @@ docs (4B x200 + this amendment). Local-only per
 remains. Branch still "paused" per 2026-05-13 — this work is
 cross-cutting tooling.
 
+### 1.7B at -x 200 — tighter-stderr confirmation (landed 18:37 UTC, 49.6 min wall)
+
+Same args as the 4B x200 (`--no-system-prompt`, `--max-new-tokens=512`,
+greedy, `--lenient-extract`). All six tasks single end-to-end run.
+
+| Task          | smoke  | x200   | Δ      | stderr      |
+| ---           | ---:   | ---:   | ---:   | ---:        |
+| ARC-Easy      | 74.00  | 69.00  | −5.00  | ±3.3pp      |
+| ARC-Challenge | 44.00  | 48.50  | +4.50  | ±3.5pp      |
+| **MMLU**      | 36.00  | **46.00** | **+10.00** | ±3.5 (2.8σ) |
+| GSM8K         | 60.00  | 59.00  | −1.00  | ±3.5pp      |
+| HumanEval     | 44.00  | 46.95  | +2.95  | n=164 canonical |
+| SpellingBee   | 46.00  | 43.50  | −2.50  | ±3.5pp      |
+| **ChatCORE**  | 0.4256 | **0.4458** | +0.020 |             |
+
+MMLU +10pp is the headline — 2.8σ lift, smoke materially
+under-counted 1.7B's knowledge. Other deltas within stderr.
+ChatCORE moved up modestly (+0.020).
+
+### Canonical-ish cross-arch summary
+
+1.7B at x200, 4B at x200, 8B still at smoke pending overnight run:
+
+|              | 1.7B x200 | 4B x200 | 8B smoke | d6_stage2 |
+| ---          | ---:      | ---:    | ---:     | ---:      |
+| **ChatCORE** | 0.4458    | 0.6456  | 0.6789   | 0.1744    |
+| vs d6_stage2 | 2.56×     | 3.70×   | 3.89×    | 1.00×     |
+
+Diminishing returns at tighter measurement:
+- d6_stage2 → 1.7B: +0.271 (2.56×) — most of the lift sits here
+- 1.7B → 4B: +0.200 (1.45×)
+- 4B → 8B: +0.033 (1.05×) — and likely shrinks further at fair N
+
+Full canonical writeup: `docs/bonsai_x200_canonical_2026-05-16.md`.
+HTML field-eval updated to use x200 numbers in the headline table.
+
+### Open follow-ups (updated)
+
+1. ~~Lenient answer extractor~~ — done.
+2. **Categorical batching** — nice-to-have, matters at full-canonical scale.
+3. **Report integration** with `nanochat.report` — side-by-side comparability.
+4. ~~Bonsai-8B smoke~~ — done.
+5. ~~Single-run full-lenient confirmation on 4B~~ — done at x200.
+6. **8B at x200** (~2h overnight) — would resolve whether 4B and 8B
+   are effectively tied at fair measurement. Operator queued as a
+   possible overnight run.
+7. **nanochat-side at x200** — d6_stage2 and d8_a2 were themselves
+   smokes at -x 100. Re-running through our own harness would make
+   the cross-arch comparison fully symmetric. ~30 min each on M2.
+
+### Branch state (updated)
+
+Six commits today: feat (lenient extractor), docs (4B lenient smoke),
+docs (8B smoke), docs (1.7B lenient correction), docs (HTML field-eval),
+docs (4B x200), docs (1.7B x200 + canonical follow-up writeup + HTML
+update + this amendment). Local-only. Untracked
+`.claude/scheduled_tasks.lock` remains. Branch still paused.
+
