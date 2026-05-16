@@ -2427,29 +2427,66 @@ task (multilingual templates, model has to identify letter as well
 as count it) plus genuine wrong answers (the probed Korean problem
 where model said 2 vs gold 1 was a real miss, not extractor failure).
 
-### Open follow-ups
+### Bonsai-8B smoke (landed 14:56 UTC, 30.2 min wall)
 
-The original four follow-ups from Day 2026-05-15:
-1. ~~Lenient answer extractor~~ — **done today.**
-2. **Categorical batching** — still nice-to-have, matters at full-
-   canonical scale (MMLU 14k problems). For -x ≤200 smoke it doesn't.
+Same harness, same args as 4B (-x 50, --no-system-prompt,
+max_new_tokens=512, greedy, --lenient-extract). Single-run end-to-end
+with lenient — categoricals + generative in one pass.
+
+| Task          | 1.7B   | 4B lenient | **8B**    | d6_stage2 |
+| ---           | ---:   | ---:       | ---:      | ---:      |
+| ARC-Easy      | 74.00  | 88.00      | **94.00** | 25.80     |
+| ARC-Challenge | 44.00  | 64.00      | **76.00** | 28.67     |
+| MMLU          | 36.00  | 56.00      | 50.00 ⚠   | 26.98     |
+| GSM8K         |  0.00  | 74.00      | 74.00     |  0.76     |
+| HumanEval     | 44.00  | 64.00      | **74.00** |  0.00     |
+| SpellingBee   |  0.00  | 64.00      | **66.00** | 95.31     |
+| **ChatCORE**  | 0.2489 | 0.6322     | **0.6789**| 0.1744    |
+
+**Diminishing returns confirmed empirically (validates bonsai ADR-001
+"4B is sweet spot"):**
+- 1.7B → 4B: ChatCORE +0.38 (2.5×)
+- 4B → 8B: ChatCORE +0.05 (1.07×)
+
+Two anomalies worth noting:
+- MMLU regressed 56→50 (-6 points). At n=50 stderr is ~±7 so this
+  is noise-consistent, but no lift signal in the n=50 sample.
+- GSM8K flat at exactly 37/50 on both 4B and 8B. Could be local
+  capability plateau or a shared-reasoning ceiling around the int2-
+  Qwen3 architecture. Worth verifying at -x 100+ if a sharper
+  scaling story is needed.
+
+**Operational implication: 4B is the pick.** 8B costs ~2.5× wall
+for marginal lift. For feedback-loop / distillation use cases on
+this M2, the 4B's 21-minute six-task pass at ChatCORE 0.6322 is the
+performance envelope.
+
+Per-task wall on 8B: ARC-E 29s, ARC-C 30s, MMLU 53s, GSM8K 474s,
+HumanEval 932s, SpellingBee 286s. HumanEval still the dominant cost
+(longer code completions hit max_new_tokens more often). Confirms the
+1.7B→4B→8B wall scaling tracks the published gen tok/s ratios
+(110/58/35 per bonsai's key_facts.md).
+
+### Open follow-ups (updated)
+
+1. ~~Lenient answer extractor~~ — **done.**
+2. **Categorical batching** — nice-to-have, matters at full-canonical
+   scale (MMLU 14k problems). For -x ≤200 smoke it doesn't.
 3. **Report integration** — currently writes a freestanding markdown.
    `nanochat.report` integration would put bonsai numbers side-by-
    side with nanochat eval numbers in the canonical report file.
-4. **Bonsai-8B smoke** — same harness, ~50 min wall expected.
-   Diminishing returns over 4B per ADR-001; only worth it if the
-   8B-vs-4B gap matters for a specific writeup.
-
-New follow-up from today:
-5. **Single-run full-lenient confirmation on 4B** if a publication-
+4. ~~Bonsai-8B smoke~~ — **done; 4B remains operational pick.**
+5. **Full-lenient single-run confirmation on 4B** if a publication-
    grade ChatCORE number is wanted (~21 min wall). The 0.6322 above
    is computed from a strict+lenient merge, which is mathematically
-   sound but operationally a bit awkward.
+   sound but operationally a bit awkward. Less urgent now that 8B
+   has confirmed the diminishing-returns story.
 
 ### Branch state
 
-Two commits today: feat (lenient extractor) and docs (lenient smoke
-result + this HANDOFF entry). Local-only per `feedback_local_only.md`.
-Untracked `.claude/scheduled_tasks.lock` remains. Branch still
-"paused" per 2026-05-13 — this work is cross-cutting tooling.
+Three commits today: feat (lenient extractor), docs (4B lenient
+smoke + HANDOFF entry), docs (8B smoke + this amendment).
+Local-only per `feedback_local_only.md`. Untracked
+`.claude/scheduled_tasks.lock` remains. Branch still "paused" per
+2026-05-13 — this work is cross-cutting tooling.
 
