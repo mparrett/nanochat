@@ -23,6 +23,7 @@ Usage:
 
 import argparse
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from functools import partial
@@ -36,10 +37,64 @@ from mlx_lm.generate import generate
 from mlx_lm.sample_utils import make_sampler
 
 from tasks.arc import ARC
-from tasks.gsm8k import GSM8K
+from tasks.gsm8k import GSM8K, extract_answer as strict_extract_answer
 from tasks.humaneval import HumanEval
 from tasks.mmlu import MMLU
 from tasks.spellingbee import SpellingBee
+
+
+# Lenient answer extraction for generative tasks (GSM8K, SpellingBee).
+# nanochat models SFT-trained to emit "#### N" hit the strict extractor.
+# General-purpose models (Bonsai-Qwen3, etc.) output natural-language
+# answers and score 0% under strict. Lenient extractor walks patterns
+# from most-specific to most-permissive, normalizing the matched number.
+_RE_STRICT = re.compile(r"####\s*(-?[0-9][0-9\.,]*)")
+_RE_HINT = re.compile(
+    r"(?:final\s*answer|the\s*answer\s*is|my\s*final\s*answer|"
+    r"answer\s*[:=]|gives\s*us)\s*[*:#`'\"$]*\s*(-?[0-9][0-9\.,]*)",
+    re.IGNORECASE,
+)
+_RE_BOLD = re.compile(r"\*\*\s*(-?[0-9][0-9\.,]*)\s*\*\*")
+_RE_BARE = re.compile(r"(-?[0-9][0-9\.,]*)")
+
+
+def _normalize_num(s):
+    return s.strip().rstrip(".").replace(",", "")
+
+
+def lenient_extract(completion):
+    """Try strict #### first, then 'final answer'/'answer is' hints,
+    then **N** bold, then last bare integer in the tail. Returns
+    normalized number string or None.
+    """
+    m = _RE_STRICT.search(completion)
+    if m:
+        return _normalize_num(m.group(1))
+    matches = list(_RE_HINT.finditer(completion))
+    if matches:
+        return _normalize_num(matches[-1].group(1))
+    matches = list(_RE_BOLD.finditer(completion))
+    if matches:
+        return _normalize_num(matches[-1].group(1))
+    # Bare-integer fallback: search the last 200 chars (avoid step-by-step
+    # working-out numbers earlier in the completion).
+    tail = completion[-200:]
+    matches = list(_RE_BARE.finditer(tail))
+    if matches:
+        return _normalize_num(matches[-1].group(1))
+    return None
+
+
+def evaluate_completion(task, conv, completion, lenient):
+    """Dispatch: strict baseline by default; lenient extractor for
+    GSM8K/SpellingBee response side only (gold stays strict — it's
+    always nanochat-format)."""
+    if not lenient or not isinstance(task, (GSM8K, SpellingBee)):
+        return int(task.evaluate(conv, completion))
+    gold_text = conv["messages"][-1]["content"][-1]["text"]
+    ref = strict_extract_answer(gold_text)
+    pred = lenient_extract(completion)
+    return int(pred is not None and pred == ref)
 
 
 BONSAI_SHORT_NAMES = {
@@ -127,7 +182,7 @@ def run_categorical(task, model, tokenizer, max_problems, no_system_prompt):
 
 
 def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
-                   temperature, no_system_prompt):
+                   temperature, no_system_prompt, lenient):
     n = min(len(task), max_problems or len(task))
     sampler = make_sampler(temp=temperature)
     passed, total = 0, 0
@@ -139,7 +194,7 @@ def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
             model, tokenizer, prompt=prompt_str, max_tokens=max_new_tokens,
             sampler=sampler, verbose=False,
         )
-        passed += int(task.evaluate(conv, completion))
+        passed += evaluate_completion(task, conv, completion, lenient)
         total += 1
         if (i + 1) % 5 == 0 or i + 1 == n:
             print(f"\r  [{i+1}/{n}] passed={passed} acc={passed/total:.3f}", end="", flush=True)
@@ -165,7 +220,8 @@ def write_report(out_path, model_id, results, totals, args, wall_total, chatcore
         f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         f"Total wall: {wall_total:.1f}s",
         f"Args: max_problems={args.max_problems} temp={args.temperature} "
-        f"max_new_tokens={args.max_new_tokens} no_system_prompt={args.no_system_prompt}",
+        f"max_new_tokens={args.max_new_tokens} no_system_prompt={args.no_system_prompt} "
+        f"lenient_extract={args.lenient_extract}",
         "",
         "| Task | Acc | n | Centered |",
         "| --- | ---: | ---: | ---: |",
@@ -195,6 +251,10 @@ def main():
                    help="Max generated tokens for generative tasks (default 256, less than nanochat 512 for smoke speed)")
     p.add_argument("--no-system-prompt", action="store_true",
                    help="Strip system messages from prompts (per Bonsai ADR-002 for 1.7B)")
+    p.add_argument("--lenient-extract", action="store_true",
+                   help="GSM8K/SpellingBee: accept natural-language answer formats "
+                   "('Final Answer: N', '**N**', etc.) in addition to strict '#### N'. "
+                   "Use when comparing non-nanochat-SFT models.")
     p.add_argument("-o", "--output", default=None, help="Markdown report path")
     args = p.parse_args()
 
@@ -221,7 +281,8 @@ def main():
         else:
             acc, n = run_generative(task, model, tokenizer,
                                      args.max_problems, args.max_new_tokens,
-                                     args.temperature, args.no_system_prompt)
+                                     args.temperature, args.no_system_prompt,
+                                     args.lenient_extract)
         results[tname] = acc
         totals[tname] = n
         print(f"  {tname}: {acc*100:.2f}% ({n} problems)")
