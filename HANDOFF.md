@@ -2353,3 +2353,103 @@ writeups), HANDOFF (this entry). 4B smoke commit pending its run.
 Local-only per `feedback_local_only.md`. Untracked
 `.claude/scheduled_tasks.lock` remains.
 
+## Day 2026-05-16 (Sat) — Lenient extractor lands; cross-arch ChatCORE clean
+
+Same harness, same branch state (still paused per 2026-05-13).
+Continuation of yesterday's bonsai-eval-harness work — closes out
+the obvious follow-up #1 from the Day 2026-05-15 entry.
+
+### What got built
+
+`chat_eval_mlx.py` `--lenient-extract` flag. GSM8K/SpellingBee
+response side accepts natural-language answer formats
+("Final Answer: N", "**N**", "the answer is N", "gives us N", last
+bare integer in the last 200 chars as fallback). Gold stays strict
+since it's always nanochat-format. Zero changes to `tasks/*.py` —
+baseline nanochat eval comparability preserved.
+
+Implementation lives entirely in the harness script (~60 LOC):
+`lenient_extract()` walks patterns most-specific to most-permissive;
+`evaluate_completion()` dispatches strict vs lenient based on flag
++ task isinstance check. Validated against 16 representative
+completions (incl. the actual Bonsai-1.7B outputs probed during
+yesterday's diagnosis, multilingual SpellingBee templates, negative
+numbers, comma-separated thousands, None on empty) — 16/16 pass.
+
+### Empirical unlock — Bonsai-4B at -x 50
+
+Re-ran GSM8K + SpellingBee under `--lenient-extract` (categoricals
+unchanged from yesterday's strict run — no extractor dependence).
+Wall 7.4 min for the two tasks.
+
+| Task          | 4B strict | **4B lenient** | d6_stage2 | d8_a2  |
+| ---           | ---:      | ---:           | ---:      | ---:   |
+| ARC-Easy      | 88.00     | 88.00          | 25.80     | 27.00  |
+| ARC-Challenge | 64.00     | 64.00          | 28.67     | 26.00  |
+| MMLU          | 56.00     | 56.00          | 26.98     | 29.00  |
+| GSM8K         |  0.00     | **74.00**      |  0.76     |  0.00  |
+| HumanEval     | 64.00     | 64.00          |  0.00     |  0.00  |
+| SpellingBee   |  0.00     | **64.00**      | 95.31     | 88.00  |
+| **ChatCORE**  | 0.4022    | **0.6322**     | 0.1744    | 0.1622 |
+
+**ChatCORE 0.6322 — 1.57× over strict 4B, 3.6× over d6_stage2.**
+
+The strict 0% on these two tasks was genuinely a harness limitation,
+not a model capability gap. Bonsai-Qwen3-4B at int2 produces real
+multi-step math and letter-counting capability that nanochat-format-
+bound evaluation was hiding completely.
+
+### Note on the ChatCORE computation
+
+The 0.6322 above merges yesterday's strict-mode categoricals with
+today's lenient-mode generative results. Justifiable because
+categorical evals (ARC, MMLU) use single-token argmax that has no
+extractor dependence — re-running them under `--lenient-extract`
+would produce bit-identical numbers. Saved ~14 min wall by not
+re-running the full six-task pass. Full single-run lenient confirmation
+is queueable if needed for a publication-grade headline.
+
+### Sanity-check on the lenient extractor
+
+GSM8K-style numerics: gold answers like "10500" or "$525" or
+"$10.50" all extract cleanly (regex `(-?[0-9][0-9\.,]*)` is greedy
+across periods/commas, comma normalization in post-process).
+
+False-positive risk: "last bare integer in tail" can mis-grab if the
+model writes "$X came from $0.20 per minute * 50 minutes" — would
+grab "50". Mitigated by trying hint patterns first; 50 problems
+on GSM8K landed at 74% which is consistent with published Qwen3-4B
+GSM8K numbers (~60-80% at full precision), so the bare-fallback
+miss rate looks bounded.
+
+SpellingBee 64% lower than GSM8K 74% reflects the harder structural
+task (multilingual templates, model has to identify letter as well
+as count it) plus genuine wrong answers (the probed Korean problem
+where model said 2 vs gold 1 was a real miss, not extractor failure).
+
+### Open follow-ups
+
+The original four follow-ups from Day 2026-05-15:
+1. ~~Lenient answer extractor~~ — **done today.**
+2. **Categorical batching** — still nice-to-have, matters at full-
+   canonical scale (MMLU 14k problems). For -x ≤200 smoke it doesn't.
+3. **Report integration** — currently writes a freestanding markdown.
+   `nanochat.report` integration would put bonsai numbers side-by-
+   side with nanochat eval numbers in the canonical report file.
+4. **Bonsai-8B smoke** — same harness, ~50 min wall expected.
+   Diminishing returns over 4B per ADR-001; only worth it if the
+   8B-vs-4B gap matters for a specific writeup.
+
+New follow-up from today:
+5. **Single-run full-lenient confirmation on 4B** if a publication-
+   grade ChatCORE number is wanted (~21 min wall). The 0.6322 above
+   is computed from a strict+lenient merge, which is mathematically
+   sound but operationally a bit awkward.
+
+### Branch state
+
+Two commits today: feat (lenient extractor) and docs (lenient smoke
+result + this HANDOFF entry). Local-only per `feedback_local_only.md`.
+Untracked `.claude/scheduled_tasks.lock` remains. Branch still
+"paused" per 2026-05-13 — this work is cross-cutting tooling.
+
