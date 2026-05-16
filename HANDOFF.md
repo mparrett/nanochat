@@ -2266,3 +2266,76 @@ landing today: this HANDOFF extension, the strategic pivot narrative,
 and ADR-008. No code changes. Local-only per `feedback_local_only.md`.
 Untracked `.claude/scheduled_tasks.lock` remains as documented.
 
+## Day 2026-05-15 (Fri) — Bonsai eval harness landed; first cross-model ChatCORE
+
+Cross-cutting tooling, not a Hope/NL experiment — branch remains in
+the paused state from 2026-05-13. This work supports the strategic-
+pivot direction (use local bonsai inference as a tool for comparison /
+distillation / feedback-loops).
+
+### What got built
+
+`scripts/chat_eval_mlx.py` (~190 lines) — runs nanochat's chat eval
+suite (the same six tasks → ChatCORE) against any model loadable
+via `mlx_lm.load()`. Reuses `tasks/*.py` verbatim; only the
+chat-template handling and the model-call shape differ from
+`scripts/chat_eval.py`. Optional `[mlx]` extra in `pyproject.toml`
+(Apple-Silicon only); default `uv sync --extra cpu` unchanged.
+
+Three integration shapes considered (direct mlx_lm import, OpenAI-
+compatible HTTP via `bonsai/serve.py`, subprocess); chose direct
+import for full programmatic control + logprob access. Bonsai short
+names (`-m 1.7b/4b/8b`) resolve to the corresponding PrismML
+HuggingFace repos.
+
+Full harness writeup: `docs/bonsai_eval_harness_2026-05-15.md`.
+
+### Headline result — Bonsai-Ternary-1.7B at -x 50
+
+**ChatCORE 0.2489** vs d6_stage2 0.1744, d8_a2 0.1622. Bonsai-1.7B
+beats both nanochat baselines on headline despite tanking SpellingBee.
+Wins on every reasoning/code task; loses every nanochat-output-
+format-bound task. Per-task table in
+`docs/bonsai_1.7b_chatcore_smoke_2026-05-15.md`.
+
+Diagnosed the SpellingBee 0% by probing three completions: the model
+solves the problems correctly but doesn't emit the `#### N` marker
+the regex extractor requires. Same root cause for GSM8K 0%.
+**Harness limitation when applied cross-model, not a model failure.**
+Categorical evals (ARC-E/C, MMLU) are immune since single-token
+argmax doesn't depend on output formatting.
+
+### What's running
+
+Bonsai-Ternary-4B smoke (same args, `-x 50`, `--no-system-prompt`)
+launched in background at 22:18-ish PDT. Estimated wall ~25 min on
+M2 24GB; 4B runs at ~58 tok/s vs 1.7B's ~110. ADR-001 in bonsai's
+project notes says 4B matches 1-bit-8B quality, so expect ARC/MMLU
+to lift further; generative tasks will still hit the format-mismatch
+ceiling until the lenient extractor lands. Output:
+`docs/bonsai_4b_chatcore_smoke_2026-05-15.md`. Log: `/tmp/bonsai_4b_smoke.log`.
+
+### Open follow-ups
+
+1. **Lenient answer extractor** (v2 enhancement, ~30 min of work).
+   Match `#### N`, `Final Answer: N`, `**N**`, `is **N**`, last-bare-
+   integer fallback. Behind a `--lenient-extract` flag so baseline
+   nanochat eval comparability is preserved. Unlocks fair generative
+   scoring for any non-nanochat-SFT model.
+2. **Categorical batching** — current loop runs one forward per
+   problem. nanochat's `chat_eval.py` batches up to bs=32. For
+   `-x ≤200` smoke it doesn't matter; for full-canonical (MMLU full
+   = 14k problems) it would.
+3. **Report integration** — currently writes a freestanding markdown.
+   Could integrate with `nanochat.report` for side-by-side comparisons
+   in the canonical report file.
+4. **Bonsai-8B smoke** — same harness, ~50 min wall expected.
+   Diminishing returns over 4B per ADR-001.
+
+### Branch state
+
+Three commits today: feat (script + pyproject), docs (smoke + harness
+writeups), HANDOFF (this entry). 4B smoke commit pending its run.
+Local-only per `feedback_local_only.md`. Untracked
+`.claude/scheduled_tasks.lock` remains.
+
