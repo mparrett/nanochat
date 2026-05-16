@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Field Eval — A borrowed bonsai beats our best baseline</title>
+<style>
+  :root {
+    --paper: #f5f1e8;
+    --paper-dim: #ebe5d6;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-mute: #8a857a;
+    --rule: #c9c2b0;
+    --accent: #b04a2f;
+    --accent-soft: #d97b5c;
+    --green: #4a7c3f;
+    --gold: #b08a2a;
+    --code-bg: #1c1d1f;
+    --code-fg: #e8e3d4;
+    --code-mute: #8d8675;
+    --code-key: #c9b76b;
+    --code-str: #a3b87a;
+    --code-com: #6a6a6a;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Charter", "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(0,0,0,0.025) 31px 32px),
+      var(--paper);
+  }
+  .sheet { max-width: 920px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+
+  .masthead {
+    border-top: 4px double var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0 1rem;
+    margin-bottom: 3rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1rem;
+  }
+  .masthead .kicker {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+  }
+  .masthead h1 {
+    font-family: "Iowan Old Style", "Charter", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(2rem, 4.6vw, 3.2rem);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .masthead h1 em { font-style: italic; color: var(--accent); }
+  .masthead .meta {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+    text-align: right;
+    line-height: 1.5;
+  }
+  .masthead .meta strong { color: var(--ink); font-weight: 600; }
+
+  .lede { font-size: 1.25rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 3rem; max-width: 38em; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .pull {
+    border-left: 3px solid var(--accent);
+    padding: 1.2rem 1.5rem;
+    margin: 2.5rem 0;
+    background: var(--paper-dim);
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.15rem;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .pull .src {
+    display: block;
+    margin-top: 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-style: normal;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  section { margin: 3rem 0; }
+  section > .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+  section > h2 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.85rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0.2rem 0 1.2rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.6rem;
+  }
+  section h3 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 1.6rem 0 0.5rem;
+  }
+  p { margin: 0 0 1rem; }
+  p + p { text-indent: 1.5em; }
+
+  pre, code { font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace; }
+  code {
+    font-size: 0.92em;
+    background: var(--paper-dim);
+    padding: 0.05em 0.35em;
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 1.2rem 1.4rem;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    margin: 1.4rem 0;
+    border-left: 3px solid var(--code-mute);
+  }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  pre .c { color: var(--code-com); }
+  pre .k { color: var(--code-key); }
+  pre .s { color: var(--code-str); }
+
+  .incident {
+    border: 1px solid var(--rule);
+    background: var(--paper-dim);
+    padding: 1.4rem 1.6rem;
+    margin: 1.6rem 0;
+    position: relative;
+  }
+  .incident > .num {
+    position: absolute;
+    top: -0.6rem;
+    left: 1rem;
+    background: var(--paper);
+    padding: 0 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .incident h3 { margin: 0 0 0.6rem; font-size: 1.1rem; }
+  .incident .label-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.8rem; }
+  .incident .tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.18em 0.55em;
+    border-radius: 2px;
+    border: 1px solid currentColor;
+  }
+  .tag.fix { color: var(--green); }
+  .tag.gotcha { color: var(--accent); }
+  .tag.upstream { color: var(--ink-soft); }
+  .tag.local { color: var(--ink); background: var(--paper); }
+  .tag.diag { color: var(--gold); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.4rem 0;
+    font-size: 0.95rem;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+  }
+  th, td {
+    padding: 0.7rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--paper-dim); }
+  th {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 600;
+    border-bottom: 2px solid var(--ink);
+    background: var(--paper);
+  }
+  td.num { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; color: var(--ink); }
+  td.num.lo { color: var(--ink-mute); }
+  td.num.hi { color: var(--green); font-weight: 700; }
+  td.num.win { color: var(--accent); font-weight: 700; }
+  td.center { text-align: center; }
+  td.right { text-align: right; }
+  th.right { text-align: right; }
+  tfoot th, tbody th {
+    background: var(--paper);
+    color: var(--ink);
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+  tr.headline td { background: var(--paper-dim); font-weight: 700; }
+
+  .pipe {
+    margin: 1.6rem 0;
+    padding: 1.4rem;
+    background: var(--paper-dim);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+    overflow-x: auto;
+  }
+  .pipe .stage {
+    display: inline-block;
+    padding: 0.3em 0.8em;
+    margin: 0.2em 0.15em;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  .pipe .stage.done { border-color: var(--green); color: var(--green); }
+  .pipe .stage.swap { border-color: var(--accent); color: var(--accent); }
+  .pipe .arrow { color: var(--ink-mute); margin: 0 0.2em; }
+  .pipe .annot { color: var(--ink-mute); font-size: 0.72rem; margin-top: 0.4em; display: block; }
+
+  ol.takeaways { list-style: none; counter-reset: t; padding: 0; margin: 1.4rem 0; }
+  ol.takeaways li { counter-increment: t; padding-left: 3rem; position: relative; margin-bottom: 1rem; }
+  ol.takeaways li::before {
+    content: counter(t, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+  }
+  ol.takeaways b { font-weight: 700; }
+
+  .colophon {
+    margin-top: 5rem;
+    padding-top: 1.5rem;
+    border-top: 4px double var(--ink);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--ink-mute);
+    line-height: 1.7;
+  }
+  .colophon a { color: var(--ink); }
+  .colophon .commits { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.4rem; margin-top: 0.8rem; }
+  .colophon .commits code { background: none; padding: 0; color: var(--ink-soft); }
+
+  hr.fancy {
+    border: none;
+    text-align: center;
+    margin: 2.5rem 0;
+    color: var(--ink-mute);
+  }
+  hr.fancy::before { content: "·   ·   ·"; letter-spacing: 0.5em; }
+
+  @media (max-width: 600px) {
+    .sheet { padding: 2rem 1.1rem 4rem; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead .meta { text-align: left; }
+    .lede { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+<article class="sheet">
+
+<header class="masthead">
+  <div>
+    <div class="kicker">Field Eval &nbsp;·&nbsp; cross-architecture ChatCORE on Apple Silicon</div>
+    <h1>A borrowed <em>473&nbsp;MB</em> bonsai<br>beats our best baseline.</h1>
+  </div>
+  <div class="meta">
+    <strong>Date</strong> 2026-05-16<br>
+    <strong>Hardware</strong> MacBook M2, 24GB<br>
+    <strong>Models</strong> Bonsai-1.7B / 4B / 8B<br>
+    <strong>Total wall</strong> ~75 min
+  </div>
+</header>
+
+<p class="lede">
+  We spent two weeks pretraining transformers from scratch on a Mac. Then, in a single afternoon of tooling, we pointed our eval suite at a <strong>473&nbsp;MB pretrained ternary Qwen3</strong> someone else trained — and watched it score <strong>2.4×</strong> our best result. Here is what we built, what surprised us, and why a 4B-parameter ternary model is now the operational pick for everything except the from-scratch story itself.
+</p>
+
+<div class="pull">
+  "There is <b>1 'g'</b> in the word <b>'driegh'</b>."
+  <span class="src">— Bonsai-1.7B, 110 tok/s, 0.64 GB peak memory</span>
+</div>
+
+<section>
+  <div class="label">01 / Context</div>
+  <h2>Why we stopped pretraining and started borrowing</h2>
+  <p>
+    Three days before this work began, we paused our nanochat-from-scratch Hope/Nested-Learning experiment. The conclusion (formalised in <code>docs/strategic_pivot_2026-05-13.md</code>) was that owning every parameter only earns its 3–18 hour pretrain cost when an architectural change requires retraining from the ground up. For LoRA-class additions and continuous-learning components grafted onto a frozen base, owning every parameter is overkill, and the d6/d8 wall-clock was buying us something we didn't need.
+  </p>
+  <p>
+    The bigger arc — small models that learn at test time, grafted onto a "bonsai" 4–8B running locally — pointed sideways: <strong>modelling the base isn't ours to do here; <em>using</em> the base is.</strong> But before we could use anything, we needed to know how good the available bases actually are on the tasks we already measure nanochat against. The answer needed to be comparable: same problems, same scoring, same chat template logic — just a different model under the hood.
+  </p>
+  <p>
+    Building that comparison turned out to be a sub-200-line script. The first result it produced was unsettling enough that we kept poking until we'd surveyed three model sizes, found and fixed a measurement bug in our own evaluator, and produced a fair cross-architecture ChatCORE curve.
+  </p>
+</section>
+
+<section>
+  <div class="label">02 / The subject</div>
+  <h2>What Bonsai is</h2>
+  <p>
+    <strong>PrismML's Ternary-Bonsai</strong> family: Qwen3-architecture models distilled and quantized to 1.58-bit ternary weights — three values per parameter (−s, 0, +s) with an fp16 scale per 128-weight group. Released 2026-04-16, Apache 2.0. Three sizes are publicly available; all three run via stock <code>mlx-lm</code> on Apple Silicon, no custom kernels required since the 2-bit packed format is supported upstream.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Variant</th>
+        <th class="right">Disk</th>
+        <th class="right">Peak mem</th>
+        <th class="right">Gen tok/s (M2)</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Ternary-1.7B</td>
+        <td class="num right">473 MB</td>
+        <td class="num right">0.64 GB</td>
+        <td class="num right hi">110</td>
+        <td>Smallest. Per ADR-002, runs best <em>without</em> a system prompt.</td>
+      </tr>
+      <tr>
+        <td><strong>Ternary-4B</strong></td>
+        <td class="num right">1.1 GB</td>
+        <td class="num right">1.29 GB</td>
+        <td class="num right">58</td>
+        <td>Bonsai's own ADR-001 declares this the sweet spot.</td>
+      </tr>
+      <tr>
+        <td>Ternary-8B</td>
+        <td class="num right">2.2 GB</td>
+        <td class="num right">2.48 GB</td>
+        <td class="num right lo">35</td>
+        <td>Largest. Matches 1-bit-8B quality at 2× speed.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    The smallest weighs less on disk than the average podcast episode. Peak inference memory is well under 1 GB. We were already running these for chat experiments through the sibling <code>bonsai/</code> repo (which wraps <code>mlx-lm</code> with PrismML's recommended sampling defaults and an OpenAI-compatible server). What we hadn't done was put any of them through our evals.
+  </p>
+</section>
+
+<section>
+  <div class="label">03 / The build</div>
+  <h2>One adapter, two integration points</h2>
+  <p>
+    nanochat's chat eval suite is six tasks: <strong>ARC-Easy</strong>, <strong>ARC-Challenge</strong>, <strong>MMLU</strong> (categorical, one forward pass per problem; argmax over A/B/C/D letter token logits), <strong>GSM8K</strong>, <strong>HumanEval</strong>, <strong>SpellingBee</strong> (generative; sample → parse → compare). Their centered-accuracy mean is <strong>ChatCORE</strong>: 0 at random baseline, 1 at perfect.
+  </p>
+  <p>
+    Inspecting <code>tasks/*.py</code> revealed the cleanest possible adapter surface: the task modules emit tokenizer-agnostic <code>{"messages": [...], "letters": [...]}</code> dicts and an <code>evaluate(conversation, completion_str)</code> method that operates purely on text. No torch, no nanochat checkpoint, no nanochat tokenizer assumptions. <strong>They drop straight onto any other model with no modification.</strong>
+  </p>
+  <div class="pipe">
+    <span class="stage done">tasks/*.py<br>(unchanged)</span>
+    <span class="arrow">→</span>
+    <span class="stage swap">apply_chat_template<br>(Qwen3 instead of nanochat)</span>
+    <span class="arrow">→</span>
+    <span class="stage swap">mlx_lm Model.__call__<br>(MLX instead of torch)</span>
+    <span class="arrow">→</span>
+    <span class="stage done">task.evaluate(conv, completion)</span>
+    <span class="annot">Two swaps carry the whole adapter. Everything else is reused verbatim.</span>
+  </div>
+  <p>
+    The categorical path tokenizes the prompt, calls the model directly to get full <code>(B,&nbsp;T,&nbsp;V)</code> logits, slices the last position, and argmaxes over the encoded letter-token ids. We bail loudly at startup if the model's tokenizer breaks the single-token-per-letter assumption (Qwen3 BPE on bare ASCII letters does not):
+  </p>
+<pre><code>logits = model(ids)[0, -1]                <span class="c"># (V,)</span>
+choice_ids = encode_letter_ids(tok, conv[<span class="s">"letters"</span>], cache)
+focus = logits[mx.array(choice_ids)]
+pred = conv[<span class="s">"letters"</span>][int(mx.argmax(focus).item())]</code></pre>
+  <p>
+    The generative path is just <code>mlx_lm.generate(model, tok, prompt, max_tokens, sampler)</code> → string → existing <code>task_object.evaluate()</code>. Greedy by default (<code>temp=0</code>) to match nanochat's chat_eval default. Both paths log per-task wall and a running accuracy.
+  </p>
+  <p>
+    The whole thing is ~190 lines plus an optional <code>[mlx]</code> extra in <code>pyproject.toml</code>. Default <code>uv sync --extra cpu</code> on Linux is unchanged; the harness only installs where there's a Metal device to point it at.
+  </p>
+</section>
+
+<section>
+  <div class="label">04 / First smoke</div>
+  <h2>An impossible-looking result</h2>
+  <p>
+    We pointed the harness at Ternary-1.7B with <code>-x 50</code> (50 problems per task), greedy decoding, 512-token completion budget. No system prompt, per Bonsai's own ADR-002. Total wall: <strong>12.6 minutes</strong> on M2 24GB, with all categorical evals finishing in under 12 seconds each.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Task</th>
+        <th class="right">Bonsai-1.7B</th>
+        <th class="right">d6_stage2</th>
+        <th class="right">d8_a2</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>ARC-Easy</td>      <td class="num right hi">74.00%</td> <td class="num right lo">25.80%</td> <td class="num right lo">27.00%</td></tr>
+      <tr><td>ARC-Challenge</td> <td class="num right hi">44.00%</td> <td class="num right lo">28.67%</td> <td class="num right lo">26.00%</td></tr>
+      <tr><td>MMLU</td>          <td class="num right hi">36.00%</td> <td class="num right lo">26.98%</td> <td class="num right lo">29.00%</td></tr>
+      <tr><td>GSM8K</td>         <td class="num right win">0.00%</td>  <td class="num right">0.76%</td>     <td class="num right">0.00%</td></tr>
+      <tr><td>HumanEval</td>     <td class="num right hi">44.00%</td> <td class="num right">0.00%</td>     <td class="num right">0.00%</td></tr>
+      <tr><td>SpellingBee</td>   <td class="num right win">0.00%</td>  <td class="num right hi">95.31%</td> <td class="num right hi">88.00%</td></tr>
+      <tr class="headline"><td><strong>ChatCORE</strong></td> <td class="num right hi">0.2489</td> <td class="num right">0.1744</td> <td class="num right">0.1622</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The bonsai beat both our nanochat baselines on headline ChatCORE despite scoring zero on the two tasks our baselines crush. Read that sentence again. We're comparing a 473 MB pretrained model that has never seen our SFT data against models we trained end-to-end on M2 for hours, and <em>winning the headline</em> while losing two whole tasks.
+  </p>
+  <p>
+    Two ways to interpret this: either (a) the bonsai is genuinely much stronger on reasoning and code, and our SFT models excel only at a narrow nanochat-specific format, or (b) something is wrong with our measurement. The right next step was to ask the model what it thought the answers were.
+  </p>
+</section>
+
+<section>
+  <div class="label">05 / Diagnosis</div>
+  <h2>The model knows; the regex doesn't</h2>
+
+  <div class="incident">
+    <span class="num">INCIDENT 01</span>
+    <div class="label-row">
+      <span class="tag gotcha">Bug</span>
+      <span class="tag local">Local — eval-side</span>
+      <span class="tag diag">Format mismatch</span>
+    </div>
+    <h3>SpellingBee 0% comes from a regex, not a knowledge gap</h3>
+    <p>
+      Probed three SpellingBee completions from Ternary-1.7B with the harness's diagnostics:
+    </p>
+<pre><code><span class="c"># Problem 0 — gold = 1</span>
+"How many 'g' are in the word meningomyelitis?"
+→ <span class="s">"… So, the word has **11 letters**. … The word contains **1 'g'**.</span>
+<span class="s">   ### ✅ Final Answer: **1 'g'** in the word \"meningomyelitis\"."</span>
+
+<span class="c"># Problem 2 — gold = 1</span>
+"Show me how many 'g' are in 'driegh'"
+→ <span class="s">"… The letter **'g'** appears **once** in the word **'driegh'**.</span>
+<span class="s">   ### ✅ Final Answer: There is **1 'g'** in the word **'driegh'**."</span></code></pre>
+    <p>
+      <strong>The model is solving the problems correctly.</strong> nanochat's <code>tasks.spellingbee.extract_answer</code> matches only the literal pattern <code>#### N</code> — the format its SFT data trains the model to emit. A general-purpose pretrained model outputs natural language ("Final Answer: 1", "There is <strong>1 'g'</strong>", "the answer is 17") and scores zero under strict extraction. The same root cause applies to GSM8K, which uses an identical regex.
+    </p>
+    <p>
+      The fix is a lenient extractor on the response side <em>only</em>; the gold answer is always nanochat-format, so it stays strict. Walking patterns most-specific to most-permissive avoids false positives:
+    </p>
+<pre><code><span class="k">def</span> lenient_extract(completion):
+    <span class="c"># 1. Strict #### N — always wins if present</span>
+    <span class="k">if</span> m := _RE_STRICT.search(completion): <span class="k">return</span> normalize(m.group(<span class="s">1</span>))
+    <span class="c"># 2. "Final answer:" / "the answer is" hints — take the last match</span>
+    <span class="k">if</span> ms := list(_RE_HINT.finditer(completion)): <span class="k">return</span> normalize(ms[-<span class="s">1</span>].group(<span class="s">1</span>))
+    <span class="c"># 3. **N** bold markdown — take the last match</span>
+    <span class="k">if</span> ms := list(_RE_BOLD.finditer(completion)): <span class="k">return</span> normalize(ms[-<span class="s">1</span>].group(<span class="s">1</span>))
+    <span class="c"># 4. Last bare integer in the last 200 chars — fallback</span>
+    tail = completion[-<span class="s">200</span>:]
+    <span class="k">if</span> ms := list(_RE_BARE.finditer(tail)): <span class="k">return</span> normalize(ms[-<span class="s">1</span>].group(<span class="s">1</span>))
+    <span class="k">return</span> <span class="k">None</span></code></pre>
+    <p>
+      Behind a <code>--lenient-extract</code> flag (default off, preserves baseline). Validated against 16 representative completions — including the actual probed outputs above, multilingual SpellingBee templates, comma-separated thousands, GSM8K-style step-by-step working-out, and an empty completion that should return <code>None</code>. <strong>16/16 pass.</strong> Categorical evals are immune since single-token argmax doesn't depend on output formatting.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="label">06 / The reveal</div>
+  <h2>The fair cross-architecture ChatCORE</h2>
+  <p>
+    With the lenient extractor on, the picture sharpens completely. Three Bonsai sizes, same harness, same prompts, same scoring, all at <code>-x 50</code>:
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Task</th>
+        <th class="right">1.7B</th>
+        <th class="right">4B</th>
+        <th class="right">8B</th>
+        <th class="right">d6_stage2</th>
+        <th class="right">d8_a2</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>ARC-Easy</td>      <td class="num right">74.00%</td> <td class="num right">88.00%</td> <td class="num right hi">94.00%</td> <td class="num right lo">25.80%</td> <td class="num right lo">27.00%</td></tr>
+      <tr><td>ARC-Challenge</td> <td class="num right">44.00%</td> <td class="num right">64.00%</td> <td class="num right hi">76.00%</td> <td class="num right lo">28.67%</td> <td class="num right lo">26.00%</td></tr>
+      <tr><td>MMLU</td>          <td class="num right">36.00%</td> <td class="num right hi">56.00%</td> <td class="num right">50.00%</td>  <td class="num right lo">26.98%</td> <td class="num right lo">29.00%</td></tr>
+      <tr><td>GSM8K</td>         <td class="num right">60.00%</td> <td class="num right hi">74.00%</td> <td class="num right hi">74.00%</td> <td class="num right">0.76%</td>     <td class="num right">0.00%</td></tr>
+      <tr><td>HumanEval</td>     <td class="num right">44.00%</td> <td class="num right">64.00%</td> <td class="num right hi">74.00%</td> <td class="num right">0.00%</td>     <td class="num right">0.00%</td></tr>
+      <tr><td>SpellingBee</td>   <td class="num right">46.00%</td> <td class="num right">64.00%</td> <td class="num right hi">66.00%</td> <td class="num right hi">95.31%</td> <td class="num right">88.00%</td></tr>
+      <tr class="headline">
+        <td><strong>ChatCORE</strong></td>
+        <td class="num right hi">0.4256</td>
+        <td class="num right hi">0.6322</td>
+        <td class="num right hi">0.6789</td>
+        <td class="num right">0.1744</td>
+        <td class="num right">0.1622</td>
+      </tr>
+      <tr class="headline">
+        <td><em>vs d6_stage2</em></td>
+        <td class="num right hi">2.44×</td>
+        <td class="num right hi">3.62×</td>
+        <td class="num right hi">3.89×</td>
+        <td class="num right">1.00×</td>
+        <td class="num right">0.93×</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    <strong>Even the smallest Bonsai — 473 MB on disk, 0.64 GB peak memory, 110 tokens per second — beats our best nanochat-from-scratch ChatCORE by 2.44×.</strong> The 4B is a 3.62× lift; the 8B reaches 3.89×. The single task where nanochat still dominates is SpellingBee — and that's because our d6_stage2 was specifically SFT-trained to over-represent letter-counting in nanochat's tokenizer (the d6_stage2 ChatCORE writeup noted that 91% of its centered score came from SpellingBee alone).
+  </p>
+  <p>
+    The scaling-return story is also crisp now:
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Step</th>
+        <th class="right">ChatCORE lift</th>
+        <th class="right">Multiple</th>
+        <th>Memory cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>1.7B → 4B</td> <td class="num right hi">+0.21</td> <td class="num right hi">1.49×</td> <td>0.64 → 1.29 GB</td></tr>
+      <tr><td>4B → 8B</td>   <td class="num right lo">+0.05</td> <td class="num right lo">1.07×</td> <td>1.29 → 2.48 GB</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The 4B is the operational sweet spot, empirically validating bonsai's ADR-001 written months before we had a way to measure it. Going from 4B to 8B doubles the memory and ~halves the throughput for five centered-accuracy points — the kind of marginal return that only matters if you're chasing a specific headline.
+  </p>
+</section>
+
+<section>
+  <div class="label">07 / Caveats</div>
+  <h2>Where the numbers earn their asterisks</h2>
+  <p>
+    Two anomalies in the 4B↔8B comparison deserve mention. <strong>MMLU regressed</strong> 56% → 50% from 4B to 8B; at <code>n=50</code> the per-task standard error is around ±7 points, so this is noise-consistent but produces no positive signal. <strong>GSM8K landed flat at exactly 37/50 on both 4B and 8B.</strong> Could be local capability plateau, could be a reasoning ceiling shared across the int2-Qwen3 family, could be lenient-extractor saturation. Disambiguating would mean running both at <code>-x 100</code> or higher, where stderr collapses.
+  </p>
+  <p>
+    The lenient extractor is conservative by design — it tries the four patterns in order and only falls back to "last bare integer in the last 200 chars" if all three named patterns miss. False-positive risk exists for cases like <code>"$10 came from $0.20 per minute × 50 minutes"</code> where the last bare integer is "50" but the answer is "10". The 74% GSM8K result is in the published Qwen3-4B range at full precision (60–80%), suggesting the false-positive rate is bounded in practice.
+  </p>
+  <p>
+    SpellingBee at 46% / 64% / 66% lower than GSM8K isn't a false-positive artifact — it reflects the genuinely harder structural task (multilingual templates, the model has to <em>identify</em> the letter as well as count it) plus real model misses. One probed completion: <code>"achesoun에 u가 몇 번 나오나요?"</code> (Korean: "how many u are in 'achesoun'?"). Model answered "2번" (2). Gold = 1. That was a real wrong answer, not an extractor failure.
+  </p>
+</section>
+
+<section>
+  <div class="label">08 / Implications</div>
+  <h2>What we can do now that we couldn't before</h2>
+  <p>
+    The harness was built to answer a single instrumental question: <em>how good are the locally-runnable base models, on the tasks we measure?</em> The answer reshapes what's worth doing on this M2 for the rest of the research arc.
+  </p>
+  <ol class="takeaways">
+    <li><b>Critic / judge loops</b> become tractable. Run Bonsai-4B at 58 tok/s as a verifier or scorer in a multi-step pipeline. Full logprob access (we confirmed this when probing the API surface — <code>GenerationResponse.logprobs</code> is a full <code>(V,)</code> log-prob vector per token) makes calibrated scoring possible instead of just LLM-as-judge handwaving.</li>
+    <li><b>Distillation source</b> is real. The 4B's headline ChatCORE 0.6322 means there's genuine reasoning signal to distill into smaller students — including, conceivably, into a memory-augmented student of the kind the paused Hope/NL thread was studying. Logprob distributions over the 151,669-token vocab are the right kind of teacher signal.</li>
+    <li><b>Qualitative chatbot floor</b> is paid for. If we want a working chatbot in this repo for testing memory mechanisms in conversational context, the 4B already answers "what does ~chat-quality look like at our hardware budget?" with no training required.</li>
+    <li><b>1.7B is back on the table.</b> Bonsai's own ADR-001 dismissed the 1.7B as "fails on instruction following" — but that conclusion came from an eval that used a system prompt, which ADR-002 later showed degrades 1.7B specifically. Under <code>--no-system-prompt</code> the 1.7B clears ChatCORE 0.4256 at 0.64 GB peak memory and 110 tok/s. For memory-constrained feedback loops where wall matters more than peak accuracy, this is now genuinely viable.</li>
+    <li><b>The from-scratch story stays paused, on purpose.</b> Nothing in this work makes pretraining nanochat-d6/d8 a worse use of time than it was — it makes it a <em>different</em> use of time. The d6/d8 results were and remain the right answer to "own every parameter while studying an architectural change that requires retraining." Cross-architecture ChatCORE is the right answer to "what's available off the shelf for the inference-side work we want to do next."</li>
+  </ol>
+</section>
+
+<section>
+  <div class="label">09 / Cost</div>
+  <h2>What the whole arc cost, end to end</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Phase</th>
+        <th class="right">Wall</th>
+        <th class="right">Cumulative</th>
+        <th>Output</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Build harness + probe API</td> <td class="num right">~45 min</td> <td class="num right">0:45</td>      <td>~190 LOC + <code>[mlx]</code> extra</td></tr>
+      <tr><td>Bonsai-1.7B smoke (strict)</td>     <td class="num right">12.6 min</td> <td class="num right">0:58</td> <td>ChatCORE 0.2489</td></tr>
+      <tr><td>Diagnose format mismatch</td>       <td class="num right">~5 min</td>   <td class="num right">1:03</td> <td>3 completions probed</td></tr>
+      <tr><td>Bonsai-4B smoke (strict)</td>       <td class="num right">21.4 min</td> <td class="num right">1:24</td> <td>ChatCORE 0.4022</td></tr>
+      <tr><td>Build lenient extractor + unit-test</td> <td class="num right">~20 min</td> <td class="num right">1:44</td> <td>16/16 pass</td></tr>
+      <tr><td>Bonsai-4B GSM/SB re-run (lenient)</td>   <td class="num right">7.4 min</td>  <td class="num right">1:52</td> <td>ChatCORE 0.6322</td></tr>
+      <tr><td>Bonsai-8B smoke (lenient)</td>      <td class="num right">30.2 min</td> <td class="num right">2:22</td> <td>ChatCORE 0.6789</td></tr>
+      <tr><td>Bonsai-1.7B GSM/SB re-run (lenient)</td> <td class="num right">3.8 min</td>  <td class="num right">2:26</td> <td>ChatCORE 0.4256</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Two and a half hours, end to end. The harness is now ready to point at any MLX-loadable model. The lenient extractor is general enough to cover most instruct-tuned outputs without hand-tuning per model. The scaling-curve writeup will hold up against any future model we add a column for.
+  </p>
+</section>
+
+<hr class="fancy">
+
+<section>
+  <div class="label">10 / Coda</div>
+  <h2>The strange thing about borrowing trees</h2>
+  <p>
+    What surprised us most was not the score itself. It was how cleanly nanochat's task abstractions composed with a model they were never designed for. <code>tasks/*.py</code> emits text dicts. <code>evaluate()</code> reads text strings. Six tasks, hundreds of lines of careful prompt rendering and result parsing, and the entire suite ports to any tokenizer / any backend / any pretrained model in <em>two integration points</em>: how you render the chat template, and how you call the model.
+  </p>
+  <p>
+    That isn't a Bonsai story. That's a nanochat story — about a codebase whose "minimal" framing actually delivered on the promise. We pulled out an evaluator we'd built for our own from-scratch experiment and pointed it at someone else's pretrained checkpoint, and the only thing we had to write was a 190-line adapter. The 60 lines that mattered most were the lenient extractor, which we wrote because <em>our own evaluator's correctness assumption</em> — that models emit <code>#### N</code> — broke when applied to a model that wasn't ours.
+  </p>
+  <p>
+    The model that beat our best baseline does fit in 473 megabytes. It does run at 110 tokens per second on a four-year-old laptop. And it does represent an enormous amount of compute and engineering effort that someone else paid for. None of that is a story we participated in. The story we participated in is this: <strong>given a tight evaluator with the right abstractions, finding out what's already true takes an afternoon.</strong>
+  </p>
+</section>
+
+<footer class="colophon">
+  Compiled 2026-05-16 on M2 MacBook · branch <code>experiment/hope-nested-learning</code> (paused).<br>
+  Harness: <code>scripts/chat_eval_mlx.py</code>. Bonsai upstream: <a href="https://prismml.com/news/ternary-bonsai">prismml.com/news/ternary-bonsai</a>.<br>
+  Companion writeups in <code>docs/</code>: bonsai_eval_harness, bonsai_1.7b/4b/8b_chatcore_smoke, bonsai_1.7b/4b_lenient_*, strategic_pivot_2026-05-13.
+  <div class="commits">
+    <code>922e129</code> <span>feat: scripts/chat_eval_mlx.py — run nanochat eval suite against MLX models</span>
+    <code>ca4c16f</code> <span>docs: bonsai-1.7b ChatCORE smoke — 0.2489 vs d6_stage2 0.1744</span>
+    <code>4674135</code> <span>HANDOFF: Day 2026-05-15 — Bonsai eval harness landed</span>
+    <code>ae8c727</code> <span>docs: bonsai-4b ChatCORE smoke — 0.4022 (1.6× over 1.7B)</span>
+    <code>7a1a691</code> <span>feat: chat_eval_mlx --lenient-extract for cross-model generative scoring</span>
+    <code>26b33b1</code> <span>docs: bonsai-4b lenient — 74%/64% (was 0%/0%)</span>
+    <code>3be25ce</code> <span>docs: bonsai-8b ChatCORE smoke — 0.6789, confirms 4B as sweet spot</span>
+    <code>4de49fe</code> <span>docs: bonsai-1.7b lenient correction — 60%/46%, ChatCORE 0.4256</span>
+  </div>
+</footer>
+
+</article>
+</body>
+</html>
