@@ -2718,3 +2718,78 @@ docs (8B x200 + final canonical update + this amendment). Local-only.
 Untracked `.claude/scheduled_tasks.lock` remains. Branch still
 paused.
 
+## Day 2026-05-17 — Quantization-cost reference + memory-incident lesson
+
+### fp-Qwen3-4B-8bit canonical baseline (landed 09:11 UTC, 191 min wall)
+
+Closes the cross-arch loop with a full-precision (well, 8-bit MLX)
+reference point. Same harness, same args as the bonsai x200 batch.
+
+| Task          | Bonsai-4B (int2) | fp-Qwen3-4B (8bit) | Δ (quant cost) |
+| ---           | ---:             | ---:                | ---:           |
+| ARC-Easy      | 84.00            | 94.00               | −10.0pp        |
+| ARC-Challenge | 72.00            | 92.50               | **−20.5pp**    |
+| MMLU          | 53.50            | 60.50               | −7.0pp         |
+| GSM8K         | 79.00            | 76.00               | +3.0pp         |
+| HumanEval     | 58.54            | 58.54               | **0.0pp**      |
+| SpellingBee   | 70.50            | 95.50               | **−25.0pp**    |
+| **ChatCORE**  | 0.6456           | **0.7656**          | −0.120         |
+
+**Headline finding: quantization cost is task-specific, not uniform.**
+Knowledge/format tasks lose 7-25pp to int2 (ARC, MMLU, SpellingBee).
+Reasoning tasks are essentially free (HumanEval identical to the
+decimal, GSM8K +3pp on Bonsai). Full writeup with mechanism
+speculation: `docs/qwen3_4b_quantization_cost_2026-05-17.md`.
+
+**Cross-arch implication: precision beats parameter count.**
+fp-Qwen3-4B-8bit at 0.7656 ChatCORE beats Bonsai-8B-int2 at 0.7056.
+Smaller-but-higher-precision wins. **Bonsai-8B int2 is now dominated**
+by fp-Qwen3-4B-8bit on every axis except disk (8B int2 2.2 GB vs
+8bit 4B 4.0 GB) — drop 8B int2 from the operational menu the same way
+ADR-003 dropped 1-bit Bonsai.
+
+### Revised operational call (three-axis)
+
+| Workload type | Pick | Rationale |
+| --- | --- | --- |
+| Coding / math / agent | Bonsai-4B int2 | Reasoning preserved; half wall, ⅓ memory |
+| RAG / QA / knowledge-strict | fp-Qwen3-4B-8bit | The +0.12 lift concentrates here |
+| General chat / mixed | Bonsai-4B int2 | Default; lift only matters for specific cases |
+| Memory-constrained feedback loop | Bonsai-1.7B int2 | Still 2.56× over d6_stage2 at 0.64 GB |
+
+### Memory-incident lesson — parallel-workload hygiene filed
+
+Earlier attempt to run fp-Qwen3-4B in parallel (PyTorch fp16 smoke +
+MLX 8-bit x200 concurrently) caused total system lockup: 8 GB HF
+download filled disk, MLX + PyTorch GPU loads competed for 24 GB
+unified memory, macOS jetsam couldn't recover because both disk and
+RAM were exhausted simultaneously. Required hard reboot.
+
+Filed `~/.claude/projects/-Users-matt-projects-new-3p-nanochat/memory/feedback_parallel_workload_hygiene.md`:
+- Always run `dev/preflight_memory.py` before any GPU job (inference too)
+- Never queue a second GPU/MPS workload while one is running on M2
+- Check `df -h ~/.cache/huggingface` before pulling multi-GB models
+- Preflight catches current state, NOT parallel-load predictions
+
+Successful re-run (option-1 sequential, preflight-first) produced
+the result above without incident.
+
+### Final canonical cross-arch table
+
+|              | 1.7B int2 | 4B int2 | 8B int2 | **4B 8bit** | d6_stage2 |
+| ---          | ---:      | ---:    | ---:    | ---:        | ---:      |
+| **ChatCORE** | 0.4458    | 0.6456  | 0.7056  | **0.7656**  | 0.1744    |
+| vs d6_stage2 | 2.56×     | 3.70×   | 4.05×   | **4.39×**   | 1.00×     |
+| Peak mem     | 0.64 GB   | 1.29 GB | 2.48 GB | ~4 GB       | —         |
+| Wall (x200)  | 50 min    | 85 min  | 132 min | 191 min     | —         |
+| Disk         | 0.47 GB   | 1.1 GB  | 2.2 GB  | 4.0 GB      | —         |
+
+Combined canonical batch (4 models, all x200): **458 min = 7.6 h**
+of M2 wall time, producing publication-grade cross-arch ChatCORE.
+
+### Branch state
+
+One commit today: docs (Qwen3-4B-8bit x200 + quantization-cost writeup
++ this HANDOFF amendment). Local-only. Branch still paused.
+
+
