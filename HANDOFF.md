@@ -2629,3 +2629,92 @@ docs (4B x200), docs (1.7B x200 + canonical follow-up writeup + HTML
 update + this amendment). Local-only. Untracked
 `.claude/scheduled_tasks.lock` remains. Branch still paused.
 
+### 8B at x200 — chained-sectional, canonical (landed 2026-05-17 01:16 UTC, 132 min)
+
+Operator queued 8B at x200 to close the canonical-comparison loop.
+Ran as three sectional invocations per Option-1 (`-a` flag splits
+the task list) so partial results were captured incrementally:
+
+| Section | Tasks                              | Wall          |
+| ---     | ---                                | ---:          |
+| 1/3     | ARC-Easy + ARC-Challenge + MMLU    | 8.0 min       |
+| 2/3     | GSM8K                              | 38.1 min      |
+| 3/3     | HumanEval + SpellingBee            | 86.3 min      |
+| **Sum** | **all six**                        | **132.4 min** |
+
+Section reports: `bonsai_8b_x200_{cat,gsm,gen}_2026-05-16.md`.
+Merged into `bonsai_8b_chatcore_x200_2026-05-17.md` (ChatCORE
+computed manually from the per-section per-task accuracies).
+
+### Final canonical cross-arch (all three Bonsai at x200)
+
+| Task          | 1.7B x200 | 4B x200  | 8B x200   | d6_stage2 |
+| ---           | ---:      | ---:     | ---:      | ---:      |
+| ARC-Easy      | 69.00     | 84.00    | 90.00     | 25.80     |
+| ARC-Challenge | 48.50     | 72.00    | 81.50     | 28.67     |
+| MMLU          | 46.00     | 53.50    | 56.00     | 26.98     |
+| GSM8K         | 59.00     | 79.00    | 77.00     |  0.76     |
+| HumanEval     | 46.95     | 58.54    | 75.00     |  0.00     |
+| SpellingBee   | 43.50     | 70.50    | 68.00     | 95.31     |
+| **ChatCORE**  | 0.4458    | 0.6456   | **0.7056**| 0.1744    |
+| vs d6_stage2  | 2.56×     | 3.70×    | **4.05×** | 1.00×     |
+
+Diminishing returns at full canonical:
+- d6_stage2 → 1.7B: +0.271 (2.56×)
+- 1.7B → 4B: +0.200 (1.45×)
+- **4B → 8B: +0.060 (1.09×)** — *larger than the +0.033 I predicted*
+
+The smoke→x200 come-down pattern observed on 4B (ARC-Easy and
+HumanEval came down) did NOT carry to 8B. 8B's ChatCORE moved UP
+from 0.6789 (smoke) to 0.7056 (x200). My prediction was wrong;
+sectional results were robust.
+
+### Revised operational call
+
+**4B is still the default pick** for general chat / RAG / instruction
+following. But the 8B's lift concentrates almost entirely in two
+tasks:
+
+| Task | 4B x200 | 8B x200 | Δ |
+| --- | ---: | ---: | ---: |
+| **HumanEval** | 58.54 | **75.00** | **+16.46pp** (largest single-task delta in the arc) |
+| ARC-Challenge | 72.00 | 81.50 | +9.50pp (~3σ) |
+| ARC-Easy | 84.00 | 90.00 | +6.00pp (~2σ) |
+| MMLU | 53.50 | 56.00 | +2.50pp (within stderr) |
+| GSM8K | 79.00 | 77.00 | −2.00pp (noise) |
+| SpellingBee | 70.50 | 68.00 | −2.50pp (noise) |
+
+**Coding-heavy workloads: 8B is now worth its cost** (+16.5pp on
+HumanEval). For general / chat / non-coding, 4B is still the call
+(9.3% relative ChatCORE for 92% more memory and 53% more wall
+isn't worth it unless HumanEval + ARC-Challenge hit your specific
+use case).
+
+### Open follow-ups (revised, final)
+
+1. ~~Lenient extractor~~ — done.
+2. ~~Categorical batching~~ — nice-to-have; deferred indefinitely.
+3. ~~Report integration with nanochat.report~~ — deferred indefinitely.
+4. ~~Bonsai-8B smoke~~ — done.
+5. ~~Single-run full-lenient confirmation on 4B~~ — done at x200.
+6. ~~8B at x200~~ — done.
+7. **nanochat-side at x200** — d6_stage2 and d8_a2 still at -x 100.
+   Re-running through our own harness would make the cross-arch
+   comparison fully symmetric. ~30 min each. Worth it only for a
+   publication-grade headline; the cross-arch gap is so large that
+   the d6/d8 side being noisier doesn't change any conclusion.
+8. **HumanEval deep-dive** — the +16.5pp 4B→8B lift is the largest
+   single-task delta in the arc. Could be characterised further
+   (problem-difficulty bands, reasoning-heavy vs generic-completion-
+   quality split). Out of scope for the eval harness; flagged for
+   anyone using bonsai as a coding tool.
+
+### Branch state (updated)
+
+Seven commits today: feat (lenient extractor), docs (4B lenient
+smoke), docs (8B smoke), docs (1.7B lenient correction), docs (HTML
+field-eval), docs (4B x200), docs (1.7B x200 + canonical writeup),
+docs (8B x200 + final canonical update + this amendment). Local-only.
+Untracked `.claude/scheduled_tasks.lock` remains. Branch still
+paused.
+
