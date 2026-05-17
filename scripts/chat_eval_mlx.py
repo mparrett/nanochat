@@ -228,12 +228,18 @@ def chatcore(results):
 
 def write_report(out_path, model_id, results, totals, args, wall_total, chatcore_val):
     delta_mem_line = f"δ-mem: {args.delta_mem}" if args.delta_mem else "δ-mem: off"
+    caps_parts = [f"max_problems={args.max_problems}"]
+    if args.max_problems_cat is not None:
+        caps_parts.append(f"cat={args.max_problems_cat}")
+    if args.max_problems_gen is not None:
+        caps_parts.append(f"gen={args.max_problems_gen}")
+    caps_str = " ".join(caps_parts)
     lines = [
         f"# MLX chat eval — {model_id}",
         "",
         f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         f"Total wall: {wall_total:.1f}s",
-        f"Args: max_problems={args.max_problems} temp={args.temperature} "
+        f"Args: {caps_str} temp={args.temperature} "
         f"max_new_tokens={args.max_new_tokens} no_system_prompt={args.no_system_prompt} "
         f"lenient_extract={args.lenient_extract}",
         delta_mem_line,
@@ -259,7 +265,15 @@ def main():
     p.add_argument("-a", "--task-name", default=None,
                    help=f"Task name(s), '|'-separated. Default = all six. Choices: {','.join(ALL_TASKS)}")
     p.add_argument("-x", "--max-problems", type=int, default=None,
-                   help="Cap problems per task (smoke-friendly)")
+                   help="Cap problems per task (smoke-friendly). Used as the "
+                   "default for both task types unless --max-problems-cat or "
+                   "--max-problems-gen overrides it.")
+    p.add_argument("--max-problems-cat", type=int, default=None,
+                   help="Override -x for categorical tasks (ARC-Easy, ARC-Challenge, MMLU). "
+                   "Useful for asymmetric runs: full resolution on cheap categorical, "
+                   "lower resolution on expensive generative.")
+    p.add_argument("--max-problems-gen", type=int, default=None,
+                   help="Override -x for generative tasks (GSM8K, HumanEval, SpellingBee).")
     p.add_argument("-t", "--temperature", type=float, default=0.0,
                    help="Sampling temperature (0 = greedy, matches nanochat default)")
     p.add_argument("--max-new-tokens", type=int, default=256,
@@ -311,12 +325,14 @@ def main():
         print(f"\n=== {tname} ===")
         task = TASK_CTORS[tname]()
         if task.eval_type == "categorical":
+            cap = args.max_problems_cat if args.max_problems_cat is not None else args.max_problems
             acc, n = run_categorical(task, model, tokenizer,
-                                      args.max_problems, args.no_system_prompt,
+                                      cap, args.no_system_prompt,
                                       delta_mem_attached)
         else:
+            cap = args.max_problems_gen if args.max_problems_gen is not None else args.max_problems
             acc, n = run_generative(task, model, tokenizer,
-                                     args.max_problems, args.max_new_tokens,
+                                     cap, args.max_new_tokens,
                                      args.temperature, args.no_system_prompt,
                                      args.lenient_extract, delta_mem_attached)
         results[tname] = acc
