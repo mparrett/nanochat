@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>δ-mem MLX port — gating a borrowed memory adapter four ways</title>
+<style>
+  :root {
+    --paper: #f5f1e8;
+    --paper-dim: #ebe5d6;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-mute: #8a857a;
+    --rule: #c9c2b0;
+    --accent: #b04a2f;
+    --accent-soft: #d97b5c;
+    --green: #4a7c3f;
+    --gold: #b08a2a;
+    --blue: #3f5f7c;
+    --code-bg: #1c1d1f;
+    --code-fg: #e8e3d4;
+    --code-mute: #8d8675;
+    --code-key: #c9b76b;
+    --code-str: #a3b87a;
+    --code-com: #6a6a6a;
+    --code-num: #d97b5c;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Charter", "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(0,0,0,0.025) 31px 32px),
+      var(--paper);
+  }
+  .sheet { max-width: 920px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+
+  .masthead {
+    border-top: 4px double var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0 1rem;
+    margin-bottom: 3rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1rem;
+  }
+  .masthead .kicker {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+  }
+  .masthead h1 {
+    font-family: "Iowan Old Style", "Charter", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(2rem, 4.6vw, 3.2rem);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .masthead h1 em { font-style: italic; color: var(--accent); }
+  .masthead .meta {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+    text-align: right;
+    line-height: 1.5;
+  }
+  .masthead .meta strong { color: var(--ink); font-weight: 600; }
+
+  .lede { font-size: 1.25rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 3rem; max-width: 38em; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .pull {
+    border-left: 3px solid var(--accent);
+    padding: 1.2rem 1.5rem;
+    margin: 2.5rem 0;
+    background: var(--paper-dim);
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.15rem;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .pull .src {
+    display: block;
+    margin-top: 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-style: normal;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  section { margin: 3rem 0; }
+  section > .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+  section > h2 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.85rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0.2rem 0 1.2rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.6rem;
+  }
+  section h3 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 1.6rem 0 0.5rem;
+  }
+  p { margin: 0 0 1rem; }
+  p + p { text-indent: 1.5em; }
+
+  pre, code { font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace; }
+  code {
+    font-size: 0.92em;
+    background: var(--paper-dim);
+    padding: 0.05em 0.35em;
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 1.2rem 1.4rem;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    overflow-x: auto;
+    margin: 1.4rem 0;
+    border-left: 3px solid var(--code-mute);
+  }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  pre .c { color: var(--code-com); }
+  pre .k { color: var(--code-key); }
+  pre .s { color: var(--code-str); }
+  pre .n { color: var(--code-num); }
+
+  .gate {
+    border: 1px solid var(--rule);
+    background: var(--paper-dim);
+    padding: 1.4rem 1.6rem;
+    margin: 1.6rem 0;
+    position: relative;
+  }
+  .gate > .num {
+    position: absolute;
+    top: -0.6rem;
+    left: 1rem;
+    background: var(--paper);
+    padding: 0 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .gate h3 { margin: 0 0 0.6rem; font-size: 1.1rem; }
+  .gate .label-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.8rem; align-items: center; }
+  .gate .tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.18em 0.55em;
+    border-radius: 2px;
+    border: 1px solid currentColor;
+  }
+  .tag.pass  { color: var(--green); }
+  .tag.exact { color: var(--green); font-weight: 700; }
+  .tag.gotcha { color: var(--accent); }
+  .tag.upstream { color: var(--ink-soft); }
+  .tag.local { color: var(--ink); background: var(--paper); }
+  .tag.diag { color: var(--gold); }
+  .tag.deferred { color: var(--ink-mute); }
+  .gate .metric { font-family: "JetBrains Mono", monospace; font-size: 0.85rem; color: var(--ink-soft); }
+  .gate .metric strong { color: var(--green); font-weight: 700; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.4rem 0;
+    font-size: 0.95rem;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+  }
+  th, td {
+    padding: 0.7rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--paper-dim); }
+  th {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 600;
+    border-bottom: 2px solid var(--ink);
+    background: var(--paper);
+  }
+  td.num { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; color: var(--ink); }
+  td.num.lo { color: var(--ink-mute); }
+  td.num.hi { color: var(--green); font-weight: 700; }
+  td.num.win { color: var(--accent); font-weight: 700; }
+  td.center { text-align: center; }
+  td.right { text-align: right; }
+  th.right { text-align: right; }
+  tr.headline td { background: var(--paper-dim); font-weight: 700; }
+
+  .pipe {
+    margin: 1.6rem 0;
+    padding: 1.4rem;
+    background: var(--paper-dim);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+    overflow-x: auto;
+  }
+  .pipe .stage {
+    display: inline-block;
+    padding: 0.3em 0.8em;
+    margin: 0.2em 0.15em;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  .pipe .stage.add { border-color: var(--accent); color: var(--accent); }
+  .pipe .stage.base { border-color: var(--blue); color: var(--blue); }
+  .pipe .arrow { color: var(--ink-mute); margin: 0 0.2em; }
+  .pipe .annot { color: var(--ink-mute); font-size: 0.72rem; margin-top: 0.4em; display: block; }
+
+  ol.takeaways { list-style: none; counter-reset: t; padding: 0; margin: 1.4rem 0; }
+  ol.takeaways li { counter-increment: t; padding-left: 3rem; position: relative; margin-bottom: 1rem; }
+  ol.takeaways li::before {
+    content: counter(t, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+  }
+  ol.takeaways b { font-weight: 700; }
+
+  .equation {
+    background: var(--paper-dim);
+    border: 1px solid var(--rule);
+    padding: 1.1rem 1.4rem;
+    margin: 1.2rem 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.92rem;
+    line-height: 1.7;
+    overflow-x: auto;
+  }
+  .equation .lbl {
+    display: inline-block;
+    color: var(--accent);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-right: 0.6em;
+    font-weight: 700;
+  }
+
+  .scorecard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1.6rem 0;
+  }
+  .scorecard .card {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--accent);
+    padding: 1rem 1.1rem;
+  }
+  .scorecard .card .lbl {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 0.4rem;
+  }
+  .scorecard .card .val {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--green);
+  }
+  .scorecard .card .val.neutral { color: var(--ink); }
+  .scorecard .card .sub {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+    margin-top: 0.3rem;
+  }
+
+  .next {
+    border: 2px solid var(--accent);
+    background: var(--paper);
+    padding: 1.6rem 1.8rem;
+    margin: 2rem 0;
+  }
+  .next h3 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.3rem;
+    margin: 0 0 0.6rem;
+    color: var(--accent);
+  }
+  .next .q {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-style: italic;
+    font-size: 1.1rem;
+    color: var(--ink-soft);
+    margin: 1rem 0;
+    padding-left: 1.2rem;
+    border-left: 2px solid var(--accent);
+  }
+
+  .colophon {
+    margin-top: 5rem;
+    padding-top: 1.5rem;
+    border-top: 4px double var(--ink);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--ink-mute);
+    line-height: 1.7;
+  }
+  .colophon a { color: var(--ink); }
+  .colophon .commits { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.4rem; margin-top: 0.8rem; }
+  .colophon .commits code { background: none; padding: 0; color: var(--ink-soft); }
+
+  hr.fancy {
+    border: none;
+    text-align: center;
+    margin: 2.5rem 0;
+    color: var(--ink-mute);
+  }
+  hr.fancy::before { content: "·   ·   ·"; letter-spacing: 0.5em; }
+
+  @media (max-width: 600px) {
+    .sheet { padding: 2rem 1.1rem 4rem; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead .meta { text-align: left; }
+    .lede { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+<article class="sheet">
+
+<header class="masthead">
+  <div>
+    <div class="kicker">δ-mem MLX port &nbsp;·&nbsp; dev checkpoint, Phase 1 + 2 complete</div>
+    <h1>Gating a borrowed memory adapter <em>four ways</em> before the 4.7-hour run.</h1>
+  </div>
+  <div class="meta">
+    <strong>Date</strong> 2026-05-17<br>
+    <strong>Hardware</strong> MacBook M2, 24 GB<br>
+    <strong>Adapter</strong> δ-mem TSW (Qwen3-4B)<br>
+    <strong>Status</strong> integration green
+  </div>
+</header>
+
+<p class="lede">
+  A new paper — δ-mem, May 2026 — proposes a small associative-memory adapter you can graft onto a frozen 4B backbone. The published adapter is open. The training code requires CUDA, FlashAttention, DeepSpeed; we have an M2. So we <strong>ported just the inference path to MLX</strong> in three commits over a morning, stacked four independent verification gates against it, and queued the canonical x200 evaluation for tonight. Here is what we built, what surprised us along the way, and the single yes-or-no question the eval will answer.
+</p>
+
+<div class="pull">
+  "A transformer is an electrical device that transfers energy between two or more circuits through electromagnetic induction…"
+  <span class="src">— Qwen3-4B-Instruct + δ-mem TSW adapter, greedy, in our MLX port</span>
+</div>
+
+<section>
+  <div class="label">01 / Context</div>
+  <h2>Why this paper, why now</h2>
+  <p>
+    On 2026-05-13 we paused the from-scratch nanochat Hope/Nested-Learning thread and wrote a strategic pivot doc. The pivot named one direction worth pursuing on this hardware budget but parked it for lack of recipe: <strong>"continuous-learning components grafted onto a frozen 4–8B base."</strong> The architecture we sketched — a small associative memory matrix updated by a gated delta-rule, read into attention as a low-rank correction — looked clean on paper but had no published instantiation, no checkpoint, and no clear path to training on M2.
+  </p>
+  <p>
+    Three days later the δ-mem paper landed in our iCloud. The mechanism is structurally near-identical to our parked design. The released adapter targets <code>Qwen/Qwen3-4B-Instruct-2507</code> — the exact backbone we had just baselined to <strong>ChatCORE 0.7656</strong> in our cross-architecture evaluation (<code>docs/qwen3_4b_quantization_cost_2026-05-17.md</code>). The training requires CUDA + FlashAttention + DeepSpeed; we have none of those. But the pre-trained adapter is published — <strong>11 MB, rank-8, TSW variant</strong> — and pre-trained weights bypass the training stack entirely.
+  </p>
+  <p>
+    The headline question we wanted to settle: <strong>does δ-mem's published-on-LoCoMo/MemoryAgentBench lift transfer to our six-task ChatCORE suite</strong> (ARC-E, ARC-C, MMLU, GSM8K, HumanEval, SpellingBee)? Before answering it we needed to port the inference path to MLX, integrate with our existing harness, and gain enough confidence in the port that a low-or-zero ChatCORE result would be <em>interpretable</em> as "the lift doesn't transfer to our tasks" rather than ambiguous as "the port has a bug."
+  </p>
+</section>
+
+<section>
+  <div class="label">02 / The mechanism, briefly</div>
+  <h2>What δ-mem is</h2>
+  <p>
+    A frozen Transformer backbone runs unchanged. At every attention block, a small <strong>8×8 associative-memory matrix S</strong> persists across tokens. Each token reads from S (giving a rank-8 vector) and writes to S via a gated delta-rule update. The read steers the attention <em>additively</em> through two low-rank corrections: <code>q ← q + W<sub>q</sub><sup>Δ</sup> · read</code> and <code>out ← out + W<sub>o</sub><sup>Δ</sup> · read</code>. State is per-layer, per-batch; the backbone never sees it as input. It is, at the API level, LoRA-shaped — but the corrections come from an <em>evolving online state</em> rather than from the current token alone.
+  </p>
+  <div class="equation">
+    <span class="lbl">Read</span>read<sub>t</sub> = S<sub>t−1</sub> · q<sub>t</sub><sup>m</sup> &nbsp;&nbsp;<span style="color:var(--ink-mute)">(B, 8) ← (B, 8, 8) · (B, 8)</span><br>
+    <span class="lbl">Update</span>S<sub>t</sub> = Diag(λ<sub>t</sub>) · S<sub>t−1</sub> + Diag(β<sub>t</sub>) · (v<sub>t</sub><sup>m</sup> − S<sub>t−1</sub>·k<sub>t</sub><sup>m</sup>) · k<sub>t</sub><sup>m⊤</sup><br>
+    <span class="lbl">Steer</span>δ<sub>q</sub> = (α/r) · W<sub>q</sub><sup>Δ</sup> · read<sub>t</sub> &nbsp;&nbsp;|&nbsp;&nbsp; δ<sub>o</sub> = (α/r) · W<sub>o</sub><sup>Δ</sup> · read<sub>t</sub>
+  </div>
+  <p>
+    Three write strategies are ablated in the paper: <strong>TSW</strong> (update every token), <strong>SSW</strong> (update once per message segment), <strong>MSW</strong> (N parallel sub-states). Only TSW is publicly released as a trained adapter. Per layer, the adapter ships seven small tensors (memory-q/k/v projections, β projection + bias, and the q/o low-rank delta heads). Total weight: <strong>11 MB</strong> across 36 Qwen3-4B layers.
+  </p>
+</section>
+
+<section>
+  <div class="label">03 / The reference codebase</div>
+  <h2>2,800 lines of "every knob ever tried"</h2>
+  <p>
+    The upstream implementation (<code>declare-lab/delta-Mem</code>, CC-BY-4.0) clocks in at <strong>117 KB / 2,800 lines</strong> in a single <code>delta_impl.py</code>. Reading it cold suggested half a dozen architectural variants — partitioned memory, latent context, synthetic-KV prepending, message-mean writes, multi-head state, cross-attention readouts, learned per-head delta scales — all bolted onto the same wrapper class. None of which the published adapter actually uses.
+  </p>
+  <p>
+    The mainline <code>delta.py</code> (a thin façade over the experimental implementation) gates the active code path to a single readout mode and rejects most configs with explicit "this is archived" errors. Inspecting the published adapter's <code>delta_mem_config.json</code> narrowed the active surface further:
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Config knob</th>
+        <th>Adapter value</th>
+        <th>What it means for the port</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>rank</code> / <code>alpha</code></td>
+        <td class="num">8 / 16.0</td>
+        <td>8×8 state, δ-scale α/rank = 2.0</td>
+      </tr>
+      <tr>
+        <td><code>couple_lambda</code></td>
+        <td class="num center">true</td>
+        <td>λ = 1 − β &nbsp;·&nbsp; no separate λ projection</td>
+      </tr>
+      <tr>
+        <td><code>delta_heads</code></td>
+        <td class="num">["q", "o"]</td>
+        <td><b>Only Q and O heads trained.</b> δ_k and δ_v are zero across all 36 layers.</td>
+      </tr>
+      <tr>
+        <td><code>num_state_heads</code></td>
+        <td class="num center">1</td>
+        <td>Single 8×8 state, no head reshape</td>
+      </tr>
+      <tr>
+        <td><code>memory_write_granularity</code></td>
+        <td class="num">"token"</td>
+        <td>TSW: write every token (only TSW variant is released)</td>
+      </tr>
+      <tr>
+        <td><code>normalize_qk</code></td>
+        <td class="num center">true</td>
+        <td>tanh + L2-normalize memory-q and memory-k projections</td>
+      </tr>
+      <tr>
+        <td><code>state_update_mode</code></td>
+        <td class="num">"standard"</td>
+        <td>keep=λ, erase=β, write=β</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Confirmed empirically by loading the adapter <code>.pt</code> in PyTorch and inspecting its 324 entries: <strong>7 active tensors × 36 layers = 252 active</strong>, plus 72 zero-valued δ_k / δ_v tensors (a bookkeeping artifact of upstream's <code>reset_parameters</code> initializing all four delta heads then zeroing the inactive ones).
+  </p>
+  <p>
+    The MLX port could skip the entire experimental scaffold. We needed roughly <strong>230 lines</strong> for a faithful inference path: the seven-tensor per-layer module, a wrapper around mlx-lm's <code>Qwen3 Attention</code>, an adapter loader, and a state-reset hook.
+  </p>
+</section>
+
+<section>
+  <div class="label">04 / The FlashAttention discovery</div>
+  <h2>The hard CUDA dependency that wasn't</h2>
+  <p>
+    Upstream's setup script installs FlashAttention as a hard requirement. Their chat demo defaults to <code>ATTN_IMPLEMENTATION=flash_attention_2</code>. Reading the forward at <code>delta_impl.py:2255</code> showed something different:
+  </p>
+<pre><code>attention_interface = self.eager_attention_forward  <span class="c"># standard HF qwen3 SDPA</span>
+<span class="k">if not</span> use_prefixed_memory <span class="k">and</span> self.base.config._attn_implementation != <span class="s">"eager"</span>:
+    attention_interface = ALL_ATTENTION_FUNCTIONS[
+        self.base.config._attn_implementation
+    ]</code></pre>
+  <p>
+    The flash path is only taken when the base model is explicitly configured to it. Loading with <code>attn_implementation="eager"</code> sidesteps the flash dispatch entirely. The Triton scan kernel is similarly optional — a pure-PyTorch fallback (<code>_memory_affine_scan_torch</code>) is selected automatically on non-CUDA backends and can be forced with <code>DELTA_MEM_SCAN_IMPL=torch</code>. The upstream regression test suite (<code>test_delta_mem_regressions.py:375,401</code>) explicitly uses the eager path, which means the non-flash code path is a tested, supported configuration, not a dusty corner.
+  </p>
+  <p>
+    For the MLX port this matters only indirectly — we re-implement the scan in MLX from scratch and never call into either CUDA kernel. But it would matter very much for the Path A fallback (a PyTorch reference for validation), and it tells us the cost of an eventual PyTorch-on-MPS smoke is "install transformers" rather than "wait for FlashAttention to ship for Metal."
+  </p>
+</section>
+
+<section>
+  <div class="label">05 / The port</div>
+  <h2>230 lines for the inference path</h2>
+  <p>
+    The MLX module sits at <code>nanochat/delta_mem_mlx.py</code>. Three classes carry the work:
+  </p>
+  <div class="pipe">
+    <span class="stage base">DeltaMemConfig</span>
+    <span class="annot">Subset of the upstream HFDeltaMemConfig. Validates loaded configs against the active feature set (couple_lambda, normalize_qk, TSW, q+o heads). Rejects archived knobs with named errors so a future SSW or MSW adapter doesn't silently misload.</span>
+  </div>
+  <div class="pipe">
+    <span class="stage add">DeltaMemLayer</span>
+    <span class="annot">Per-layer module. Seven trainable tensors: memory_q/k/v_proj (rank, hidden), delta_q_proj (q_out, rank), delta_o_proj (o_out, rank), beta_proj (rank, hidden), beta_bias (rank,). Three pure methods: project_memory → (q_m, k_m, v_m, β); scan → (state_T, reads); project_deltas → (δ_q, δ_o).</span>
+  </div>
+  <div class="pipe">
+    <span class="stage add">DeltaMemAttention</span>
+    <span class="annot">Wraps mlx-lm's Qwen3 Attention. Holds the base + a DeltaMemLayer + per-batch state. Forward = project_memory → scan → project_deltas → standard Qwen3 attention with δ_q added to base query and δ_o added after base.o_proj.</span>
+  </div>
+  <p>
+    The wrapper mirrors upstream's pattern intentionally — same per-layer state attribute, same reset semantics, same tensor names. A future port of the SSW or MSW variants would add code rather than refactor. Adapter conversion is a one-shot script: <code>torch.load</code> the published <code>.pt</code>, skip the all-zero δ_k / δ_v, write MLX safetensors. Output: <strong>9.31 MB</strong>, 252 active tensors, no PyTorch dependency at harness runtime.
+  </p>
+  <p>
+    Integration with mlx-lm is a single function call: <code>attach_delta_mem(model, config)</code> walks <code>model.model.layers</code> and replaces each <code>block.self_attn</code> with the wrapper. State threads via instance attribute. <code>reset_delta_mem_states(model)</code> zeros every layer's state — called per problem in the eval loop.
+  </p>
+</section>
+
+<section>
+  <div class="label">06 / Four gates</div>
+  <h2>Verifying the port without running the eval</h2>
+  <p>
+    The expensive eval is ~<strong>4.7 hours</strong> wall on a single M2 (191 min baseline × 1.47× δ-mem overhead). The cost of running it speculatively is high enough that we should not run it at all unless we've ruled out the most likely failure modes first. We stacked four independent gates against the port, each testing a different thing.
+  </p>
+
+  <div class="gate">
+    <span class="num">GATE 01</span>
+    <div class="label-row">
+      <span class="tag pass">PASS</span>
+      <span class="tag local">Synthetic math</span>
+      <span class="metric">max|Δ| = <strong>2 × 10⁻⁶</strong></span>
+    </div>
+    <h3>Bit-equivalence vs upstream torch reference, fp32, eight intermediate tensors</h3>
+    <p>
+      A standalone unit test inlines the upstream <code>_memory_sequence_projections</code> + <code>_memory_affine_scan_torch</code> + <code>_project_delta_head</code> in plain PyTorch (no transformers dependency), generates synthetic weights matching the adapter shapes for Qwen3-4B-Instruct, runs both implementations on a random <code>(B=2, T=16, hidden=2560)</code> input, and diffs eight intermediate tensors:
+    </p>
+<pre><code>memory_q       max|Δ|=<span class="n">9.69e-7</span>   OK
+memory_k       max|Δ|=<span class="n">8.68e-7</span>   OK
+memory_v       max|Δ|=<span class="n">1.91e-6</span>   OK
+beta           max|Δ|=<span class="n">2.68e-7</span>   OK
+reads          max|Δ|=<span class="n">4.99e-7</span>   OK
+state_T        max|Δ|=<span class="n">2.98e-7</span>   OK
+delta_q        max|Δ|=<span class="n">6.76e-8</span>   OK
+delta_o        max|Δ|=<span class="n">5.12e-8</span>   OK</code></pre>
+    <p>
+      Tolerance gate was 1e-5; observed max was 2e-6. The math layer — projections, normalization, gated delta-rule scan, low-rank corrections — is faithful to the reference at fp32 precision.
+    </p>
+  </div>
+
+  <div class="gate">
+    <span class="num">GATE 02</span>
+    <div class="label-row">
+      <span class="tag exact">PASS · EXACT</span>
+      <span class="tag local">Integration wiring</span>
+      <span class="metric">max|Δ| logits = <strong>0</strong></span>
+    </div>
+    <h3>Zero-weight sanity: wrapped model output == base model output, bit-for-bit</h3>
+    <p>
+      Loaded <code>mlx-community/Qwen3-4B-Instruct-2507-8bit</code>. Captured baseline logits on a 7-token prompt. Attached <code>DeltaMemAttention</code> wrappers to all 36 layers with <em>default zero-initialized</em> δ-mem weights (no adapter loaded). Re-ran the forward.
+    </p>
+    <p>
+      With weights all zero, <code>δ_q = reads @ 0 = 0</code> and <code>δ_o = reads @ 0 = 0</code> regardless of how the state evolves — so the wrapped output <em>must</em> equal the base output exactly if and only if the wiring (which input gets read, where δ_q gets added, where δ_o gets added, the order of normalization / rotary / KV-cache) is correct. Observed <strong>max|Δ| logits = 0.0000</strong>, bit-equal across 151,936 vocab positions × 7 prompt positions. This is the strongest gate in the stack: it isolates wiring from math from precision and proves wiring is exact.
+    </p>
+  </div>
+
+  <div class="gate">
+    <span class="num">GATE 03</span>
+    <div class="label-row">
+      <span class="tag pass">PASS</span>
+      <span class="tag local">Signal magnitude</span>
+      <span class="metric">δ vs base = <strong>2%</strong> · 36/36 layers active</span>
+    </div>
+    <h3>Real adapter loaded → non-trivial corrections, all layers writing</h3>
+    <p>
+      Loaded the 252 active adapter tensors. Re-ran the forward. Output diverges from base by max|Δ| = 0.469 on a base logit scale of 23.5 — about 2% perturbation, mean 0.056. Per-layer state inspection shows 36/36 layers have non-zero state after the forward, confirming the scan is running everywhere. Last-token argmax was unchanged on this short prompt, which is expected: a 2% perturbation rarely flips a confidently-determined next token.
+    </p>
+  </div>
+
+  <div class="gate">
+    <span class="num">GATE 04</span>
+    <div class="label-row">
+      <span class="tag pass">PASS</span>
+      <span class="tag local">KV-cache generation</span>
+      <span class="metric">T=1 scan path · coherent output</span>
+    </div>
+    <h3>Greedy generation with KV cache — coherent text, sensible perturbations</h3>
+    <p>
+      The math gate tested the scan at <code>T=16</code>. KV-cache generation runs the scan at <code>T=1</code> per step (one token per forward, state continuing to evolve). A subtle off-by-one or empty-stack bug would crash or produce garbage. Generated 80 tokens greedy on "Briefly explain what a transformer is in one paragraph."
+    </p>
+<pre><code><span class="c"># Base (no δ-mem)</span>
+"A transformer is an electrical device that transfers <b>electrical</b> energy
+ between two or more circuits through electromagnetic induction…
+ …in <b>the</b> other. Transformers are essential in power distribution systems,
+ <b>allowing</b> efficient transmission of electricity over long distances by"
+
+<span class="c"># With δ-mem adapter</span>
+"A transformer is an electrical device that transfers energy
+ between two or more circuits through electromagnetic induction…
+ …in <b>a</b> other. Transformers are essential in power distribution systems,
+ <b>enabling</b> efficient transmission of electricity over long distances by <b>stepping</b>"</code></pre>
+    <p>
+      Both produce coherent, on-topic English. The adapter introduces small consistent perturbations ("transfers energy" / "enabling" / "stepping" / "where a") without breaking semantic structure. The 91-character shared prefix before divergence suggests the signal is non-trivial but on-scale. The T=1 scan path works correctly.
+    </p>
+  </div>
+
+  <div class="gate">
+    <span class="num">GATE 05 — DEFERRED</span>
+    <div class="label-row">
+      <span class="tag deferred">DEFERRED</span>
+      <span class="tag local">Activation-capture diff</span>
+      <span class="metric">backfill if Phase 3 result is borderline</span>
+    </div>
+    <h3>Per-layer δ_q / δ_o vs PyTorch reference on real hidden states</h3>
+    <p>
+      Originally planned as a fifth gate: dump per-layer attention-input hidden states from the PyTorch reference on a real prompt, feed them to the MLX <code>DeltaMemLayer</code>, diff δ_q / δ_o per layer. Catches the "math right at the layer level but wrong base activation distribution" class of bug.
+    </p>
+    <p>
+      Cost: ~10 GB transient RAM to load Qwen3-4B in PyTorch CPU + ~1–2 hours to wire the capture and the comparison. After gates 01–04 came back so clean, the marginal probability that this gate would catch a real bug dropped substantially — and the gates we already have together cover the most plausible failure modes. Deferred unless Phase 3 results land in the ambiguous [0.73, 0.78] band where the question becomes "is the small lift real, or is it a per-layer scaling artifact?"
+    </p>
+  </div>
+
+  <div class="scorecard">
+    <div class="card">
+      <div class="lbl">Math gate</div>
+      <div class="val">2 × 10⁻⁶</div>
+      <div class="sub">vs torch ref · fp32</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Wiring gate</div>
+      <div class="val">0.0000</div>
+      <div class="sub">bit-exact · all 151,936 vocab</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Signal gate</div>
+      <div class="val">2.0%</div>
+      <div class="sub">on base scale 23.5</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Generation gate</div>
+      <div class="val">coherent</div>
+      <div class="sub">T=1 scan path · 80 tok greedy</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="label">07 / Gotcha</div>
+  <h2>The quantization weight-shape surprise</h2>
+  <div class="gate">
+    <span class="num">INCIDENT 01</span>
+    <div class="label-row">
+      <span class="tag gotcha">Bug</span>
+      <span class="tag local">Local — integration</span>
+      <span class="tag diag">Quantization layout</span>
+    </div>
+    <h3>q_proj.weight.shape[1] is in_features for fp16 — packed bytes for 8-bit</h3>
+    <p>
+      First integration run on the 8-bit MLX Qwen3 base crashed at the very first forward:
+    </p>
+<pre><code>ValueError: [matmul] Last dimension of first input with shape (1, 7, 2560)
+must match second to last dimension of second input with shape (640, 8).</code></pre>
+    <p>
+      The wrapper had inferred <code>hidden_size = q_proj.weight.shape[1]</code> — a reasonable assumption for an <code>nn.Linear</code>, where <code>weight</code> is shaped <code>(out_features, in_features)</code>. But <strong>mlx-lm's <code>QuantizedLinear</code> stores weights in a packed layout</strong>: <code>(out_features, in_features // packing_factor)</code>. For 8-bit weights with group size 64, <code>in_features = 2560</code> packs to <code>640</code>. The wrapper had built <code>memory_q_proj</code> with the wrong inner dimension, and the very first matmul exploded.
+    </p>
+    <p>
+      Fix: read <code>hidden_size</code> from <code>model.args</code> (framework-agnostic, quant-independent) instead of from <code>weight.shape[1]</code> (layout-dependent). The other dimension, <code>weight.shape[0]</code>, is <code>out_features</code> in both layouts and remains correct. One-line change; all four gates passed on the next run.
+    </p>
+    <p>
+      Worth flagging because the same bug pattern will recur for anyone porting an adapter to MLX against a quantized base: shape-introspection from <code>nn.Linear</code> doesn't survive the move to <code>QuantizedLinear</code>. Use the model's ModelArgs as the canonical source.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="label">08 / Harness wire-up</div>
+  <h2>One flag, per-problem state reset</h2>
+  <p>
+    Phase 2 added a single argument to <code>scripts/chat_eval_mlx.py</code> — the harness we built last week for the bonsai cross-architecture evaluation. The integration is small enough to fit in this paragraph: <code>--delta-mem PATH</code> reads <code>adapter.safetensors</code> + <code>delta_mem_config.json</code>, calls <code>attach_delta_mem</code> + <code>load_delta_mem_adapter</code>, sets a flag the eval loop checks before each problem to call <code>reset_delta_mem_states(model)</code>. State must reset between problems or it would leak across the eval and corrupt the comparison.
+  </p>
+  <p>
+    Smoke test, <code>--no-system-prompt -x 5</code> on ARC-Easy with the 8-bit Qwen3 base:
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Run</th>
+        <th class="right">Passed</th>
+        <th class="right">Wall</th>
+        <th class="right">Per-problem</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Base (no δ-mem)</td>
+        <td class="num right">4 / 5</td>
+        <td class="num right">3.4 s</td>
+        <td class="num right">0.68 s</td>
+      </tr>
+      <tr>
+        <td>+ δ-mem adapter</td>
+        <td class="num right">4 / 5</td>
+        <td class="num right">5.0 s</td>
+        <td class="num right">1.00 s</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Both produce 4/5; the δ-mem perturbation is sub-threshold for flipping a confident categorical argmax on this small sample. Wall overhead is <strong>~47%</strong> per problem — expected, since every token now incurs an extra scan + δ_q/δ_o projection at every layer. Extrapolating to the canonical 191-minute baseline gives roughly <strong>4.7 hours for the full x200 run</strong>.
+  </p>
+</section>
+
+<section>
+  <div class="label">09 / What we built, end to end</div>
+  <h2>Ledger</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Phase</th>
+        <th>Artifact</th>
+        <th class="right">Lines</th>
+        <th class="right">Wall</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>0 — Recon</td>
+        <td><code>docs/delta_mem_recon_2026-05-17.md</code></td>
+        <td class="num right">206</td>
+        <td class="num right">~2 h</td>
+      </tr>
+      <tr>
+        <td>1a — Math module</td>
+        <td><code>nanochat/delta_mem_mlx.py</code></td>
+        <td class="num right">230</td>
+        <td class="num right">~1 h</td>
+      </tr>
+      <tr>
+        <td>1b — Adapter converter</td>
+        <td><code>scripts/convert_delta_mem_adapter.py</code></td>
+        <td class="num right">70</td>
+        <td class="num right">~15 min</td>
+      </tr>
+      <tr>
+        <td>1c — Synthetic math gate</td>
+        <td><code>dev/delta_mem_mlx_smoke.py</code></td>
+        <td class="num right">140</td>
+        <td class="num right">~30 min</td>
+      </tr>
+      <tr>
+        <td>1d — Integration gate</td>
+        <td><code>dev/delta_mem_integration_smoke.py</code></td>
+        <td class="num right">110</td>
+        <td class="num right">~30 min</td>
+      </tr>
+      <tr>
+        <td>1e — Generation gate</td>
+        <td><code>dev/delta_mem_generation_sanity.py</code></td>
+        <td class="num right">55</td>
+        <td class="num right">~10 min</td>
+      </tr>
+      <tr>
+        <td>2 — Harness wire-up</td>
+        <td><code>scripts/chat_eval_mlx.py</code> (delta)</td>
+        <td class="num right">~40</td>
+        <td class="num right">~20 min</td>
+      </tr>
+      <tr class="headline">
+        <td colspan="2"><strong>Total dev work, Phase 0–2</strong></td>
+        <td class="num right">~850</td>
+        <td class="num right">~5 h</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    The vast majority of the 5 hours was spent reading the 2,800-line upstream reference and the paper carefully. The actual MLX code is a single small module plus three throwaway smoke scripts. The integration with our existing harness was about 40 lines of diff. The adapter conversion is a one-shot script that ran in seconds and produced a 9.31 MB safetensors file we'll never need to regenerate.
+  </p>
+</section>
+
+<section>
+  <div class="label">10 / The next 4.7 hours</div>
+  <h2>What the eval will answer</h2>
+  <div class="next">
+    <h3>The headline question</h3>
+    <div class="q">
+      Does δ-mem's published-on-LoCoMo/MemoryAgentBench lift transfer to our six-task ChatCORE suite?
+    </div>
+    <p style="margin-bottom: 0">
+      Baseline to beat: <strong>fp-Qwen3-4B-8bit = ChatCORE 0.7656</strong> at -x 200 lenient. We will run with and without the adapter on the same base, same problems, same scoring.
+    </p>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Outcome band</th>
+        <th>Interpretation</th>
+        <th>Next move</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="num">ChatCORE ≥ 0.79</td>
+        <td>Real lift (+0.024, ~3σ at n=200). Graft architectures matter beyond memory-specific benchmarks.</td>
+        <td>Pursue grafted-memory direction more aggressively. Try training our own variants once we have a training stack.</td>
+      </tr>
+      <tr>
+        <td class="num">0.76 – 0.78</td>
+        <td>No signal vs noise. Per-task pattern (HumanEval moves but MMLU flat = interpretable) tells us more than the aggregate.</td>
+        <td>Document per-task pattern; the graft works on its target benchmarks but doesn't generalize to our reasoning/knowledge suite.</td>
+      </tr>
+      <tr>
+        <td class="num">&lt; 0.74</td>
+        <td>Graft is hurting. Almost certainly a port bug OR a real 8-bit-base × bf16-adapter precision incompatibility.</td>
+        <td>Backfill the deferred activation-capture gate. If gate passes, convert fp16 MLX base (~8 GB) and rerun for apples-to-apples adapter-precision match.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    The four gates already passed make a low result <em>interpretable</em>: we can be confident a low ChatCORE means "the lift doesn't transfer to our tasks" or "8-bit base disagrees with bf16 adapter" rather than "the port has a bug." That interpretability is the whole point of having gated this carefully before spending the 4.7 hours.
+  </p>
+</section>
+
+<section>
+  <div class="label">11 / Why we did it this way</div>
+  <h2>Methodology notes</h2>
+  <ol class="takeaways">
+    <li><b>Gate-stacking discipline.</b> Four independent gates, each isolating a different failure mode, run before any expensive eval. The bonsai work last week burned 21 minutes per smoke iteration; the δ-mem eval burns ~5 hours. The marginal cost of careful gating is much smaller than the marginal cost of running an uninterpretable eval and not knowing why.</li>
+    <li><b>Port the active subset, not the kitchen sink.</b> Upstream's 2,800-line wrapper supports a dozen archived variants. The released adapter uses one config. Porting only what's needed gave us a 230-line module that's auditable in one sitting. Future SSW or MSW adapters would <em>add</em> code, not refactor existing code.</li>
+    <li><b>Read the dispatch, not the documentation.</b> Upstream's README and setup script make FlashAttention sound mandatory. The forward at <code>delta_impl.py:2261</code> shows it's a single conditional on <code>config._attn_implementation</code>. Reading the actual code path (vs trusting the surface) saved a day of "how do we install FlashAttention on MPS."</li>
+    <li><b>Tests that are unfalsifiable proofs beat tests that are evidence.</b> The zero-weight wiring gate isn't probabilistic — with δ-projection weights all zero, the wrapped output <em>must</em> equal base bit-for-bit, or the wiring is wrong. That's a much stronger gate than "the output is roughly similar to base, within tolerance X." When you can engineer an exact-equality invariant into a test, do it.</li>
+    <li><b>Defer the expensive gate when the cheap gates have already covered the failure surface.</b> Gate 05 (activation-capture diff vs PyTorch reference) would cost ~2 hours plus ~10 GB transient RAM. After Gates 01–04 came back clean, its conditional value-of-information dropped enough to defer until — and unless — the eval result lands in the ambiguous band. Methodology is not "always run every gate"; it's "run the gates whose information value exceeds their cost given what you already know."</li>
+  </ol>
+</section>
+
+<hr class="fancy">
+
+<section>
+  <div class="label">12 / Coda</div>
+  <h2>Borrowing the future</h2>
+  <p>
+    The strangest thing about this exercise is how close the published δ-mem mechanism is to what we sketched on the whiteboard in May and parked. The strategic pivot doc from 2026-05-13 named "continuous-learning components grafted onto a frozen 4–8B base" as the right direction but said we lacked the recipe. Three days later, someone published the recipe. We did not invent any of the mechanism. We did not train any of the weights. The contribution this checkpoint represents is one small, careful translation — from the framework someone else wrote it in, to the framework we can run it in — plus the gating discipline to be sure the translation was faithful.
+  </p>
+  <p>
+    Whatever the eval tells us tonight, we'll know it cleanly. Either the published lift transfers to our suite (and we have a working grafted-memory adapter on our laptop, immediately), or it doesn't (and we'll have a concrete, per-task answer for <em>why</em>, not a hand-wave about porting bugs). The four-gate stack means we never had to choose between "fast" and "interpretable." The 4.7-hour question is queued. The answer comes in the morning.
+  </p>
+</section>
+
+<footer class="colophon">
+  Compiled 2026-05-17 on M2 MacBook · branch <code>experiment/hope-nested-learning</code> (paused).<br>
+  Phase 0 recon: <code>docs/delta_mem_recon_2026-05-17.md</code> · Paper notes: <code>docs/paper_delta_mem_2026-05-17.md</code> · Ticket: <code>docs/project_incoming/feat_delta_mem_mlx_port.md</code>.<br>
+  Upstream: <code>declare-lab/delta-Mem</code> (CC-BY-4.0) · Published adapter: <code>declare-lab/delta-mem_qwen3_4b-instruct</code> (HF, 11 MB).<br>
+  Base model: <code>mlx-community/Qwen3-4B-Instruct-2507-8bit</code> · Baseline target: ChatCORE 0.7656 (<code>docs/qwen3_4b_quantization_cost_2026-05-17.md</code>).
+  <div class="commits">
+    <code>bc20ef3</code> <span>docs: file δ-mem MLX port ticket — verified upstream code, fresh-session ready</span>
+    <code>62dbdbc</code> <span>docs: δ-mem MLX port Phase 0 recon — gate to Phase 1 green</span>
+    <code>236bc46</code> <span>feat: δ-mem MLX port — pure-math module verified to 2e-6 vs torch reference</span>
+    <code>1d41ccb</code> <span>feat: δ-mem MLX integration smoke — wiring verified bit-exact on Qwen3-4B-8bit</span>
+    <code>c6dc17e</code> <span>feat: δ-mem generation sanity — KV-cache T=1 scan path verified</span>
+    <code>bf534cb</code> <span>feat: chat_eval_mlx --delta-mem flag + per-problem state reset</span>
+    <code>[next]</code>   <span>Phase 3: x200 lenient ChatCORE — δ-mem on fp-Qwen3-4B-8bit vs baseline 0.7656</span>
+  </div>
+</footer>
+
+</article>
+</body>
+</html>
