@@ -31,11 +31,20 @@ from functools import partial
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("datasets").setLevel(logging.WARNING)
 
+import json
+from pathlib import Path
+
 import mlx.core as mx
 from mlx_lm import load
 from mlx_lm.generate import generate
 from mlx_lm.sample_utils import make_sampler
 
+from nanochat.delta_mem_mlx import (
+    DeltaMemConfig,
+    attach_delta_mem,
+    load_delta_mem_adapter,
+    reset_delta_mem_states,
+)
 from tasks.arc import ARC
 from tasks.gsm8k import GSM8K, extract_answer as strict_extract_answer
 from tasks.humaneval import HumanEval
@@ -159,12 +168,14 @@ def encode_letter_ids(tokenizer, letters, cache):
     return out
 
 
-def run_categorical(task, model, tokenizer, max_problems, no_system_prompt):
+def run_categorical(task, model, tokenizer, max_problems, no_system_prompt, delta_mem_attached):
     n = min(len(task), max_problems or len(task))
     cache = {}
     passed, total = 0, 0
     t0 = time.perf_counter()
     for i in range(n):
+        if delta_mem_attached:
+            reset_delta_mem_states(model)
         conv = task[i]
         prompt_str = render_prompt(tokenizer, conv, no_system_prompt)
         ids = mx.array(tokenizer.encode(prompt_str, add_special_tokens=False))[None, :]
@@ -182,12 +193,14 @@ def run_categorical(task, model, tokenizer, max_problems, no_system_prompt):
 
 
 def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
-                   temperature, no_system_prompt, lenient):
+                   temperature, no_system_prompt, lenient, delta_mem_attached):
     n = min(len(task), max_problems or len(task))
     sampler = make_sampler(temp=temperature)
     passed, total = 0, 0
     t0 = time.perf_counter()
     for i in range(n):
+        if delta_mem_attached:
+            reset_delta_mem_states(model)
         conv = task[i]
         prompt_str = render_prompt(tokenizer, conv, no_system_prompt)
         completion = generate(
@@ -214,6 +227,7 @@ def chatcore(results):
 
 
 def write_report(out_path, model_id, results, totals, args, wall_total, chatcore_val):
+    delta_mem_line = f"δ-mem: {args.delta_mem}" if args.delta_mem else "δ-mem: off"
     lines = [
         f"# MLX chat eval — {model_id}",
         "",
@@ -222,6 +236,7 @@ def write_report(out_path, model_id, results, totals, args, wall_total, chatcore
         f"Args: max_problems={args.max_problems} temp={args.temperature} "
         f"max_new_tokens={args.max_new_tokens} no_system_prompt={args.no_system_prompt} "
         f"lenient_extract={args.lenient_extract}",
+        delta_mem_line,
         "",
         "| Task | Acc | n | Centered |",
         "| --- | ---: | ---: | ---: |",
@@ -256,6 +271,11 @@ def main():
                    "('Final Answer: N', '**N**', etc.) in addition to strict '#### N'. "
                    "Use when comparing non-nanochat-SFT models.")
     p.add_argument("-o", "--output", default=None, help="Markdown report path")
+    p.add_argument("--delta-mem", default=None, metavar="PATH",
+                   help="Path to converted δ-mem adapter directory (containing "
+                   "adapter.safetensors + delta_mem_config.json). Per-problem "
+                   "state reset is applied automatically. See "
+                   "scripts/convert_delta_mem_adapter.py.")
     args = p.parse_args()
 
     model_id = BONSAI_SHORT_NAMES.get(args.model.lower(), args.model)
@@ -270,6 +290,21 @@ def main():
     print(f"  loaded in {time.perf_counter()-t0:.1f}s")
     print(f"  vocab={len(tokenizer.vocab)} arch={type(model).__module__}")
 
+    delta_mem_attached = False
+    if args.delta_mem:
+        adapter_dir = Path(args.delta_mem)
+        adapter_st = adapter_dir / "adapter.safetensors"
+        config_json = adapter_dir / "delta_mem_config.json"
+        if not adapter_st.exists() or not config_json.exists():
+            p.error(f"--delta-mem dir missing required files at {adapter_dir}")
+        with open(config_json) as f:
+            cfg = DeltaMemConfig.from_dict(json.load(f))
+        wrapped = attach_delta_mem(model, cfg)
+        n_loaded = load_delta_mem_adapter(model, str(adapter_st))
+        print(f"  δ-mem attached: {len(wrapped)} layers wrapped, {n_loaded} tensors loaded")
+        print(f"  δ-mem config: rank={cfg.rank} alpha={cfg.alpha} delta_heads={cfg.delta_heads}")
+        delta_mem_attached = True
+
     results, totals = {}, {}
     wall_t0 = time.perf_counter()
     for tname in task_names:
@@ -277,12 +312,13 @@ def main():
         task = TASK_CTORS[tname]()
         if task.eval_type == "categorical":
             acc, n = run_categorical(task, model, tokenizer,
-                                      args.max_problems, args.no_system_prompt)
+                                      args.max_problems, args.no_system_prompt,
+                                      delta_mem_attached)
         else:
             acc, n = run_generative(task, model, tokenizer,
                                      args.max_problems, args.max_new_tokens,
                                      args.temperature, args.no_system_prompt,
-                                     args.lenient_extract)
+                                     args.lenient_extract, delta_mem_attached)
         results[tname] = acc
         totals[tname] = n
         print(f"  {tname}: {acc*100:.2f}% ({n} problems)")
