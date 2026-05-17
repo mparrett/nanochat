@@ -6,7 +6,22 @@ literature or precedent. Move to `decisions.md` if/when picked up.
 
 ---
 
-## δ-mem reproduction on fp-Qwen3-4B-Instruct (2026-05-17)
+## ~~δ-mem reproduction on fp-Qwen3-4B-Instruct~~ — MOVED TO INCOMING (2026-05-17)
+
+**Status:** Promoted from backlog to open ticket on 2026-05-17 after
+verifying that public code exists (CC-BY-4.0, real implementation),
+pre-trained adapter is published, and operator wants to pursue.
+
+**Active ticket:** `docs/project_incoming/feat_delta_mem_mlx_port.md`
+— full reproduction plan (Path B MLX port preferred, Path A PyTorch+MPS
+fallback). Self-contained enough to bootstrap a fresh session.
+
+Original backlog entry preserved below for context on how the
+direction came together.
+
+---
+
+## δ-mem reproduction on fp-Qwen3-4B-Instruct (2026-05-17, original backlog entry)
 
 **Pitch.** Reproduce δ-mem (Lei et al., May 2026 — `docs/paper_delta_mem_2026-05-17.md`)
 on the fp-Qwen3-4B-Instruct backbone we've now canonically baselined.

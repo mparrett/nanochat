@@ -2787,9 +2787,46 @@ the result above without incident.
 Combined canonical batch (4 models, all x200): **458 min = 7.6 h**
 of M2 wall time, producing publication-grade cross-arch ChatCORE.
 
+### δ-mem ticket filed for fresh-session pickup (2026-05-17 evening)
+
+After the canonical fp-baseline landed, surveyed the δ-mem
+(Lei et al. May 2026) reference implementation on GitHub:
+
+- **Code exists, substantial, CC-BY-4.0**: `declare-lab/delta-Mem`
+  (101 stars, real `deltamem/` package with core/train/eval/kernels),
+  mirrored at `MindLab-Research/delta-Mem`.
+- **Training is CUDA-only** (mandatory FlashAttention + DeepSpeed).
+  Not viable on M2 for training.
+- **Pre-trained adapter published**: `declare-lab/delta-mem_qwen3_4b-instruct`
+  (rank-8 Q/O TSW variant, write length 8192). **Inference is viable
+  on M2** because the adapter is small and the backbone (Qwen3-4B-
+  Instruct-2507) is already cached.
+
+Filed ticket: `docs/project_incoming/feat_delta_mem_mlx_port.md`.
+
+**Two paths, operator preference Path B first:**
+- **Path B — MLX port** (~3-4 days): port δ-mem forward from PyTorch
+  reference into MLX, load adapter weights, integrate with our
+  `chat_eval_mlx.py` harness via a new `--delta-mem` flag. Bigger
+  upfront cost but reuses our eval infrastructure cleanly.
+- **Path A — PyTorch + MPS fallback** (~1-2 days): clone reference
+  code, patch out FlashAttention, build a thin PyTorch-side eval
+  harness. Faster but introduces a second eval harness.
+
+**Headline question for the experiment:** does δ-mem's published
+LoCoMo/MemoryAgentBench lift transfer to our six-task ChatCORE
+suite? Compared to the fp-Qwen3-4B-8bit baseline (0.7656):
+- ChatCORE ≥ 0.79 → real lift signal, follow up aggressively
+- 0.76-0.78 → no signal vs noise, document per-task pattern
+- < 0.74 → graft hurts, almost certainly a port bug
+
+Ticket is self-contained enough to bootstrap a fresh session.
+Backlog entry promoted to OPEN with a pointer to the ticket.
+
 ### Branch state
 
-One commit today: docs (Qwen3-4B-8bit x200 + quantization-cost writeup
-+ this HANDOFF amendment). Local-only. Branch still paused.
+Two commits this evening: docs (Qwen3-4B-8bit x200 + quantization-
+cost writeup), docs (δ-mem paper notes + backlog entry + GitHub
+verification + filed ticket). Local-only. Branch still paused.
 
 
