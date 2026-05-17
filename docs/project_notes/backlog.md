@@ -6,6 +6,81 @@ literature or precedent. Move to `decisions.md` if/when picked up.
 
 ---
 
+## δ-mem reproduction on fp-Qwen3-4B-Instruct (2026-05-17)
+
+**Pitch.** Reproduce δ-mem (Lei et al., May 2026 — `docs/paper_delta_mem_2026-05-17.md`)
+on the fp-Qwen3-4B-Instruct backbone we've now canonically baselined.
+The architecture is essentially what we paused on 2026-05-13: graft a
+small trainable memory module onto a frozen Qwen3-4B base, train via
+standard SFT, evaluate via our existing harness. Mechanism is a
+gated delta-rule on an 8×8 associative-memory state that produces
+low-rank corrections to the frozen attention's query and output.
+
+**Why now / why interesting.**
+- The architecture matches our parked Hope/NL graft direction; if a
+  published reference exists, we're not reinventing.
+- The Stage 2 work on Hope/NL built the exact same gated delta-rule
+  from scratch — `nanochat/gpt.py` has reusable building blocks.
+- The fp-Qwen3-4B-8bit baseline (ChatCORE 0.7656 at -x 200) gives us
+  a precise reference point for measuring lift on our six tasks.
+- The δ-mem paper validates on long-context and conversational-memory
+  tasks (LoCoMo, MemoryAgentBench) which are NOT our ChatCORE suite.
+  Adding our ARC/MMLU/GSM8K/HumanEval/SpellingBee numbers would be
+  net signal beyond their published evals.
+
+**Cost.** Three sub-stages, gateable:
+- **(a) Verify code availability** (~30 min). Check Declare-lab and
+  MindLab-Research GitHub orgs for runnable code. If yes → (b). If
+  no → from-scratch reimplementation is ~3-5 days and the gating
+  question is whether that's worth it without their training data.
+- **(b) PyTorch + MPS smoke** with their adapter wired to fp-Qwen3-4B-
+  Instruct (~half day). Verify backward flows correctly through the
+  rank-r adapters only, not the frozen backbone.
+- **(c) Train on a small SFT sample** (~1-2 days). Their training
+  setup uses LongSFT-3; would need to identify the exact mixture.
+  Evaluate via our chat_eval_mlx for direct comparison to the
+  baselined 0.7656 ChatCORE.
+
+Total feasibly-bounded: 2-3 weeks of focused work; gateable at each
+sub-stage; first 30 minutes (the GitHub check) determines whether
+the rest is even on the table.
+
+**Falsification thresholds (if the full reproduction happens).**
+- ChatCORE on fp-Qwen3-4B-8bit + δ-mem ≥ 0.78: the graft delivers
+  measurable lift on our six tasks. Strong signal for the architecture.
+- ChatCORE = 0.7656 ± noise: graft works mechanistically (per their
+  benchmarks) but doesn't help our reasoning/knowledge suite. Expected
+  outcome based on their published numbers; would confirm their lift
+  is conversational-memory-specific.
+- ChatCORE < 0.7656: the graft hurts. Would falsify the "memory module
+  is free to add" assumption.
+
+**What's known so far** (from `docs/paper_delta_mem_2026-05-17.md`):
+- Architecture spec is precise enough to reimplement.
+- Trainable params are small (rank-r adapters + 8×8 state per layer).
+- They report +4.87 average ChatCORE-equivalent lift, +9.31 on
+  MemoryAgentBench, +6.13 on LoCoMo. IFEval and GPQA-Diamond flat.
+- The "Github: Declare-lab & MindLab-Research" line in the paper
+  masthead is a citation, not verified-public runnable code.
+
+**Status.** Open. δ-mem-on-fp is the cleaner experiment; δ-mem-on-int2-
+Bonsai may fight the wrong battle (the quantization-cost analysis
+shows int2 already preserves reasoning for free; the memory/knowledge
+gap is where int2 loses, and that's also where δ-mem helps — so
+"compose them" may double the int2 deficit rather than fix it).
+
+**References.**
+- Paper notes: `docs/paper_delta_mem_2026-05-17.md` (the precise
+  mechanism, reservations, and what this changes for us)
+- Strategic context: `docs/strategic_pivot_2026-05-13.md` (why this
+  direction was parked, why it now has a reference architecture)
+- Backbone baseline: `docs/qwen3_4b_quantization_cost_2026-05-17.md`
+- Prior from-scratch precedent: `docs/hope_nl_stage2_*.md` (we built
+  the gated delta-rule before, but as a full block replacement; δ-mem
+  uses the same equation as a graft module instead)
+
+---
+
 ## bf16 full-pretrain validation on M2 — de-risk before any 1-bit work (2026-05-07)
 
 **Pitch.** Run a full 5000-iter d6 pretrain with `NANOCHAT_DTYPE=bfloat16`
