@@ -228,12 +228,17 @@ class DeltaMemAttention(nn.Module):
 
 def attach_delta_mem(model: nn.Module, config: DeltaMemConfig) -> list[str]:
     """Walk model.model.layers, replacing each TransformerBlock.self_attn with a
-    DeltaMemAttention wrapper. Returns the list of layer keys that were wrapped."""
+    DeltaMemAttention wrapper. Returns the list of layer keys that were wrapped.
+
+    Hidden_size is taken from model.args (works for both fp16 and quantized
+    bases; QuantizedLinear stores weight in packed layout so weight.shape[1]
+    is NOT in_features). Out features are read from weight.shape[0] which is
+    correct for both layouts."""
     wrapped = []
+    hidden_size = model.args.hidden_size
     layers = model.model.layers
     for layer_idx, block in enumerate(layers):
         base_attn = block.self_attn
-        hidden_size = base_attn.q_proj.weight.shape[1]
         q_out = base_attn.q_proj.weight.shape[0]
         o_out = base_attn.o_proj.weight.shape[0]
         delta_layer = DeltaMemLayer(hidden_size, q_out, o_out, config)
