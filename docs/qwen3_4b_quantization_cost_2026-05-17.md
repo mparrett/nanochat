@@ -5,6 +5,14 @@
 **Companion:** `docs/bonsai_field_eval_2026-05-16.html` (the bonsai narrative)
 this doc adds the fp-precision reference point
 
+> **⚠ UPDATE 2026-05-18: The operational recommendation in this doc has
+> been superseded by the δ-mem field result.** See "Revision 2026-05-18 —
+> δ-mem flips the coding/math call" at the bottom of this doc, and the
+> field-result writeup at `docs/delta_mem_field_result_2026-05-18.html`.
+> The headline quantization-cost numbers (fp-Qwen3-4B-8bit at ChatCORE
+> 0.7656) remain correct — they're the baseline the δ-mem result is
+> measured against. The two cells that flip are coding and math.
+
 ## Why we ran this
 
 Bonsai's ADR-001 claims "ternary 4B matches 1-bit 8B quality" but says
@@ -166,3 +174,96 @@ dropped per Bonsai's ADR-003; this drops 2-bit-8B by the same logic.)
    comparison fully symmetric. ~30 min each. The cross-arch gap is
    so large that the d6/d8 side being noisier doesn't change any
    conclusion; only worth it for a publication-grade headline.
+
+---
+
+## Revision 2026-05-18 — δ-mem flips the coding/math call
+
+The day after this analysis was written, we ported the published
+`declare-lab/delta-mem_qwen3_4b-instruct` adapter to MLX and ran it on
+the same six-task ChatCORE suite at the same base precision (8-bit).
+The result superseded the operational recommendation in this doc for
+coding and math workloads. The original analysis above is preserved
+intact because its measurements (quantization-cost split, per-task
+pattern at baseline) are still correct — only the operational *call*
+shifted, and only for two cells of the table.
+
+**δ-mem result summary** (full doc: `docs/delta_mem_field_result_2026-05-18.html`):
+
+| Task | Baseline (this doc) | + δ-mem | Δ | z |
+| --- | ---: | ---: | ---: | ---: |
+| ARC-Easy | 94.00% | 94.00% | 0.0pp | 0.0 |
+| ARC-Challenge | 92.50% | 92.50% | 0.0pp | 0.0 |
+| MMLU | 60.50% | 60.00% | −0.5pp | −0.1 |
+| **GSM8K** | **76.00%** | **81.50%** | **+5.5pp** | **1.35** |
+| **HumanEval** | **58.54%** | **70.73%** | **+12.2pp** | **2.33** |
+| SpellingBee | 95.50% | 92.00% | −3.5pp | −0.7 |
+| **ChatCORE** | **0.7656** | **0.7882** | **+0.0226** | ~1.4 |
+
+The lift is entirely on the two reasoning tasks; the four
+knowledge-leaning tasks did not move. Mechanism story (hypothesis
+fitting the data): δ-mem provides online working memory which benefits
+tasks where the model has to maintain intermediate state during
+generation (code variables, arithmetic) and is irrelevant to tasks
+where the answer is static recall + single-step inference. Cost:
++9.31 MB adapter weights, +47% per-token wall.
+
+### Revised operational call
+
+The "Revised operational call" section above made three claims that
+need updating:
+
+| Workload | Pre-δ-mem call (this doc, above) | Post-δ-mem call (2026-05-18) |
+| --- | --- | --- |
+| Coding (HumanEval-style) | Bonsai-4B int2 — same HE, smaller | **fp-Qwen3-4B-8bit + δ-mem** (+12.2pp at 2.33σ) |
+| Math (GSM8K-heavy) | Bonsai-4B (79% vs 76%, marginal) | **fp-Qwen3-4B-8bit + δ-mem** (+5.5pp at 1.35σ) |
+| Knowledge (MMLU, ARC, SpellingBee) | fp-Qwen3-4B-8bit | unchanged — δ-mem doesn't move these |
+| General chat / mixed | Bonsai-4B int2 by default | **fp-Qwen3-4B-8bit + δ-mem** if wall and memory budget allows; Bonsai-4B otherwise |
+| Memory-constrained | Bonsai-1.7B int2 | unchanged — δ-mem doesn't fit budget |
+
+The "Bonsai for coding/math" call was load-bearing in the original
+analysis above. After δ-mem, fp-Qwen3-4B-8bit wins coding outright
+(70.73% vs Bonsai-4B's 58.54%) and wins math too (81.50% vs Bonsai-4B's
+79.00%). The "fp-Qwen3-4B-8bit is dominated only on size/memory" framing
+in the original now extends to "and dominated on speed, but never on
+reasoning quality."
+
+**Bonsai-8B int2 status** (was "dominated by fp-Qwen3-4B-8bit"):
+unchanged. fp-Qwen3-4B-8bit + δ-mem extends the dominance — same
+memory, better reasoning, comparable knowledge. Drop 8B int2 from the
+operational menu remains the recommendation.
+
+**Bonsai-4B int2 status** (was "the pick for coding/math/general chat"):
+materially weakened. For users who can afford +47% wall and +9.31 MB
+disk, fp-Qwen3-4B-8bit + δ-mem dominates Bonsai-4B on every quality
+axis at the same memory footprint (~4 GB peak). Bonsai-4B retains its
+edge only on (a) wall time when neither model is δ-mem-augmented, and
+(b) the smaller memory footprint of int2 if running multiple model
+instances or on a tighter budget.
+
+### What didn't change
+
+- The quantization-cost analysis itself (knowledge-heavy tasks lose
+  meaningful points to int2; reasoning tasks essentially free) is still
+  the right read of the baseline measurement.
+- The mechanism speculation about "weight precision matters for fact
+  retrieval, weight directions are enough for reasoning circuits" still
+  fits the data and is orthogonal to the δ-mem finding.
+- The Bonsai-vs-fp-Qwen3 disk/memory/wall trade still holds — δ-mem
+  shifts the *quality* axis, not the *cost* axis.
+
+### Open follow-ups added by the δ-mem result
+
+5. **MBPP / out-of-distribution coding** (~1h) to disambiguate
+   "δ-mem helps coding broadly" from "δ-mem helps HumanEval
+   specifically." The published adapter trained on Qasper, not code.
+6. **Long-context QA addition to the suite** (LoCoMo, RULER, or
+   similar). The paper's native evaluation domain. Would test whether
+   the δ-mem lift extends to its claimed memory-recall use case on our
+   infrastructure, separating "the port works for reasoning" from
+   "δ-mem also delivers its advertised memory benefit on our setup."
+7. **fp16 base reconsideration deferred.** The 8-bit × bf16-adapter
+   pairing produced a clean +12.2pp lift; an fp16 base might give more
+   (closer precision match) or might not (no apples-to-apples
+   comparison to existing baseline). +8 GB disk + ~3h to test if/when
+   we want the precision-controlled measurement.
