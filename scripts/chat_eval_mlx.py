@@ -48,6 +48,7 @@ from nanochat.delta_mem_mlx import (
 from tasks.arc import ARC
 from tasks.gsm8k import GSM8K, extract_answer as strict_extract_answer
 from tasks.humaneval import HumanEval
+from tasks.mbpp import MBPP
 from tasks.mmlu import MMLU
 from tasks.spellingbee import SpellingBee
 
@@ -113,9 +114,12 @@ BONSAI_SHORT_NAMES = {
 }
 
 ALL_TASKS = ["ARC-Easy", "ARC-Challenge", "MMLU", "GSM8K", "HumanEval", "SpellingBee"]
+# MBPP is not in ALL_TASKS (so ChatCORE composite is unchanged) but is
+# selectable via -a MBPP for the δ-mem coding-generality confirmation.
 BASELINE_ACC = {
     "ARC-Easy": 0.25, "ARC-Challenge": 0.25, "MMLU": 0.25,
     "GSM8K": 0.0, "HumanEval": 0.0, "SpellingBee": 0.0,
+    "MBPP": 0.0,
 }
 
 TASK_CTORS = {
@@ -125,6 +129,7 @@ TASK_CTORS = {
     "GSM8K":         partial(GSM8K, subset="main", split="test"),
     "HumanEval":     HumanEval,
     "SpellingBee":   partial(SpellingBee, size=256, split="test"),
+    "MBPP":          MBPP,
 }
 
 
@@ -247,11 +252,10 @@ def write_report(out_path, model_id, results, totals, args, wall_total, chatcore
         "| Task | Acc | n | Centered |",
         "| --- | ---: | ---: | ---: |",
     ]
-    for t in ALL_TASKS:
-        if t in results:
-            base = BASELINE_ACC[t]
-            cent = (results[t] - base) / (1.0 - base)
-            lines.append(f"| {t} | {results[t]:.4f} | {totals[t]} | {cent:+.4f} |")
+    for t in results:
+        base = BASELINE_ACC.get(t, 0.0)
+        cent = (results[t] - base) / (1.0 - base) if base < 1.0 else 0.0
+        lines.append(f"| {t} | {results[t]:.4f} | {totals[t]} | {cent:+.4f} |")
     if chatcore_val is not None:
         lines.append(f"| **ChatCORE** | — | — | **{chatcore_val:.4f}** |")
     with open(out_path, "w") as f:
@@ -344,7 +348,9 @@ def main():
     print(f"\n{'='*50}")
     print(f"Summary — {model_id}")
     print(f"{'='*50}")
-    for t in ALL_TASKS:
+    # Iterate task_names so non-ALL_TASKS (e.g. MBPP) show up when requested,
+    # but compute ChatCORE only when all six ALL_TASKS are present.
+    for t in task_names:
         if t in results:
             base = BASELINE_ACC[t]
             cent = (results[t] - base) / (1.0 - base)
