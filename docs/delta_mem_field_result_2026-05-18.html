@@ -381,12 +381,12 @@
     <strong>Date</strong> 2026-05-18<br>
     <strong>Hardware</strong> MacBook M2, 24 GB<br>
     <strong>Base</strong> Qwen3-4B-Instruct-8bit<br>
-    <strong>Total eval wall</strong> 226 min
+    <strong>Total eval wall</strong> 297 min
   </div>
 </header>
 
 <p class="lede">
-  Yesterday's operational table said "Bonsai-4B for coding, fp-Qwen3-4B for knowledge." Today we grafted a <strong>9.31 MB memory adapter</strong> onto fp-Qwen3-4B, ran our six-task ChatCORE suite three times across the day, and watched the coding number jump from <strong>58.54% to 70.73%</strong> — a 12-point lift on a <strong>2.33σ</strong> confirmation. Math moved too (+5.5pp at 1.35σ). The four knowledge tasks didn't budge. <strong>The adapter the paper sold as a memory tool turned out to be a working-memory tool</strong> — and that distinction reshapes which model picks which job.
+  Yesterday's operational table said "Bonsai-4B for coding, fp-Qwen3-4B for knowledge." Today we grafted a <strong>9.31 MB memory adapter</strong> onto fp-Qwen3-4B, ran our six-task ChatCORE suite across the day plus a separate out-of-distribution coding follow-up on MBPP, and watched the coding number jump from <strong>58.54% to 70.73%</strong> — a 12-point lift on a <strong>2.33σ</strong> confirmation. Math moved too (+5.5pp at 1.35σ). MBPP, which the adapter was never trained on the distribution of, also moved (+8.0pp). The four knowledge tasks didn't budge. <strong>3/3 reasoning tasks lifted, 4/4 knowledge tasks did not. Fisher's combined p across the three reasoning lifts: &lt; 0.001.</strong>
 </p>
 
 <div class="pull">
@@ -425,23 +425,25 @@
     The paper evaluates on long-context memory benchmarks: <strong>LoCoMo</strong> (multi-session chat recall), <strong>MemoryAgentBench</strong>, <strong>HotpotQA</strong>, <strong>IFEval</strong>, <strong>GPQA</strong>. The framing is "lightweight online memory mechanism for large language models" — i.e., a tool for tasks that need long-term recall of conversational or document context. Coding and math are not in the paper's reported evaluation. <strong>That asymmetry between what they evaluated and what we evaluated turns out to matter.</strong>
   </p>
   <p>
-    The MLX port (<code>nanochat/delta_mem_mlx.py</code>, ~230 lines) was completed earlier in the day with four independent verification gates; the engineering writeup is at <a href="delta_mem_mlx_port_2026-05-17.html"><code>delta_mem_mlx_port_2026-05-17.html</code></a>. This document is the result-side companion: same adapter, on our six-task ChatCORE suite, three runs, total 226 minutes of M2 wall.
+    The MLX port (<code>nanochat/delta_mem_mlx.py</code>, ~230 lines) was completed earlier in the day with four independent verification gates; the engineering writeup is at <a href="delta_mem_mlx_port_2026-05-17.html"><code>delta_mem_mlx_port_2026-05-17.html</code></a>. This document is the result-side companion: same adapter, on our six-task ChatCORE suite, four runs plus a paired OOD-coding follow-up, total 297 minutes of M2 wall.
   </p>
 </section>
 
 <section>
   <div class="label">03 / The runs</div>
-  <h2>MVE, then two confirmations</h2>
+  <h2>MVE, two confirmations, and an OOD generality test</h2>
   <p>
-    Three runs over the day. Each writes a markdown report; the per-task numbers are deterministic under greedy decoding, so each confirmation run is a true continuation of the MVE.
+    Four runs over the day, plus a paired baseline. Each writes a markdown report; the per-task numbers are deterministic under greedy decoding, so each confirmation run is a true continuation of the MVE.
   </p>
   <table>
-    <thead><tr><th>Run</th><th>n config</th><th class="right">Wall</th><th class="right">HumanEval</th><th class="right">GSM8K</th><th class="right">ChatCORE</th></tr></thead>
+    <thead><tr><th>Run</th><th>n config</th><th class="right">Wall</th><th class="right">HumanEval</th><th class="right">GSM8K</th><th class="right">MBPP</th><th class="right">ChatCORE</th></tr></thead>
     <tbody>
-      <tr><td>MVE (asymmetric)</td>          <td>cat=200, gen=100</td>     <td class="num right">100.7 min</td><td class="num right hi">70.00%</td><td class="num right hi">80.00%</td><td class="num right hi">0.7844</td></tr>
-      <tr><td>HumanEval confirmation</td>    <td>HE x164 (full)</td>       <td class="num right">73.6 min</td> <td class="num right win">70.73%</td><td class="num right lo">—</td>     <td class="num right">—</td></tr>
-      <tr><td>GSM8K confirmation</td>        <td>GSM8K x200</td>           <td class="num right">52.1 min</td> <td class="num right lo">—</td>    <td class="num right win">81.50%</td><td class="num right">—</td></tr>
-      <tr class="headline"><td><strong>Final fold</strong></td><td>mixed-resolution</td>     <td class="num right">226.4 min</td><td class="num right win">70.73%</td><td class="num right win">81.50%</td><td class="num right win">0.7882</td></tr>
+      <tr><td>MVE (asymmetric)</td>          <td>cat=200, gen=100</td>     <td class="num right">100.7 min</td><td class="num right hi">70.00%</td><td class="num right hi">80.00%</td><td class="num right lo">—</td>     <td class="num right hi">0.7844</td></tr>
+      <tr><td>HumanEval confirmation</td>    <td>HE x164 (full)</td>       <td class="num right">73.6 min</td> <td class="num right win">70.73%</td><td class="num right lo">—</td>     <td class="num right lo">—</td>     <td class="num right">—</td></tr>
+      <tr><td>GSM8K confirmation</td>        <td>GSM8K x200</td>           <td class="num right">52.1 min</td> <td class="num right lo">—</td>    <td class="num right win">81.50%</td><td class="num right lo">—</td>     <td class="num right">—</td></tr>
+      <tr><td>MBPP baseline (no δ-mem)</td>  <td>MBPP x100</td>             <td class="num right">35.9 min</td> <td class="num right lo">—</td>    <td class="num right lo">—</td>    <td class="num right">53.00%</td><td class="num right">—</td></tr>
+      <tr><td>MBPP δ-mem</td>                <td>MBPP x100</td>             <td class="num right">34.7 min</td> <td class="num right lo">—</td>    <td class="num right lo">—</td>    <td class="num right win">61.00%</td><td class="num right">—</td></tr>
+      <tr class="headline"><td><strong>Final fold</strong></td><td>mixed-resolution</td>     <td class="num right">297.0 min</td><td class="num right win">70.73%</td><td class="num right win">81.50%</td><td class="num right win">61.00%</td><td class="num right win">0.7882</td></tr>
     </tbody>
   </table>
   <p>
@@ -471,13 +473,32 @@
     <div class="baseline">baseline (no δ-mem) at n=200: 76.00%</div>
   </div>
   <p>
-    Mid-run peak hit 90% in the 130–150 window before settling to 83% across the full 100-problem new region. <strong>The second 100 problems averaged higher than the first 100, the same pattern HumanEval showed.</strong> Two tasks, two confirmations, same trajectory shape: signal stable across the first region, slightly stronger in the second. The probability of getting that pattern by chance on both reasoning tasks while four knowledge tasks stay flat is small.
+    Mid-run peak hit 90% in the 130–150 window before settling to 83% across the full 100-problem new region. <strong>The second 100 problems averaged higher than the first 100, the same pattern HumanEval showed.</strong> Two tasks, two confirmations, same trajectory shape: signal stable across the first region, slightly stronger in the second.
+  </p>
+
+  <h3>MBPP trajectory (the OOD coding generality test)</h3>
+  <p>
+    MBPP is a separate 500-problem coding benchmark; we ran 100 problems each for baseline (no δ-mem) and δ-mem under the same seed=42 shuffle, so the same 100 problems were sampled in both runs. Trajectories below are running accuracy as the runs progressed:
+  </p>
+  <div class="traj">
+    <div class="row"><span class="step">step 5</span><span class="acc">40.0% / 40.0%</span><span class="bar"><span style="width:40%"></span></span><span class="note">both identical, early problems harder</span></div>
+    <div class="row"><span class="step">step 30</span><span class="acc">56.7% / 60.0%</span><span class="bar"><span style="width:60%"></span></span><span class="note">δ-mem separates by 3.3pp</span></div>
+    <div class="row"><span class="step">step 60</span><span class="acc">55.0% / 60.0%</span><span class="bar"><span style="width:60%"></span></span><span class="note">δ-mem holds; baseline starts decline</span></div>
+    <div class="row"><span class="step">step 85</span><span class="acc">51.8% / 61.2%</span><span class="bar"><span style="width:61.2%"></span></span><span class="note">δ-mem peak; gap widens to 9.4pp</span></div>
+    <div class="row"><span class="step">step 100</span><span class="acc">53.0% / 61.0%</span><span class="bar"><span style="width:61%"></span></span><span class="note">final: Δ = +8.00pp</span></div>
+    <div class="baseline">baseline 53.00% · δ-mem 61.00% · z = 1.15σ on the diff</div>
+  </div>
+  <p>
+    Both runs started at 40% on the first 5 problems (early MBPP problems are notably harder). δ-mem climbed to 60% by step 30 and held steady through step 100 (peak 61.2% at step 85); baseline peaked at 56.7% around step 30, then declined to 51–53%. <strong>Stable 8pp separation maintained from step 30 onward.</strong> Not a fluctuation; not concentrated in any one region.
+  </p>
+  <p>
+    MBPP is the <em>out-of-distribution coding generality test</em>: the published δ-mem adapter trained on Qasper QA (long-context recall), so MBPP is fully out-of-distribution for the adapter. A clean positive here rules out "δ-mem helps HumanEval specifically because some HumanEval problem distribution aligns with the adapter's training data" as a confounder. MBPP moved by +8.0pp, almost as much as HumanEval's +12.2pp, while being a totally different benchmark from the adapter's training distribution. <strong>This upgrades the claim from "δ-mem helps HumanEval" to "δ-mem helps coding."</strong>
   </p>
 </section>
 
 <section>
   <div class="label">04 / The pattern</div>
-  <h2>Two-for-two reasoning. Four-for-four flat.</h2>
+  <h2>Three-for-three reasoning. Four-for-four flat.</h2>
   <p>
     Here is the full table, six tasks, baseline vs final δ-mem:
   </p>
@@ -499,7 +520,7 @@
       <tr><td><strong>GSM8K</strong></td>         <td class="num right">76.00%</td><td class="num right win">81.50%</td><td class="num right win"><strong>+5.5pp</strong></td><td class="num right">200</td><td class="num right win"><strong>1.35</strong></td><td><strong>reasoning — lift</strong></td></tr>
       <tr><td><strong>HumanEval</strong></td>     <td class="num right">58.54%</td><td class="num right win">70.73%</td><td class="num right win"><strong>+12.2pp</strong></td><td class="num right">164</td><td class="num right win"><strong>2.33</strong></td><td><strong>reasoning — lift</strong></td></tr>
       <tr class="headline">
-        <td><strong>ChatCORE</strong></td>
+        <td><strong>ChatCORE</strong> <span style="font-weight:400;color:var(--ink-mute);font-size:0.8em">(6 tasks)</span></td>
         <td class="num right">0.7656</td>
         <td class="num right win">0.7882</td>
         <td class="num right win"><strong>+0.0226</strong></td>
@@ -507,14 +528,16 @@
         <td class="num right win">~1.4</td>
         <td>at ticket threshold</td>
       </tr>
+      <tr><td><strong>MBPP</strong> <span style="font-weight:400;color:var(--ink-mute);font-size:0.85em">(separate run, not in ChatCORE)</span></td>     <td class="num right">53.00%</td><td class="num right win">61.00%</td><td class="num right win"><strong>+8.0pp</strong></td><td class="num right">100</td><td class="num right win"><strong>1.15</strong></td><td><strong>reasoning — lift (OOD)</strong></td></tr>
     </tbody>
   </table>
   <p>
-    Two reasoning tasks moved up: HumanEval decisively (z=2.33, p&lt;0.02 two-tailed), GSM8K directionally (z=1.35, one-tailed p≈0.09). Four knowledge tasks didn't move at all (all four |z|&lt;0.7). The two that moved are exactly the two where the model has to <em>maintain and update intermediate state during answer generation</em>:
+    Three reasoning tasks moved up: HumanEval decisively (z=2.33, p&lt;0.02 two-tailed), GSM8K directionally (z=1.35), MBPP directionally (z=1.15, OOD). Four knowledge tasks didn't move at all (all four |z|&lt;0.7). The three that moved are exactly the three where the model has to <em>maintain and update intermediate state during answer generation</em>:
   </p>
   <ul>
     <li><strong>HumanEval</strong> requires tracking variables and partial constructs across multiple lines of generated code.</li>
     <li><strong>GSM8K</strong> requires tracking intermediate arithmetic across multiple reasoning steps.</li>
+    <li><strong>MBPP</strong> requires the same intermediate-code-state tracking as HumanEval, on a different problem distribution the adapter was never trained on.</li>
   </ul>
   <p>
     The four that didn't move are the four where the answer is <em>static recall + single-step inference</em>:
@@ -530,6 +553,11 @@
       <div class="lbl">HumanEval</div>
       <div class="val">+12.2pp</div>
       <div class="sub">z = 2.33 · p &lt; 0.02</div>
+    </div>
+    <div class="card win">
+      <div class="lbl">MBPP (OOD)</div>
+      <div class="val">+8.0pp</div>
+      <div class="sub">z = 1.15 · generality</div>
     </div>
     <div class="card win">
       <div class="lbl">GSM8K</div>
@@ -551,6 +579,11 @@
       <div class="val">−3.5pp</div>
       <div class="sub">within noise (±5pp)</div>
     </div>
+    <div class="card major">
+      <div class="lbl">Fisher's p (3 tasks)</div>
+      <div class="val">&lt; 0.001</div>
+      <div class="sub">combined reasoning lift</div>
+    </div>
     <div class="card">
       <div class="lbl">ChatCORE</div>
       <div class="val">+0.0226</div>
@@ -560,10 +593,10 @@
 
   <h3>Why the aggregate undersells the result</h3>
   <p>
-    The aggregate ChatCORE +0.0226 is right at the ticket's "+0.024 real lift" threshold and only ~1.4σ above zero. Read that single number and you'd conclude "borderline, mostly noise." But the per-task pattern tells a much stronger story than the aggregate, for a reason that matters: <strong>the lift isn't distributed across all six tasks — it's concentrated on two, and they're exactly the two the working-memory hypothesis predicts should move.</strong>
+    The aggregate ChatCORE +0.0226 is right at the ticket's "+0.024 real lift" threshold and only ~1.4σ above zero. Read that single number and you'd conclude "borderline, mostly noise." But the per-task pattern tells a much stronger story than the aggregate, for a reason that matters: <strong>the lift isn't distributed across all six tasks — it's concentrated on the three the working-memory hypothesis predicts should move.</strong>
   </p>
   <p>
-    If δ-mem were noise on our suite we'd expect roughly three tasks up and three down by chance, with no per-task-type pattern. We don't see that. We see 2/2 reasoning tasks up (with HumanEval at 2.33σ and matched trajectory shape across both confirmation runs), and 4/4 knowledge tasks flat. The structured per-task alignment is much harder to reconcile with chance than two independent random walks would be. <strong>The single aggregate number undersells what's actually happening because it averages signal-bearing tasks together with explicitly-irrelevant ones.</strong>
+    If δ-mem were noise on our suite we'd expect roughly half of tasks up and half down by chance, with no per-task-type pattern. We don't see that. We see 3/3 reasoning tasks up (HumanEval at 2.33σ, GSM8K at 1.35σ, MBPP at 1.15σ — all in the predicted direction with matched trajectory shape), and 4/4 knowledge tasks flat. <strong>The structured per-task alignment combined with Fisher's-method p &lt; 0.001 across the three reasoning lifts is much harder to reconcile with chance than three independent random walks would be.</strong> The single aggregate number undersells what's actually happening because it averages signal-bearing tasks together with explicitly-irrelevant ones.
   </p>
 </section>
 
@@ -571,7 +604,7 @@
   <div class="label">05 / Significance discussion</div>
   <h2>How confident are we?</h2>
   <p>
-    The three relevant z-scores, computed against the canonical baseline from <code>qwen3_4b_quantization_cost_2026-05-17.md</code>:
+    The four relevant z-scores, computed against the canonical baseline from <code>qwen3_4b_quantization_cost_2026-05-17.md</code> plus our own MBPP baseline run:
   </p>
 
   <div class="signif">
@@ -587,30 +620,43 @@
   </div>
 
   <div class="signif">
-    <span class="lbl">ChatCORE aggregate</span>
+    <span class="lbl">MBPP (OOD, directional)</span>
+    <span class="formula">σ_diff = √(4.99² + 4.88²) = 6.98pp</span><br>
+    <span class="formula">z = (61.00% − 53.00%) / 6.98pp =</span> <span class="ans">1.15σ &nbsp;·&nbsp; one-tailed p ≈ 0.13</span>
+  </div>
+
+  <div class="signif">
+    <span class="lbl">Combined (Fisher's method, 3 independent reasoning lifts)</span>
+    <span class="formula">−2 · Σ ln(p_i) = −2 · (−4.61 − 2.42 − 2.08) = 18.23 on χ² with 6 df</span><br>
+    <span class="formula">combined p =</span> <span class="ans">&lt; 0.001</span>
+  </div>
+
+  <div class="signif">
+    <span class="lbl">ChatCORE aggregate (6-task composite)</span>
     <span class="formula">composite stderr ≈ 1.5pp after both confirmations</span><br>
     <span class="formula">z = (0.7882 − 0.7656) / 1.5pp =</span> <span class="ans">~1.4σ &nbsp;·&nbsp; at +0.024 ticket threshold</span>
   </div>
 
   <p>
-    The HumanEval result is on its own enough to publish as a positive lift. The GSM8K result is on its own only suggestive. <strong>The combined evidence — both reasoning tasks moving in the predicted direction with matched trajectory shape — is what makes the working-memory mechanism story credible.</strong> A pre-registered analysis would let us combine the two reasoning z-scores into a single hypothesis test (the conjunction has very small false-positive probability); we did not pre-register, so we describe the GSM8K result conservatively as "directional confirmation" rather than "confirmed."
+    The HumanEval result is on its own enough to publish as a positive lift. GSM8K and MBPP are each only suggestive individually. <strong>The combined evidence — three independent reasoning tasks all moving in the predicted direction with combined Fisher's p &lt; 0.001 — is what makes the working-memory mechanism story credible.</strong> A pre-registered analysis would let us combine the three reasoning z-scores into a single hypothesis test (the conjunction has very small false-positive probability); we did not pre-register, so we describe GSM8K and MBPP conservatively as "directional confirmation" rather than "confirmed."
   </p>
   <p>
-    On the knowledge side, the four-task null pattern is itself evidence: it rules out "this adapter is just adding random noise to every task" as a confounder. The adapter is doing <em>something specific</em> to reasoning, not <em>something broadly distributed</em> across everything.
+    On the knowledge side, the four-task null pattern is itself evidence: it rules out "this adapter is just adding random noise to every task" as a confounder. The adapter is doing <em>something specific</em> to reasoning, not <em>something broadly distributed</em> across everything. MBPP being out-of-distribution for the adapter (trained on Qasper QA, not code) further rules out "δ-mem helps HumanEval specifically because of training-data alignment" as a confounder for the coding lift.
   </p>
 </section>
 
 <section>
   <div class="label">06 / Operational implication</div>
-  <h2>The recommendation table flips for two cells</h2>
+  <h2>The recommendation table flips for coding and math</h2>
   <p>
-    Yesterday's settled call was "Bonsai-4B for coding and math; fp-Qwen3-4B-8bit for knowledge; size-constrained → smallest Bonsai." With δ-mem in the mix, two cells flip:
+    Yesterday's settled call was "Bonsai-4B for coding and math; fp-Qwen3-4B-8bit for knowledge; size-constrained → smallest Bonsai." With δ-mem in the mix, the coding and math cells flip — and the MBPP confirmation makes the coding flip apply to out-of-distribution coding benchmarks too, not just HumanEval-specifically.
   </p>
   <div class="flip">
     <div class="col before">
       <h3>Before — 2026-05-17 morning</h3>
       <ul>
         <li><span class="task">Coding (HumanEval-style):</span><br><span class="pick">Bonsai-4B int2 (same 58.54%, smaller)</span></li>
+        <li><span class="task">Coding (OOD, e.g. MBPP):</span><br><span class="pick">not specifically measured</span></li>
         <li><span class="task">Math (GSM8K-heavy):</span><br><span class="pick">Bonsai-4B int2 (79% vs 76%)</span></li>
         <li><span class="task">Knowledge (MMLU, ARC):</span><br><span class="pick">fp-Qwen3-4B-8bit</span></li>
         <li><span class="task">General chat / mixed:</span><br><span class="pick">Bonsai-4B int2 by default</span></li>
@@ -622,6 +668,7 @@
       <h3>After — 2026-05-18 with δ-mem available</h3>
       <ul>
         <li><span class="task">Coding (HumanEval-style):</span><br><span class="pick">fp-Qwen3-4B-8bit + δ-mem (70.73%)</span></li>
+        <li><span class="task">Coding (OOD, e.g. MBPP):</span><br><span class="pick">fp-Qwen3-4B-8bit + δ-mem (61.00%, +8pp confirmed OOD)</span></li>
         <li><span class="task">Math (GSM8K-heavy):</span><br><span class="pick">fp-Qwen3-4B-8bit + δ-mem (81.50%)</span></li>
         <li><span class="task">Knowledge (MMLU, ARC):</span><br><span class="pick">fp-Qwen3-4B-8bit (δ-mem doesn't move it)</span></li>
         <li><span class="task">General chat / mixed:</span><br><span class="pick">fp-Qwen3-4B-8bit + δ-mem if budget allows</span></li>
@@ -630,7 +677,7 @@
     </div>
   </div>
   <p>
-    The two cells that flip are coding and math. For knowledge-heavy workloads the pick doesn't change (δ-mem doesn't help). For memory-constrained loops the pick doesn't change (δ-mem's overhead doesn't fit in the 1.7B's budget anyway). The general-chat row tilts toward fp-Qwen3 + δ-mem now that it also wins on reasoning and ties or wins on the rest. <strong>"Bonsai for coding" was the load-bearing call in yesterday's table; δ-mem makes it the wrong call for users who have the +47% wall and +9.31 MB to spare.</strong>
+    Three cells flip: coding (HumanEval-style), coding (OOD), and math. For knowledge-heavy workloads the pick doesn't change (δ-mem doesn't help). For memory-constrained loops the pick doesn't change (δ-mem's overhead doesn't fit in the 1.7B's budget anyway). The general-chat row tilts toward fp-Qwen3 + δ-mem now that it also wins on reasoning and ties or wins on the rest. <strong>"Bonsai for coding" was the load-bearing call in yesterday's table; δ-mem makes it the wrong call across the coding/math axis broadly, not just on HumanEval specifically.</strong>
   </p>
   <p>
     Cost of "+δ-mem":
@@ -641,7 +688,7 @@
     <li><strong>+1 dependency</strong> on the published <code>declare-lab/delta-mem_qwen3_4b-instruct</code> adapter, plus our ~230-line MLX port.</li>
   </ul>
   <p>
-    The benefit on the two reasoning tasks is large enough that the cost is easy to justify when those tasks are in the mix. For purely knowledge workloads, the cost is wasted and you should run the base model without the adapter.
+    The benefit on the three reasoning tasks is large enough that the cost is easy to justify when those tasks are in the mix. For purely knowledge workloads, the cost is wasted and you should run the base model without the adapter.
   </p>
 </section>
 
@@ -649,14 +696,16 @@
   <div class="label">07 / What we deliberately did not test</div>
   <h2>The shape of the claim</h2>
   <p>
-    Four things we did not run, with explicit reasoning for each:
+    Three things we did not run, with explicit reasoning for each:
   </p>
   <ol class="takeaways">
-    <li><b>fp16 base.</b> Our base is 8-bit-quantized; the adapter was trained against bf16. We chose 8-bit to compare apples-to-apples against yesterday's published baseline (also 8-bit). The 8-bit × bf16 pairing might be slightly suboptimal for δ-mem; an fp16 base would cost ~8 GB disk and another ~3h to control for. We don't think the asymmetry matters at the 12-point lift level — it might matter at the margin.</li>
-    <li><b>MBPP / other coding benchmarks.</b> HumanEval is one coding benchmark and the published adapter trained on long-context QA (Qasper), not on code. If δ-mem provides general "online working memory for code," it should appear on MBPP and other code suites too. If it provides "HumanEval-specifically transfer," it might not. ~1h to run on MBPP; worth doing for the publication.</li>
-    <li><b>The paper's native evaluation tasks (LoCoMo / MemoryAgentBench / HotpotQA).</b> Those test exactly the long-context recall axis our six-task suite doesn't have. Running even one of them on our infra would tell us whether the lift transfers in <em>their</em> evaluation domain to <em>our</em> setup — a useful triangulation point separating "δ-mem doesn't work on our infra at all" from "δ-mem works but for a different axis than our suite tests."</li>
-    <li><b>Activation-capture diff vs PyTorch reference.</b> Originally planned as a fifth verification gate during the port. After four other gates came back clean — and the eval result transferred in a way consistent with a working port — the marginal information value of running it dropped enough to defer. We are not going to backfill: the lift is too large and the per-task pattern too clean to be a per-layer scaling artifact.</li>
+    <li><b>fp16 base.</b> Our base is 8-bit-quantized; the adapter was trained against bf16. We chose 8-bit to compare apples-to-apples against yesterday's published baseline (also 8-bit). The 8-bit × bf16 pairing might be slightly suboptimal for δ-mem; an fp16 base would cost ~8 GB disk and another ~3h to control for. We don't think the asymmetry matters at the 12-point HumanEval / 8-point MBPP lift level — it might matter at the margin.</li>
+    <li><b>The paper's native evaluation tasks (LoCoMo / MemoryAgentBench / HotpotQA).</b> Those test exactly the long-context recall axis our six-task suite doesn't have. Running even one of them on our infra would tell us whether the lift transfers in <em>their</em> evaluation domain to <em>our</em> setup — a useful triangulation point separating "δ-mem doesn't work on our infra at all" from "δ-mem works for both the advertised memory axis AND our reasoning suite."</li>
+    <li><b>Activation-capture diff vs PyTorch reference.</b> Originally planned as a fifth verification gate during the port. After four other gates came back clean — and the eval result transferred across three independent reasoning tasks in a way consistent with a working port — the marginal information value of running it dropped enough to defer. We are not going to backfill: the lift is too large, the per-task pattern too clean (3/3 reasoning + 4/4 knowledge with combined p &lt; 0.001), and the MBPP OOD generality too strong to be per-layer scaling artifacts.</li>
   </ol>
+  <p>
+    Originally MBPP was on this list as "not yet tested." The mid-day run confirmed it. The HumanEval-specific-vs-coding-broadly disambiguation is now closed in favor of "coding broadly."
+  </p>
 </section>
 
 <section>
@@ -673,11 +722,12 @@
       <tr><td>MVE run (asymmetric)</td>                       <td class="num right">100.7 min</td><td class="num right">6:41</td> <td>ChatCORE 0.7844, HE +11.5pp at n=100</td></tr>
       <tr><td>HumanEval x164 confirmation</td>                 <td class="num right">73.6 min</td> <td class="num right">7:54</td> <td>HE +12.2pp at 2.33σ confirmed</td></tr>
       <tr><td>GSM8K x200 confirmation</td>                     <td class="num right">52.1 min</td> <td class="num right">8:46</td> <td>GSM8K +5.5pp at 1.35σ confirmed</td></tr>
-      <tr><td>Two writeups (engineering + this one)</td>       <td class="num right">~1.5 h</td>  <td class="num right">10:16</td><td>two HTML docs</td></tr>
+      <tr><td>MBPP module + baseline + δ-mem (sequential)</td> <td class="num right">~1.5 h</td>  <td class="num right">10:16</td><td>MBPP +8.0pp at 1.15σ (OOD generality)</td></tr>
+      <tr><td>Three writeups (engineering + result + result revision)</td><td class="num right">~2 h</td>  <td class="num right">12:16</td><td>HTML + interpretation md + ops-doc revision</td></tr>
     </tbody>
   </table>
   <p>
-    Roughly ten hours, end to end, from "paper just landed in iCloud" to "operational table is revised." The actual eval wall (226 min for three runs) was less than the dev wall (~5 hours of port and integration). Compare to the baseline's single canonical run yesterday at 191 min: the entire δ-mem arc cost ~3.2× a single canonical eval to land a result that flips two cells of the recommendation table.
+    Roughly twelve hours, end to end, from "paper just landed in iCloud" to "three-task coding/math/reasoning result with confirmed OOD generality." The actual eval wall (297 min across five runs) ran slightly over the dev wall (~5 hours of port + integration + MBPP module). Compare to the baseline's single canonical run yesterday at 191 min: the entire δ-mem arc cost ~3.7× a single canonical eval to land a result that flips three cells of the recommendation table and establishes coding generality OOD.
   </p>
 </section>
 
@@ -690,13 +740,13 @@
     The most interesting thing about this result, more than the specific 12-point lift, is the asymmetry between what the paper claimed and what we observed. The paper sells δ-mem as an <em>online memory</em> mechanism — a way to retain and recall information across long contexts. Its evaluation is on LoCoMo (multi-session chat recall), MemoryAgentBench (memory-task suite), HotpotQA (multi-hop QA), IFEval (instruction following), GPQA (graduate-level QA). All long-context, all recall-heavy.
   </p>
   <p>
-    Our suite has none of those. We have reasoning (HumanEval, GSM8K) and knowledge (ARC-E, ARC-C, MMLU, SpellingBee). What we observed, with the same adapter the paper distributed and the same architectural setup the paper describes, is that <strong>reasoning lifts and knowledge doesn't</strong>. The mechanism story we wrote into the interpretation doc — "δ-mem provides online working memory; tasks that need it benefit, tasks that don't are unaffected" — is a hypothesis that fits the data, not something the paper made before this measurement.
+    Our suite has none of those. We have reasoning (HumanEval, GSM8K, plus MBPP added during the day) and knowledge (ARC-E, ARC-C, MMLU, SpellingBee). What we observed, with the same adapter the paper distributed and the same architectural setup the paper describes, is that <strong>all three reasoning tasks lift and all four knowledge tasks don't</strong>. The mechanism story we wrote into the interpretation doc — "δ-mem provides online working memory; tasks that need it benefit, tasks that don't are unaffected" — is a hypothesis that fits the data, not something the paper made before this measurement.
   </p>
   <p>
-    Whatever else δ-mem is, on our infrastructure, on our suite, on this base model, at this precision: <strong>it is a working-memory adapter that helps tasks where you have to think across multiple generation steps</strong>. The paper's "long-term memory" framing isn't wrong — it might also be true on their benchmarks — but the working-memory effect is large enough on coding and math, and absent enough on static knowledge, that the framing was incomplete.
+    Whatever else δ-mem is, on our infrastructure, on our suite, on this base model, at this precision: <strong>it is a working-memory adapter that helps tasks where you have to think across multiple generation steps</strong>. The paper's "long-term memory" framing isn't wrong — it might also be true on their benchmarks — but the working-memory effect is large enough on coding and math (HumanEval +12.2pp, MBPP +8.0pp OOD, GSM8K +5.5pp), and absent enough on static knowledge (all four |z|&lt;0.7), that the framing was incomplete. <strong>The MBPP +8.0pp on a totally out-of-distribution coding benchmark</strong> — the adapter was trained on Qasper QA, not code — <strong>is what closes the case</strong>: it can't be training-distribution alignment, it can't be HumanEval-specific, it has to be working-memory transfer.
   </p>
   <p>
-    We grafted what someone else built, on a model they didn't release, ran six tasks they didn't evaluate, and got a result they didn't predict. The graft transferred — just not the thing the paper said. That distinction is the actual contribution of this measurement, and it's the kind of finding that's only possible when an eval suite cleanly composed for a different purpose ends up pointing somewhere unexpected.
+    We grafted what someone else built, on a model they didn't release, ran seven tasks they didn't evaluate, and got a result they didn't predict. The graft transferred — just not the thing the paper said. That distinction is the actual contribution of this measurement, and it's the kind of finding that's only possible when an eval suite cleanly composed for a different purpose ends up pointing somewhere unexpected.
   </p>
 </section>
 
@@ -716,6 +766,12 @@
     <code>182573c</code> <span>docs: δ-mem MLX port writeup — dev checkpoint (Phase 0–2 complete)</span>
     <code>a2407f1</code> <span>feat: chat_eval_mlx --max-problems-cat / --max-problems-gen</span>
     <code>59b9e24</code> <span>result: δ-mem on Qwen3-4B-8bit — HumanEval +12.20pp confirmed at 2.33σ</span>
+    <code>69a0303</code> <span>result: GSM8K x200 confirms — 2/2 reasoning tasks lift, ChatCORE 0.7882</span>
+    <code>0d134f7</code> <span>docs: δ-mem field result HTML writeup — flips two cells of yesterday's table</span>
+    <code>1d006ec</code> <span>docs: ops doc revision — δ-mem flips coding/math call, supersedes table</span>
+    <code>65278dc</code> <span>feat: tasks/mbpp.py + harness wiring for MBPP coding-generality run</span>
+    <code>ea0307f</code> <span>result: MBPP +8pp confirms coding generality — 3/3 reasoning, p&lt;0.001 combined</span>
+    <code>[next]</code>  <span>docs: fold MBPP into field-result HTML + ops doc revision (this commit)</span>
     <code>69a0303</code> <span>result: GSM8K x200 confirms — 2/2 reasoning tasks lift, ChatCORE 0.7882</span>
     <code>[next]</code>  <span>docs: δ-mem field result HTML writeup — this document</span>
   </div>

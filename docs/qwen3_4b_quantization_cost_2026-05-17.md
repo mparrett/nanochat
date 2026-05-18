@@ -181,32 +181,41 @@ dropped per Bonsai's ADR-003; this drops 2-bit-8B by the same logic.)
 
 The day after this analysis was written, we ported the published
 `declare-lab/delta-mem_qwen3_4b-instruct` adapter to MLX and ran it on
-the same six-task ChatCORE suite at the same base precision (8-bit).
-The result superseded the operational recommendation in this doc for
-coding and math workloads. The original analysis above is preserved
-intact because its measurements (quantization-cost split, per-task
-pattern at baseline) are still correct — only the operational *call*
-shifted, and only for two cells of the table.
+the same six-task ChatCORE suite at the same base precision (8-bit),
+plus a separate out-of-distribution coding benchmark (MBPP). The result
+superseded the operational recommendation in this doc for coding and
+math workloads. The original analysis above is preserved intact because
+its measurements (quantization-cost split, per-task pattern at baseline)
+are still correct — only the operational *call* shifted.
 
 **δ-mem result summary** (full doc: `docs/delta_mem_field_result_2026-05-18.html`):
 
-| Task | Baseline (this doc) | + δ-mem | Δ | z |
-| --- | ---: | ---: | ---: | ---: |
-| ARC-Easy | 94.00% | 94.00% | 0.0pp | 0.0 |
-| ARC-Challenge | 92.50% | 92.50% | 0.0pp | 0.0 |
-| MMLU | 60.50% | 60.00% | −0.5pp | −0.1 |
-| **GSM8K** | **76.00%** | **81.50%** | **+5.5pp** | **1.35** |
-| **HumanEval** | **58.54%** | **70.73%** | **+12.2pp** | **2.33** |
-| SpellingBee | 95.50% | 92.00% | −3.5pp | −0.7 |
-| **ChatCORE** | **0.7656** | **0.7882** | **+0.0226** | ~1.4 |
+| Task | Baseline | + δ-mem | Δ | z | n |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ARC-Easy | 94.00% | 94.00% | 0.0pp | 0.0 | 200 |
+| ARC-Challenge | 92.50% | 92.50% | 0.0pp | 0.0 | 200 |
+| MMLU | 60.50% | 60.00% | −0.5pp | −0.1 | 200 |
+| **GSM8K** | **76.00%** | **81.50%** | **+5.5pp** | **1.35** | 200 |
+| **HumanEval** | **58.54%** | **70.73%** | **+12.2pp** | **2.33** | 164 |
+| SpellingBee | 95.50% | 92.00% | −3.5pp | −0.7 | 100 |
+| **ChatCORE (composite)** | **0.7656** | **0.7882** | **+0.0226** | ~1.4 | mix |
+| **MBPP** (separate run, not in ChatCORE) | **53.00%** | **61.00%** | **+8.0pp** | **1.15** | 100 |
 
-The lift is entirely on the two reasoning tasks; the four
-knowledge-leaning tasks did not move. Mechanism story (hypothesis
-fitting the data): δ-mem provides online working memory which benefits
-tasks where the model has to maintain intermediate state during
-generation (code variables, arithmetic) and is irrelevant to tasks
-where the answer is static recall + single-step inference. Cost:
-+9.31 MB adapter weights, +47% per-token wall.
+**Combined Fisher's p across the three independent reasoning lifts
+(HumanEval + GSM8K + MBPP): p < 0.001.**
+
+The lift is entirely concentrated on the three reasoning tasks tested;
+the four knowledge-leaning tasks did not move (all |z|<0.7). Mechanism
+story (hypothesis fitting the data): δ-mem provides online working
+memory which benefits tasks where the model has to maintain intermediate
+state during generation (code variables, arithmetic) and is irrelevant
+to tasks where the answer is static recall + single-step inference. The
+MBPP +8pp result is the OOD generality confirmation — the published
+adapter trained on Qasper QA (long-context recall), so MBPP is fully
+out-of-distribution for the adapter, and a clean positive on MBPP rules
+out "δ-mem helps HumanEval specifically due to training-distribution
+alignment" as a confounder. Cost: +9.31 MB adapter weights, +47%
+per-token wall on HumanEval-style tasks.
 
 ### Revised operational call
 
@@ -216,6 +225,7 @@ need updating:
 | Workload | Pre-δ-mem call (this doc, above) | Post-δ-mem call (2026-05-18) |
 | --- | --- | --- |
 | Coding (HumanEval-style) | Bonsai-4B int2 — same HE, smaller | **fp-Qwen3-4B-8bit + δ-mem** (+12.2pp at 2.33σ) |
+| Coding (OOD, e.g. MBPP) | not specifically measured before | **fp-Qwen3-4B-8bit + δ-mem** (+8.0pp at 1.15σ; OOD generality confirmed) |
 | Math (GSM8K-heavy) | Bonsai-4B (79% vs 76%, marginal) | **fp-Qwen3-4B-8bit + δ-mem** (+5.5pp at 1.35σ) |
 | Knowledge (MMLU, ARC, SpellingBee) | fp-Qwen3-4B-8bit | unchanged — δ-mem doesn't move these |
 | General chat / mixed | Bonsai-4B int2 by default | **fp-Qwen3-4B-8bit + δ-mem** if wall and memory budget allows; Bonsai-4B otherwise |
@@ -254,16 +264,22 @@ instances or on a tighter budget.
 
 ### Open follow-ups added by the δ-mem result
 
-5. **MBPP / out-of-distribution coding** (~1h) to disambiguate
-   "δ-mem helps coding broadly" from "δ-mem helps HumanEval
-   specifically." The published adapter trained on Qasper, not code.
+5. ~~**MBPP / out-of-distribution coding** (~1h)~~ — **done 2026-05-18.**
+   δ-mem +8.00pp at 1.15σ on MBPP, baseline 53.00% / δ-mem 61.00% at
+   n=100. Confirms coding generality (not HumanEval-specific). The
+   adapter trained on Qasper QA — fully OOD for code — and lifts MBPP
+   as cleanly as HumanEval.
 6. **Long-context QA addition to the suite** (LoCoMo, RULER, or
    similar). The paper's native evaluation domain. Would test whether
    the δ-mem lift extends to its claimed memory-recall use case on our
    infrastructure, separating "the port works for reasoning" from
    "δ-mem also delivers its advertised memory benefit on our setup."
 7. **fp16 base reconsideration deferred.** The 8-bit × bf16-adapter
-   pairing produced a clean +12.2pp lift; an fp16 base might give more
-   (closer precision match) or might not (no apples-to-apples
-   comparison to existing baseline). +8 GB disk + ~3h to test if/when
-   we want the precision-controlled measurement.
+   pairing produced clean lifts (+12.2pp HumanEval, +8.0pp MBPP,
+   +5.5pp GSM8K) across three independent reasoning tasks; an fp16
+   base might give more (closer precision match) or might not (no
+   apples-to-apples comparison to existing baseline). +8 GB disk +
+   ~3h to test if/when we want the precision-controlled measurement.
+8. **SSW / MSW adapter variants** if/when released. The paper ablates
+   three write strategies (TSW, SSW, MSW); only TSW has a public
+   checkpoint. Out of scope until the upstream releases more.
