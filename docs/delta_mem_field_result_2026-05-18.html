@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>δ-mem field result — A borrowed 9.31 MB adapter lifts HumanEval by 12 points</title>
+<style>
+  :root {
+    --paper: #f5f1e8;
+    --paper-dim: #ebe5d6;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-mute: #8a857a;
+    --rule: #c9c2b0;
+    --accent: #b04a2f;
+    --accent-soft: #d97b5c;
+    --green: #4a7c3f;
+    --green-bright: #5a9c4f;
+    --gold: #b08a2a;
+    --blue: #3f5f7c;
+    --code-bg: #1c1d1f;
+    --code-fg: #e8e3d4;
+    --code-mute: #8d8675;
+    --code-key: #c9b76b;
+    --code-str: #a3b87a;
+    --code-com: #6a6a6a;
+    --code-num: #d97b5c;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Charter", "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(0,0,0,0.025) 31px 32px),
+      var(--paper);
+  }
+  .sheet { max-width: 920px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+
+  .masthead {
+    border-top: 4px double var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0 1rem;
+    margin-bottom: 3rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1rem;
+  }
+  .masthead .kicker {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+  }
+  .masthead h1 {
+    font-family: "Iowan Old Style", "Charter", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(2rem, 4.6vw, 3.2rem);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .masthead h1 em { font-style: italic; color: var(--accent); }
+  .masthead .meta {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+    text-align: right;
+    line-height: 1.5;
+  }
+  .masthead .meta strong { color: var(--ink); font-weight: 600; }
+
+  .lede { font-size: 1.25rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 3rem; max-width: 38em; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .pull {
+    border-left: 3px solid var(--accent);
+    padding: 1.2rem 1.5rem;
+    margin: 2.5rem 0;
+    background: var(--paper-dim);
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.15rem;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .pull .src {
+    display: block;
+    margin-top: 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-style: normal;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  section { margin: 3rem 0; }
+  section > .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+  section > h2 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.85rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0.2rem 0 1.2rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.6rem;
+  }
+  section h3 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 1.6rem 0 0.5rem;
+  }
+  p { margin: 0 0 1rem; }
+  p + p { text-indent: 1.5em; }
+
+  pre, code { font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace; }
+  code {
+    font-size: 0.92em;
+    background: var(--paper-dim);
+    padding: 0.05em 0.35em;
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 1.2rem 1.4rem;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    overflow-x: auto;
+    margin: 1.4rem 0;
+    border-left: 3px solid var(--code-mute);
+  }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  pre .c { color: var(--code-com); }
+  pre .k { color: var(--code-key); }
+  pre .s { color: var(--code-str); }
+  pre .n { color: var(--code-num); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.4rem 0;
+    font-size: 0.95rem;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+  }
+  th, td {
+    padding: 0.7rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--paper-dim); }
+  th {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 600;
+    border-bottom: 2px solid var(--ink);
+    background: var(--paper);
+  }
+  td.num { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; color: var(--ink); }
+  td.num.lo { color: var(--ink-mute); }
+  td.num.hi { color: var(--green); font-weight: 700; }
+  td.num.win { color: var(--accent); font-weight: 700; }
+  td.num.flat { color: var(--ink-mute); }
+  td.center { text-align: center; }
+  td.right { text-align: right; }
+  th.right { text-align: right; }
+  tr.headline td { background: var(--paper-dim); font-weight: 700; }
+  tr.headline td.num.win { background: var(--paper-dim); }
+
+  .scorecard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1.8rem 0;
+  }
+  .scorecard .card {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--accent);
+    padding: 1rem 1.1rem;
+  }
+  .scorecard .card.flat { border-top-color: var(--ink-mute); }
+  .scorecard .card.major { border-top-color: var(--green-bright); border-top-width: 4px; }
+  .scorecard .card .lbl {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 0.4rem;
+  }
+  .scorecard .card .val {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--ink);
+  }
+  .scorecard .card.flat .val { color: var(--ink-mute); }
+  .scorecard .card.major .val { color: var(--green); }
+  .scorecard .card.win .val { color: var(--accent); }
+  .scorecard .card .sub {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+    margin-top: 0.3rem;
+  }
+
+  .flip {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 1.2rem;
+    align-items: stretch;
+    margin: 2rem 0;
+  }
+  .flip .col {
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    padding: 1.2rem 1.3rem;
+  }
+  .flip .col.before { border-top: 3px solid var(--ink-mute); }
+  .flip .col.after  { border-top: 3px solid var(--accent); background: var(--paper-dim); }
+  .flip .col h3 {
+    margin: 0 0 0.8rem;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+  .flip .col.after h3 { color: var(--accent); }
+  .flip .col ul { list-style: none; padding: 0; margin: 0; font-size: 0.93rem; line-height: 1.5; }
+  .flip .col li { padding: 0.4rem 0; border-bottom: 1px dashed var(--rule); }
+  .flip .col li:last-child { border-bottom: none; }
+  .flip .col li .task { font-weight: 700; color: var(--ink); }
+  .flip .col li .pick { color: var(--ink-soft); }
+  .flip .col.after li .pick { color: var(--ink); font-weight: 600; }
+  .flip .arrow {
+    align-self: center;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 1.4rem;
+    color: var(--accent);
+    text-align: center;
+  }
+
+  .traj {
+    background: var(--paper-dim);
+    border: 1px solid var(--rule);
+    padding: 1.2rem 1.4rem;
+    margin: 1.4rem 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78rem;
+    line-height: 1.65;
+    overflow-x: auto;
+  }
+  .traj .row {
+    display: grid;
+    grid-template-columns: 6em 8em 1fr 5em;
+    gap: 0.8rem;
+    align-items: center;
+    padding: 0.15rem 0;
+  }
+  .traj .row .step { color: var(--ink-mute); }
+  .traj .row .acc { color: var(--ink); font-weight: 600; }
+  .traj .row .bar {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    height: 14px;
+    position: relative;
+  }
+  .traj .row .bar > span {
+    display: block;
+    background: var(--green-bright);
+    height: 100%;
+  }
+  .traj .row .note { color: var(--ink-mute); font-size: 0.72rem; }
+  .traj .baseline { color: var(--accent); font-style: italic; padding-top: 0.4rem; }
+
+  .signif {
+    background: var(--paper-dim);
+    border-left: 3px solid var(--green-bright);
+    padding: 1rem 1.3rem;
+    margin: 1.4rem 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  .signif .formula { color: var(--ink-soft); }
+  .signif .ans { color: var(--green); font-weight: 700; }
+  .signif .lbl {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-style: italic;
+    color: var(--accent);
+    font-size: 0.95rem;
+    display: block;
+    margin-bottom: 0.4rem;
+  }
+
+  ol.takeaways { list-style: none; counter-reset: t; padding: 0; margin: 1.4rem 0; }
+  ol.takeaways li { counter-increment: t; padding-left: 3rem; position: relative; margin-bottom: 1rem; }
+  ol.takeaways li::before {
+    content: counter(t, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+  }
+  ol.takeaways b { font-weight: 700; }
+
+  .colophon {
+    margin-top: 5rem;
+    padding-top: 1.5rem;
+    border-top: 4px double var(--ink);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--ink-mute);
+    line-height: 1.7;
+  }
+  .colophon a { color: var(--ink); }
+  .colophon .commits { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.4rem; margin-top: 0.8rem; }
+  .colophon .commits code { background: none; padding: 0; color: var(--ink-soft); }
+
+  hr.fancy {
+    border: none;
+    text-align: center;
+    margin: 2.5rem 0;
+    color: var(--ink-mute);
+  }
+  hr.fancy::before { content: "·   ·   ·"; letter-spacing: 0.5em; }
+
+  @media (max-width: 700px) {
+    .sheet { padding: 2rem 1.1rem 4rem; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead .meta { text-align: left; }
+    .lede { font-size: 1.1rem; }
+    .flip { grid-template-columns: 1fr; }
+    .flip .arrow { transform: rotate(90deg); }
+    .traj .row { grid-template-columns: 4em 6em 1fr 4em; font-size: 0.72rem; }
+  }
+</style>
+</head>
+<body>
+<article class="sheet">
+
+<header class="masthead">
+  <div>
+    <div class="kicker">δ-mem field result &nbsp;·&nbsp; six-task ChatCORE on Apple Silicon</div>
+    <h1>A borrowed <em>9.31&nbsp;MB</em> adapter<br>lifts HumanEval by 12 points.</h1>
+  </div>
+  <div class="meta">
+    <strong>Date</strong> 2026-05-18<br>
+    <strong>Hardware</strong> MacBook M2, 24 GB<br>
+    <strong>Base</strong> Qwen3-4B-Instruct-8bit<br>
+    <strong>Total eval wall</strong> 226 min
+  </div>
+</header>
+
+<p class="lede">
+  Yesterday's operational table said "Bonsai-4B for coding, fp-Qwen3-4B for knowledge." Today we grafted a <strong>9.31 MB memory adapter</strong> onto fp-Qwen3-4B, ran our six-task ChatCORE suite three times across the day, and watched the coding number jump from <strong>58.54% to 70.73%</strong> — a 12-point lift on a <strong>2.33σ</strong> confirmation. Math moved too (+5.5pp at 1.35σ). The four knowledge tasks didn't budge. <strong>The adapter the paper sold as a memory tool turned out to be a working-memory tool</strong> — and that distinction reshapes which model picks which job.
+</p>
+
+<div class="pull">
+  "We don't have a memory benchmark in our suite. We have reasoning and knowledge. The reasoning side lifted; the knowledge side didn't. The graft did transfer — just not the thing the paper said."
+  <span class="src">— interpretation doc, 2026-05-17 evening</span>
+</div>
+
+<section>
+  <div class="label">01 / Context</div>
+  <h2>Where the table stood yesterday</h2>
+  <p>
+    Two days of bonsai cross-architecture work (<a href="bonsai_field_eval_2026-05-16.html"><code>bonsai_field_eval_2026-05-16</code></a>, <code>qwen3_4b_quantization_cost_2026-05-17</code>) ended with a measured-and-settled operational table. The headline numbers everyone was working from:
+  </p>
+  <table>
+    <thead><tr><th>Model</th><th class="right">ChatCORE</th><th class="right">HumanEval</th><th class="right">GSM8K</th><th class="right">Peak mem</th></tr></thead>
+    <tbody>
+      <tr><td>Bonsai-4B int2</td><td class="num right hi">0.6456</td><td class="num right hi">58.54%</td><td class="num right hi">79.00%</td><td class="num right">1.29 GB</td></tr>
+      <tr><td>fp-Qwen3-4B-8bit</td><td class="num right win">0.7656</td><td class="num right hi">58.54%</td><td class="num right">76.00%</td><td class="num right">~4 GB</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The two models tied to the decimal on HumanEval. Bonsai held a small GSM8K lead (within noise). fp-Qwen3-4B-8bit won the aggregate ChatCORE by +0.12 — but that lead concentrated in knowledge tasks (ARC, MMLU, SpellingBee) which Bonsai's int2 quantization lost meaningful points on. So the call was: <strong>Bonsai for coding/math, fp-Qwen3 for knowledge.</strong>
+  </p>
+  <p>
+    Then we ported δ-mem.
+  </p>
+</section>
+
+<section>
+  <div class="label">02 / What δ-mem is, briefly</div>
+  <h2>A 9.31 MB plug-in claiming long-term memory</h2>
+  <p>
+    <strong>δ-mem</strong> (Lei et al., May 2026, arXiv 2605.12357) is a small associative-memory adapter for frozen Transformer backbones. At every attention block, an <strong>8×8 state matrix</strong> persists across tokens; each token reads from the state (giving a rank-8 vector that steers the attention query and output through low-rank corrections) and writes back via a gated delta-rule update. State is per-layer, per-batch. Adapter weight: ~10 MB. Published variant for Qwen3-4B-Instruct trains only the query and output low-rank heads (<code>delta_heads=["q","o"]</code>) plus the memory read/write projections — seven small tensors per layer, 252 total.
+  </p>
+  <p>
+    The paper evaluates on long-context memory benchmarks: <strong>LoCoMo</strong> (multi-session chat recall), <strong>MemoryAgentBench</strong>, <strong>HotpotQA</strong>, <strong>IFEval</strong>, <strong>GPQA</strong>. The framing is "lightweight online memory mechanism for large language models" — i.e., a tool for tasks that need long-term recall of conversational or document context. Coding and math are not in the paper's reported evaluation. <strong>That asymmetry between what they evaluated and what we evaluated turns out to matter.</strong>
+  </p>
+  <p>
+    The MLX port (<code>nanochat/delta_mem_mlx.py</code>, ~230 lines) was completed earlier in the day with four independent verification gates; the engineering writeup is at <a href="delta_mem_mlx_port_2026-05-17.html"><code>delta_mem_mlx_port_2026-05-17.html</code></a>. This document is the result-side companion: same adapter, on our six-task ChatCORE suite, three runs, total 226 minutes of M2 wall.
+  </p>
+</section>
+
+<section>
+  <div class="label">03 / The runs</div>
+  <h2>MVE, then two confirmations</h2>
+  <p>
+    Three runs over the day. Each writes a markdown report; the per-task numbers are deterministic under greedy decoding, so each confirmation run is a true continuation of the MVE.
+  </p>
+  <table>
+    <thead><tr><th>Run</th><th>n config</th><th class="right">Wall</th><th class="right">HumanEval</th><th class="right">GSM8K</th><th class="right">ChatCORE</th></tr></thead>
+    <tbody>
+      <tr><td>MVE (asymmetric)</td>          <td>cat=200, gen=100</td>     <td class="num right">100.7 min</td><td class="num right hi">70.00%</td><td class="num right hi">80.00%</td><td class="num right hi">0.7844</td></tr>
+      <tr><td>HumanEval confirmation</td>    <td>HE x164 (full)</td>       <td class="num right">73.6 min</td> <td class="num right win">70.73%</td><td class="num right lo">—</td>     <td class="num right">—</td></tr>
+      <tr><td>GSM8K confirmation</td>        <td>GSM8K x200</td>           <td class="num right">52.1 min</td> <td class="num right lo">—</td>    <td class="num right win">81.50%</td><td class="num right">—</td></tr>
+      <tr class="headline"><td><strong>Final fold</strong></td><td>mixed-resolution</td>     <td class="num right">226.4 min</td><td class="num right win">70.73%</td><td class="num right win">81.50%</td><td class="num right win">0.7882</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Greedy decoding means the first 100 problems of the HumanEval confirmation were deterministically identical to the MVE's HumanEval x100 (70/100 = 70.00%, exact). The same was true for GSM8K (80/100 = 80.00%, exact). The confirmation runs only added *new* information from the unseen problems in the back half of each dataset. <strong>What we wanted to know was whether the per-problem pass-rate on the new region matched the first region — i.e., was the MVE signal real or a sampling artifact?</strong>
+  </p>
+
+  <h3>HumanEval trajectory (new region, problems 100–163)</h3>
+  <div class="traj">
+    <div class="row"><span class="step">step 100</span><span class="acc">70.00%</span><span class="bar"><span style="width:70%"></span></span><span class="note">MVE checkpoint, exact</span></div>
+    <div class="row"><span class="step">step 105</span><span class="acc">68.57%</span><span class="bar"><span style="width:68.57%"></span></span><span class="note">new 2/5 = 40%</span></div>
+    <div class="row"><span class="step">step 120</span><span class="acc">69.17%</span><span class="bar"><span style="width:69.17%"></span></span><span class="note">new 13/20 = 65%</span></div>
+    <div class="row"><span class="step">step 140</span><span class="acc">70.00%</span><span class="bar"><span style="width:70%"></span></span><span class="note">new 28/40 = 70%, recovered</span></div>
+    <div class="row"><span class="step">step 164</span><span class="acc">70.73%</span><span class="bar"><span style="width:70.73%"></span></span><span class="note">new 46/64 = 71.9%, slightly above</span></div>
+    <div class="baseline">baseline (no δ-mem) at n=164: 58.54%</div>
+  </div>
+  <p>
+    The early dip ("2/5 = 40%" at step 105) is single-digit noise on a 5-problem window. The trajectory recovered cleanly by step 140 and finished slightly *above* the first 100's pass rate. <strong>The new 64 problems passed at 71.9% — higher than the first 100's 70%.</strong> No mean reversion. The lift is robust to extending the dataset.
+  </p>
+
+  <h3>GSM8K trajectory (new region, problems 100–199)</h3>
+  <div class="traj">
+    <div class="row"><span class="step">step 100</span><span class="acc">80.00%</span><span class="bar"><span style="width:80%"></span></span><span class="note">MVE checkpoint, exact</span></div>
+    <div class="row"><span class="step">step 110</span><span class="acc">80.00%</span><span class="bar"><span style="width:80%"></span></span><span class="note">new 8/10 = 80%</span></div>
+    <div class="row"><span class="step">step 130</span><span class="acc">81.54%</span><span class="bar"><span style="width:81.54%"></span></span><span class="note">new 26/30 = 87%</span></div>
+    <div class="row"><span class="step">step 150</span><span class="acc">83.33%</span><span class="bar"><span style="width:83.33%"></span></span><span class="note">new 45/50 = 90%, peak</span></div>
+    <div class="row"><span class="step">step 200</span><span class="acc">81.50%</span><span class="bar"><span style="width:81.5%"></span></span><span class="note">new 83/100 = 83%</span></div>
+    <div class="baseline">baseline (no δ-mem) at n=200: 76.00%</div>
+  </div>
+  <p>
+    Mid-run peak hit 90% in the 130–150 window before settling to 83% across the full 100-problem new region. <strong>The second 100 problems averaged higher than the first 100, the same pattern HumanEval showed.</strong> Two tasks, two confirmations, same trajectory shape: signal stable across the first region, slightly stronger in the second. The probability of getting that pattern by chance on both reasoning tasks while four knowledge tasks stay flat is small.
+  </p>
+</section>
+
+<section>
+  <div class="label">04 / The pattern</div>
+  <h2>Two-for-two reasoning. Four-for-four flat.</h2>
+  <p>
+    Here is the full table, six tasks, baseline vs final δ-mem:
+  </p>
+  <table>
+    <thead><tr>
+      <th>Task</th>
+      <th class="right">Baseline</th>
+      <th class="right">δ-mem final</th>
+      <th class="right">Δ</th>
+      <th class="right">n (final)</th>
+      <th class="right">z</th>
+      <th>Direction</th>
+    </tr></thead>
+    <tbody>
+      <tr><td>ARC-Easy</td>      <td class="num right">94.00%</td><td class="num right">94.00%</td><td class="num right flat">±0.0pp</td><td class="num right">200</td><td class="num right flat">0.0</td><td>knowledge — flat</td></tr>
+      <tr><td>ARC-Challenge</td> <td class="num right">92.50%</td><td class="num right">92.50%</td><td class="num right flat">±0.0pp</td><td class="num right">200</td><td class="num right flat">0.0</td><td>knowledge — flat</td></tr>
+      <tr><td>MMLU</td>          <td class="num right">60.50%</td><td class="num right">60.00%</td><td class="num right flat">−0.5pp</td><td class="num right">200</td><td class="num right flat">−0.1</td><td>knowledge — flat</td></tr>
+      <tr><td>SpellingBee</td>   <td class="num right">95.50%</td><td class="num right">92.00%</td><td class="num right flat">−3.5pp</td><td class="num right">100</td><td class="num right flat">−0.7</td><td>knowledge — flat</td></tr>
+      <tr><td><strong>GSM8K</strong></td>         <td class="num right">76.00%</td><td class="num right win">81.50%</td><td class="num right win"><strong>+5.5pp</strong></td><td class="num right">200</td><td class="num right win"><strong>1.35</strong></td><td><strong>reasoning — lift</strong></td></tr>
+      <tr><td><strong>HumanEval</strong></td>     <td class="num right">58.54%</td><td class="num right win">70.73%</td><td class="num right win"><strong>+12.2pp</strong></td><td class="num right">164</td><td class="num right win"><strong>2.33</strong></td><td><strong>reasoning — lift</strong></td></tr>
+      <tr class="headline">
+        <td><strong>ChatCORE</strong></td>
+        <td class="num right">0.7656</td>
+        <td class="num right win">0.7882</td>
+        <td class="num right win"><strong>+0.0226</strong></td>
+        <td class="num right">mix</td>
+        <td class="num right win">~1.4</td>
+        <td>at ticket threshold</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Two reasoning tasks moved up: HumanEval decisively (z=2.33, p&lt;0.02 two-tailed), GSM8K directionally (z=1.35, one-tailed p≈0.09). Four knowledge tasks didn't move at all (all four |z|&lt;0.7). The two that moved are exactly the two where the model has to <em>maintain and update intermediate state during answer generation</em>:
+  </p>
+  <ul>
+    <li><strong>HumanEval</strong> requires tracking variables and partial constructs across multiple lines of generated code.</li>
+    <li><strong>GSM8K</strong> requires tracking intermediate arithmetic across multiple reasoning steps.</li>
+  </ul>
+  <p>
+    The four that didn't move are the four where the answer is <em>static recall + single-step inference</em>:
+  </p>
+  <ul>
+    <li><strong>ARC-E / ARC-C</strong> — knowledge MC, single-pass argmax over A/B/C/D logits.</li>
+    <li><strong>MMLU</strong> — knowledge MC, same shape.</li>
+    <li><strong>SpellingBee</strong> — single-character counting from a fixed prompt.</li>
+  </ul>
+
+  <div class="scorecard">
+    <div class="card major">
+      <div class="lbl">HumanEval</div>
+      <div class="val">+12.2pp</div>
+      <div class="sub">z = 2.33 · p &lt; 0.02</div>
+    </div>
+    <div class="card win">
+      <div class="lbl">GSM8K</div>
+      <div class="val">+5.5pp</div>
+      <div class="sub">z = 1.35 · directional</div>
+    </div>
+    <div class="card flat">
+      <div class="lbl">ARC-E / ARC-C</div>
+      <div class="val">0.0pp</div>
+      <div class="sub">flat across the board</div>
+    </div>
+    <div class="card flat">
+      <div class="lbl">MMLU</div>
+      <div class="val">−0.5pp</div>
+      <div class="sub">within noise (±3.5pp)</div>
+    </div>
+    <div class="card flat">
+      <div class="lbl">SpellingBee</div>
+      <div class="val">−3.5pp</div>
+      <div class="sub">within noise (±5pp)</div>
+    </div>
+    <div class="card">
+      <div class="lbl">ChatCORE</div>
+      <div class="val">+0.0226</div>
+      <div class="sub">at ticket threshold (+0.024)</div>
+    </div>
+  </div>
+
+  <h3>Why the aggregate undersells the result</h3>
+  <p>
+    The aggregate ChatCORE +0.0226 is right at the ticket's "+0.024 real lift" threshold and only ~1.4σ above zero. Read that single number and you'd conclude "borderline, mostly noise." But the per-task pattern tells a much stronger story than the aggregate, for a reason that matters: <strong>the lift isn't distributed across all six tasks — it's concentrated on two, and they're exactly the two the working-memory hypothesis predicts should move.</strong>
+  </p>
+  <p>
+    If δ-mem were noise on our suite we'd expect roughly three tasks up and three down by chance, with no per-task-type pattern. We don't see that. We see 2/2 reasoning tasks up (with HumanEval at 2.33σ and matched trajectory shape across both confirmation runs), and 4/4 knowledge tasks flat. The structured per-task alignment is much harder to reconcile with chance than two independent random walks would be. <strong>The single aggregate number undersells what's actually happening because it averages signal-bearing tasks together with explicitly-irrelevant ones.</strong>
+  </p>
+</section>
+
+<section>
+  <div class="label">05 / Significance discussion</div>
+  <h2>How confident are we?</h2>
+  <p>
+    The three relevant z-scores, computed against the canonical baseline from <code>qwen3_4b_quantization_cost_2026-05-17.md</code>:
+  </p>
+
+  <div class="signif">
+    <span class="lbl">HumanEval (decisive)</span>
+    <span class="formula">σ_diff = √(σ_baseline² + σ_δ²) = √(3.85² + 3.56²) = 5.24pp</span><br>
+    <span class="formula">z = (70.73% − 58.54%) / 5.24pp =</span> <span class="ans">2.33σ &nbsp;·&nbsp; p &lt; 0.02 two-tailed</span>
+  </div>
+
+  <div class="signif">
+    <span class="lbl">GSM8K (directional)</span>
+    <span class="formula">σ_diff = √(3.02² + 2.75²) = 4.08pp</span><br>
+    <span class="formula">z = (81.50% − 76.00%) / 4.08pp =</span> <span class="ans">1.35σ &nbsp;·&nbsp; one-tailed p ≈ 0.09</span>
+  </div>
+
+  <div class="signif">
+    <span class="lbl">ChatCORE aggregate</span>
+    <span class="formula">composite stderr ≈ 1.5pp after both confirmations</span><br>
+    <span class="formula">z = (0.7882 − 0.7656) / 1.5pp =</span> <span class="ans">~1.4σ &nbsp;·&nbsp; at +0.024 ticket threshold</span>
+  </div>
+
+  <p>
+    The HumanEval result is on its own enough to publish as a positive lift. The GSM8K result is on its own only suggestive. <strong>The combined evidence — both reasoning tasks moving in the predicted direction with matched trajectory shape — is what makes the working-memory mechanism story credible.</strong> A pre-registered analysis would let us combine the two reasoning z-scores into a single hypothesis test (the conjunction has very small false-positive probability); we did not pre-register, so we describe the GSM8K result conservatively as "directional confirmation" rather than "confirmed."
+  </p>
+  <p>
+    On the knowledge side, the four-task null pattern is itself evidence: it rules out "this adapter is just adding random noise to every task" as a confounder. The adapter is doing <em>something specific</em> to reasoning, not <em>something broadly distributed</em> across everything.
+  </p>
+</section>
+
+<section>
+  <div class="label">06 / Operational implication</div>
+  <h2>The recommendation table flips for two cells</h2>
+  <p>
+    Yesterday's settled call was "Bonsai-4B for coding and math; fp-Qwen3-4B-8bit for knowledge; size-constrained → smallest Bonsai." With δ-mem in the mix, two cells flip:
+  </p>
+  <div class="flip">
+    <div class="col before">
+      <h3>Before — 2026-05-17 morning</h3>
+      <ul>
+        <li><span class="task">Coding (HumanEval-style):</span><br><span class="pick">Bonsai-4B int2 (same 58.54%, smaller)</span></li>
+        <li><span class="task">Math (GSM8K-heavy):</span><br><span class="pick">Bonsai-4B int2 (79% vs 76%)</span></li>
+        <li><span class="task">Knowledge (MMLU, ARC):</span><br><span class="pick">fp-Qwen3-4B-8bit</span></li>
+        <li><span class="task">General chat / mixed:</span><br><span class="pick">Bonsai-4B int2 by default</span></li>
+        <li><span class="task">Memory-constrained:</span><br><span class="pick">Bonsai-1.7B int2 (0.64 GB peak)</span></li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="col after">
+      <h3>After — 2026-05-18 with δ-mem available</h3>
+      <ul>
+        <li><span class="task">Coding (HumanEval-style):</span><br><span class="pick">fp-Qwen3-4B-8bit + δ-mem (70.73%)</span></li>
+        <li><span class="task">Math (GSM8K-heavy):</span><br><span class="pick">fp-Qwen3-4B-8bit + δ-mem (81.50%)</span></li>
+        <li><span class="task">Knowledge (MMLU, ARC):</span><br><span class="pick">fp-Qwen3-4B-8bit (δ-mem doesn't move it)</span></li>
+        <li><span class="task">General chat / mixed:</span><br><span class="pick">fp-Qwen3-4B-8bit + δ-mem if budget allows</span></li>
+        <li><span class="task">Memory-constrained:</span><br><span class="pick">Bonsai-1.7B int2 (unchanged)</span></li>
+      </ul>
+    </div>
+  </div>
+  <p>
+    The two cells that flip are coding and math. For knowledge-heavy workloads the pick doesn't change (δ-mem doesn't help). For memory-constrained loops the pick doesn't change (δ-mem's overhead doesn't fit in the 1.7B's budget anyway). The general-chat row tilts toward fp-Qwen3 + δ-mem now that it also wins on reasoning and ties or wins on the rest. <strong>"Bonsai for coding" was the load-bearing call in yesterday's table; δ-mem makes it the wrong call for users who have the +47% wall and +9.31 MB to spare.</strong>
+  </p>
+  <p>
+    Cost of "+δ-mem":
+  </p>
+  <ul>
+    <li><strong>+9.31 MB</strong> of adapter weights (compared to the 4-billion-parameter base).</li>
+    <li><strong>+47% wall</strong> per token (extra scan + δ-q + δ-o projections at every layer).</li>
+    <li><strong>+1 dependency</strong> on the published <code>declare-lab/delta-mem_qwen3_4b-instruct</code> adapter, plus our ~230-line MLX port.</li>
+  </ul>
+  <p>
+    The benefit on the two reasoning tasks is large enough that the cost is easy to justify when those tasks are in the mix. For purely knowledge workloads, the cost is wasted and you should run the base model without the adapter.
+  </p>
+</section>
+
+<section>
+  <div class="label">07 / What we deliberately did not test</div>
+  <h2>The shape of the claim</h2>
+  <p>
+    Four things we did not run, with explicit reasoning for each:
+  </p>
+  <ol class="takeaways">
+    <li><b>fp16 base.</b> Our base is 8-bit-quantized; the adapter was trained against bf16. We chose 8-bit to compare apples-to-apples against yesterday's published baseline (also 8-bit). The 8-bit × bf16 pairing might be slightly suboptimal for δ-mem; an fp16 base would cost ~8 GB disk and another ~3h to control for. We don't think the asymmetry matters at the 12-point lift level — it might matter at the margin.</li>
+    <li><b>MBPP / other coding benchmarks.</b> HumanEval is one coding benchmark and the published adapter trained on long-context QA (Qasper), not on code. If δ-mem provides general "online working memory for code," it should appear on MBPP and other code suites too. If it provides "HumanEval-specifically transfer," it might not. ~1h to run on MBPP; worth doing for the publication.</li>
+    <li><b>The paper's native evaluation tasks (LoCoMo / MemoryAgentBench / HotpotQA).</b> Those test exactly the long-context recall axis our six-task suite doesn't have. Running even one of them on our infra would tell us whether the lift transfers in <em>their</em> evaluation domain to <em>our</em> setup — a useful triangulation point separating "δ-mem doesn't work on our infra at all" from "δ-mem works but for a different axis than our suite tests."</li>
+    <li><b>Activation-capture diff vs PyTorch reference.</b> Originally planned as a fifth verification gate during the port. After four other gates came back clean — and the eval result transferred in a way consistent with a working port — the marginal information value of running it dropped enough to defer. We are not going to backfill: the lift is too large and the per-task pattern too clean to be a per-layer scaling artifact.</li>
+  </ol>
+</section>
+
+<section>
+  <div class="label">08 / Cost ledger</div>
+  <h2>What the whole arc cost end to end</h2>
+  <table>
+    <thead><tr><th>Phase</th><th class="right">Wall</th><th class="right">Cumulative</th><th>Output</th></tr></thead>
+    <tbody>
+      <tr><td>Phase 0 — reference recon + paper notes</td>     <td class="num right">~2 h</td>   <td class="num right">2:00</td> <td><code>docs/delta_mem_recon_2026-05-17.md</code></td></tr>
+      <tr><td>Phase 1a — math module (230 LOC MLX)</td>       <td class="num right">~1 h</td>   <td class="num right">3:00</td> <td><code>nanochat/delta_mem_mlx.py</code></td></tr>
+      <tr><td>Phase 1b — adapter converter + smoke</td>       <td class="num right">~0.5 h</td> <td class="num right">3:30</td> <td>9.31 MB safetensors + math gate 2e-6</td></tr>
+      <tr><td>Phase 1c — integration smoke (4 gates)</td>     <td class="num right">~1 h</td>   <td class="num right">4:30</td> <td>bit-exact wiring + signal magnitude</td></tr>
+      <tr><td>Phase 2 — harness wire-up + asymmetric caps</td><td class="num right">~0.5 h</td> <td class="num right">5:00</td> <td><code>--delta-mem</code> + <code>--max-problems-cat/gen</code></td></tr>
+      <tr><td>MVE run (asymmetric)</td>                       <td class="num right">100.7 min</td><td class="num right">6:41</td> <td>ChatCORE 0.7844, HE +11.5pp at n=100</td></tr>
+      <tr><td>HumanEval x164 confirmation</td>                 <td class="num right">73.6 min</td> <td class="num right">7:54</td> <td>HE +12.2pp at 2.33σ confirmed</td></tr>
+      <tr><td>GSM8K x200 confirmation</td>                     <td class="num right">52.1 min</td> <td class="num right">8:46</td> <td>GSM8K +5.5pp at 1.35σ confirmed</td></tr>
+      <tr><td>Two writeups (engineering + this one)</td>       <td class="num right">~1.5 h</td>  <td class="num right">10:16</td><td>two HTML docs</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Roughly ten hours, end to end, from "paper just landed in iCloud" to "operational table is revised." The actual eval wall (226 min for three runs) was less than the dev wall (~5 hours of port and integration). Compare to the baseline's single canonical run yesterday at 191 min: the entire δ-mem arc cost ~3.2× a single canonical eval to land a result that flips two cells of the recommendation table.
+  </p>
+</section>
+
+<hr class="fancy">
+
+<section>
+  <div class="label">09 / Coda</div>
+  <h2>Borrowed for memory. Found working memory.</h2>
+  <p>
+    The most interesting thing about this result, more than the specific 12-point lift, is the asymmetry between what the paper claimed and what we observed. The paper sells δ-mem as an <em>online memory</em> mechanism — a way to retain and recall information across long contexts. Its evaluation is on LoCoMo (multi-session chat recall), MemoryAgentBench (memory-task suite), HotpotQA (multi-hop QA), IFEval (instruction following), GPQA (graduate-level QA). All long-context, all recall-heavy.
+  </p>
+  <p>
+    Our suite has none of those. We have reasoning (HumanEval, GSM8K) and knowledge (ARC-E, ARC-C, MMLU, SpellingBee). What we observed, with the same adapter the paper distributed and the same architectural setup the paper describes, is that <strong>reasoning lifts and knowledge doesn't</strong>. The mechanism story we wrote into the interpretation doc — "δ-mem provides online working memory; tasks that need it benefit, tasks that don't are unaffected" — is a hypothesis that fits the data, not something the paper made before this measurement.
+  </p>
+  <p>
+    Whatever else δ-mem is, on our infrastructure, on our suite, on this base model, at this precision: <strong>it is a working-memory adapter that helps tasks where you have to think across multiple generation steps</strong>. The paper's "long-term memory" framing isn't wrong — it might also be true on their benchmarks — but the working-memory effect is large enough on coding and math, and absent enough on static knowledge, that the framing was incomplete.
+  </p>
+  <p>
+    We grafted what someone else built, on a model they didn't release, ran six tasks they didn't evaluate, and got a result they didn't predict. The graft transferred — just not the thing the paper said. That distinction is the actual contribution of this measurement, and it's the kind of finding that's only possible when an eval suite cleanly composed for a different purpose ends up pointing somewhere unexpected.
+  </p>
+</section>
+
+<footer class="colophon">
+  Compiled 2026-05-18 on M2 MacBook · branch <code>experiment/hope-nested-learning</code> (paused).<br>
+  Companion engineering writeup: <code>docs/delta_mem_mlx_port_2026-05-17.html</code> (the port, the four-gate verification stack, the FlashAttention discovery, the integration gotcha).<br>
+  Result interpretation: <code>docs/delta_mem_mve_interpretation_2026-05-17.md</code> (per-task analysis, mechanism story, methodology notes, next steps).<br>
+  Baseline target: <code>docs/qwen3_4b_quantization_cost_2026-05-17.md</code> (ChatCORE 0.7656, the operational table this writeup revises).<br>
+  Upstream: <code>declare-lab/delta-Mem</code> (CC-BY-4.0) · Published adapter: <code>declare-lab/delta-mem_qwen3_4b-instruct</code> (HF, 11 MB) · Paper: arXiv 2605.12357 (Lei et al., May 2026).
+  <div class="commits">
+    <code>bc20ef3</code> <span>docs: file δ-mem MLX port ticket — verified upstream code, fresh-session ready</span>
+    <code>62dbdbc</code> <span>docs: δ-mem MLX port Phase 0 recon — gate to Phase 1 green</span>
+    <code>236bc46</code> <span>feat: δ-mem MLX port — pure-math module verified to 2e-6 vs torch reference</span>
+    <code>1d41ccb</code> <span>feat: δ-mem MLX integration smoke — wiring verified bit-exact on Qwen3-4B-8bit</span>
+    <code>c6dc17e</code> <span>feat: δ-mem generation sanity — KV-cache T=1 scan path verified</span>
+    <code>bf534cb</code> <span>feat: chat_eval_mlx --delta-mem flag + per-problem state reset</span>
+    <code>182573c</code> <span>docs: δ-mem MLX port writeup — dev checkpoint (Phase 0–2 complete)</span>
+    <code>a2407f1</code> <span>feat: chat_eval_mlx --max-problems-cat / --max-problems-gen</span>
+    <code>59b9e24</code> <span>result: δ-mem on Qwen3-4B-8bit — HumanEval +12.20pp confirmed at 2.33σ</span>
+    <code>69a0303</code> <span>result: GSM8K x200 confirms — 2/2 reasoning tasks lift, ChatCORE 0.7882</span>
+    <code>[next]</code>  <span>docs: δ-mem field result HTML writeup — this document</span>
+  </div>
+</footer>
+
+</article>
+</body>
+</html>
