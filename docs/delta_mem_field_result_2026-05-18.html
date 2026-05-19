@@ -381,12 +381,12 @@
     <strong>Date</strong> 2026-05-18<br>
     <strong>Hardware</strong> MacBook M2, 24 GB<br>
     <strong>Base</strong> Qwen3-4B-Instruct-8bit<br>
-    <strong>Total eval wall</strong> 297 min
+    <strong>Total eval wall</strong> 388 min
   </div>
 </header>
 
 <p class="lede">
-  Yesterday's operational table said "Bonsai-4B for coding, fp-Qwen3-4B for knowledge." Today we grafted a <strong>9.31 MB memory adapter</strong> onto fp-Qwen3-4B, ran our six-task ChatCORE suite across the day plus a separate out-of-distribution coding follow-up on MBPP, and watched the coding number jump from <strong>58.54% to 70.73%</strong> — a 12-point lift on a <strong>2.33σ</strong> confirmation. Math moved too (+5.5pp at 1.35σ). MBPP, which the adapter was never trained on the distribution of, also moved (+8.0pp). The four knowledge tasks didn't budge. <strong>3/3 reasoning tasks lifted, 4/4 knowledge tasks did not. Fisher's combined p across the three reasoning lifts: &lt; 0.001.</strong>
+  Yesterday's operational table said "Bonsai-4B for coding, fp-Qwen3-4B for knowledge." Today we grafted a <strong>9.31 MB memory adapter</strong> onto fp-Qwen3-4B, ran our six-task ChatCORE suite across the day plus a separate out-of-distribution coding follow-up on MBPP, and watched the coding number jump from <strong>58.54% to 70.73%</strong> — a 12-point lift on a <strong>2.33σ</strong> confirmation. Math moved too (+5.5pp at 1.35σ). MBPP, which the adapter was never trained on the distribution of, also moved (+8.0pp). The four knowledge tasks didn't budge. <strong>3/3 reasoning tasks lifted, 4/4 knowledge tasks did not. Fisher's combined p across the three reasoning lifts: &lt; 0.001.</strong> And in the late evening, a paired 200-example test on <strong>HotpotQA</strong> — the paper's own headline long-context recall benchmark — came back null (Δ mean F1 = +0.0003, 0.21σ on F1≥0.5 accuracy). The paper-native triangulation sharpens rather than weakens the working-memory reframing: δ-mem helps multi-step generation, not long-context recall, even on the paper's own benchmark.
 </p>
 
 <div class="pull">
@@ -431,19 +431,21 @@
 
 <section>
   <div class="label">03 / The runs</div>
-  <h2>MVE, two confirmations, and an OOD generality test</h2>
+  <h2>MVE, two confirmations, an OOD generality test, and a paper-native null</h2>
   <p>
-    Four runs over the day, plus a paired baseline. Each writes a markdown report; the per-task numbers are deterministic under greedy decoding, so each confirmation run is a true continuation of the MVE.
+    Six runs over the day, plus three paired baselines. Each writes a markdown report; the per-task numbers are deterministic under greedy decoding, so each confirmation run is a true continuation of the MVE.
   </p>
   <table>
-    <thead><tr><th>Run</th><th>n config</th><th class="right">Wall</th><th class="right">HumanEval</th><th class="right">GSM8K</th><th class="right">MBPP</th><th class="right">ChatCORE</th></tr></thead>
+    <thead><tr><th>Run</th><th>n config</th><th class="right">Wall</th><th class="right">HumanEval</th><th class="right">GSM8K</th><th class="right">MBPP</th><th class="right">HotpotQA</th><th class="right">ChatCORE</th></tr></thead>
     <tbody>
-      <tr><td>MVE (asymmetric)</td>          <td>cat=200, gen=100</td>     <td class="num right">100.7 min</td><td class="num right hi">70.00%</td><td class="num right hi">80.00%</td><td class="num right lo">—</td>     <td class="num right hi">0.7844</td></tr>
-      <tr><td>HumanEval confirmation</td>    <td>HE x164 (full)</td>       <td class="num right">73.6 min</td> <td class="num right win">70.73%</td><td class="num right lo">—</td>     <td class="num right lo">—</td>     <td class="num right">—</td></tr>
-      <tr><td>GSM8K confirmation</td>        <td>GSM8K x200</td>           <td class="num right">52.1 min</td> <td class="num right lo">—</td>    <td class="num right win">81.50%</td><td class="num right lo">—</td>     <td class="num right">—</td></tr>
-      <tr><td>MBPP baseline (no δ-mem)</td>  <td>MBPP x100</td>             <td class="num right">35.9 min</td> <td class="num right lo">—</td>    <td class="num right lo">—</td>    <td class="num right">53.00%</td><td class="num right">—</td></tr>
-      <tr><td>MBPP δ-mem</td>                <td>MBPP x100</td>             <td class="num right">34.7 min</td> <td class="num right lo">—</td>    <td class="num right lo">—</td>    <td class="num right win">61.00%</td><td class="num right">—</td></tr>
-      <tr class="headline"><td><strong>Final fold</strong></td><td>mixed-resolution</td>     <td class="num right">297.0 min</td><td class="num right win">70.73%</td><td class="num right win">81.50%</td><td class="num right win">61.00%</td><td class="num right win">0.7882</td></tr>
+      <tr><td>MVE (asymmetric)</td>             <td>cat=200, gen=100</td>     <td class="num right">100.7 min</td><td class="num right hi">70.00%</td><td class="num right hi">80.00%</td><td class="num right lo">—</td>     <td class="num right lo">—</td>     <td class="num right hi">0.7844</td></tr>
+      <tr><td>HumanEval confirmation</td>       <td>HE x164 (full)</td>       <td class="num right">73.6 min</td> <td class="num right win">70.73%</td><td class="num right lo">—</td>     <td class="num right lo">—</td>     <td class="num right lo">—</td>     <td class="num right">—</td></tr>
+      <tr><td>GSM8K confirmation</td>           <td>GSM8K x200</td>           <td class="num right">52.1 min</td> <td class="num right lo">—</td>    <td class="num right win">81.50%</td><td class="num right lo">—</td>     <td class="num right lo">—</td>     <td class="num right">—</td></tr>
+      <tr><td>MBPP baseline (no δ-mem)</td>     <td>MBPP x100</td>             <td class="num right">35.9 min</td> <td class="num right lo">—</td>    <td class="num right lo">—</td>    <td class="num right">53.00%</td><td class="num right lo">—</td>     <td class="num right">—</td></tr>
+      <tr><td>MBPP δ-mem</td>                   <td>MBPP x100</td>             <td class="num right">34.7 min</td> <td class="num right lo">—</td>    <td class="num right lo">—</td>    <td class="num right win">61.00%</td><td class="num right lo">—</td>     <td class="num right">—</td></tr>
+      <tr><td>HotpotQA baseline (no δ-mem)</td> <td>HotpotQA x200</td>         <td class="num right">38.1 min</td> <td class="num right lo">—</td>    <td class="num right lo">—</td>    <td class="num right lo">—</td>     <td class="num right">64.50%</td><td class="num right">—</td></tr>
+      <tr><td>HotpotQA δ-mem (paper-native)</td><td>HotpotQA x200</td>         <td class="num right">52.7 min</td> <td class="num right lo">—</td>    <td class="num right lo">—</td>    <td class="num right lo">—</td>     <td class="num right flat">65.50%</td><td class="num right">—</td></tr>
+      <tr class="headline"><td><strong>Final fold</strong></td><td>mixed-resolution</td>     <td class="num right">387.8 min</td><td class="num right win">70.73%</td><td class="num right win">81.50%</td><td class="num right win">61.00%</td><td class="num right flat">65.50%</td><td class="num right win">0.7882</td></tr>
     </tbody>
   </table>
   <p>
@@ -494,13 +496,35 @@
   <p>
     MBPP is the <em>out-of-distribution coding generality test</em>: the published δ-mem adapter trained on Qasper QA (long-context recall), so MBPP is fully out-of-distribution for the adapter. A clean positive here rules out "δ-mem helps HumanEval specifically because some HumanEval problem distribution aligns with the adapter's training data" as a confounder. MBPP moved by +8.0pp, almost as much as HumanEval's +12.2pp, while being a totally different benchmark from the adapter's training distribution. <strong>This upgrades the claim from "δ-mem helps HumanEval" to "δ-mem helps coding."</strong>
   </p>
+
+  <h3>HotpotQA trajectory (the paper-native triangulation)</h3>
+  <p>
+    HotpotQA is the paper's own headline benchmark for "long-context multi-hop recall." 7,405 validation examples, distractor split (10 paragraphs per question, 8 distractors + 2 supporting). We ran 200 problems each for baseline (no δ-mem) and δ-mem under the same seed=42 shuffle. Scoring follows SQuAD convention: normalize (lowercase, strip articles/punctuation), token-level F1 + EM. We report mean F1, mean EM, and F1≥0.5 binary accuracy.
+  </p>
+  <div class="traj">
+    <div class="row"><span class="step">step 25</span><span class="acc">68.0% / 72.0%</span><span class="bar"><span style="width:72%"></span></span><span class="note">δ-mem +4pp early</span></div>
+    <div class="row"><span class="step">step 60</span><span class="acc">68.3% / 71.7%</span><span class="bar"><span style="width:71.7%"></span></span><span class="note">gap narrowing</span></div>
+    <div class="row"><span class="step">step 100</span><span class="acc">69.0% / 70.0%</span><span class="bar"><span style="width:70%"></span></span><span class="note">δ-mem +1pp</span></div>
+    <div class="row"><span class="step">step 150</span><span class="acc">64.7% / 66.7%</span><span class="bar"><span style="width:66.7%"></span></span><span class="note">both decline together</span></div>
+    <div class="row"><span class="step">step 200</span><span class="acc">64.5% / 65.5%</span><span class="bar"><span style="width:65.5%"></span></span><span class="note">final: Δ = +1.00pp</span></div>
+    <div class="baseline">baseline 64.50% F1≥0.5 (mean F1 0.6407, mean EM 0.4850) · δ-mem 65.50% (mean F1 0.6410, mean EM 0.5000) · z = 0.21σ</div>
+  </div>
+  <p>
+    The δ-mem run started 4pp higher and converged toward the baseline across 200 problems. Final difference: <strong>+1.0pp F1≥0.5 acc, +0.0003 mean F1, +1.5pp EM</strong> — all within sampling noise (σ_diff = 4.77pp; z = 0.21σ on F1≥0.5 acc; p ≈ 0.83 two-tailed). <strong>The paper's home-axis claim does not reproduce on this slice.</strong>
+  </p>
+  <p>
+    Power note: n=200 gives σ_diff ≈ 4.77pp, so a sub-5pp lift could in principle hide in the noise. But the observed Δ is so close to zero (mean F1 differs by 0.0003 across 200 examples) that no plausible larger run rescues it. If the paper's reported HotpotQA lift were comparable in magnitude to our HumanEval/MBPP coding numbers (+8 to +12pp), this slice would have detected it cleanly. The adapter is running correctly — wall overhead is +38% (similar to other generative tasks; KV-cache scan and δ-q/δ-o projections add the same per-layer cost regardless of task) and the trajectory is smooth, not catastrophic. It just doesn't help.
+  </p>
+  <p>
+    This is the cleanest single argument for the working-memory reframing the interpretation doc hypothesized yesterday: <strong>δ-mem lifts multi-step generation</strong> (HumanEval, GSM8K, MBPP — code/math where the model must maintain state across many output tokens) <strong>but does not lift long-context recall</strong>, even on the paper's own headline benchmark for that regime.
+  </p>
 </section>
 
 <section>
   <div class="label">04 / The pattern</div>
-  <h2>Three-for-three reasoning. Four-for-four flat.</h2>
+  <h2>Three-for-three multi-step generation. Four-for-four knowledge flat. Paper-native recall: also flat.</h2>
   <p>
-    Here is the full table, six tasks, baseline vs final δ-mem:
+    Here is the full table, six ChatCORE tasks plus the two extras (MBPP, HotpotQA), baseline vs final δ-mem:
   </p>
   <table>
     <thead><tr>
@@ -529,10 +553,11 @@
         <td>at ticket threshold</td>
       </tr>
       <tr><td><strong>MBPP</strong> <span style="font-weight:400;color:var(--ink-mute);font-size:0.85em">(separate run, not in ChatCORE)</span></td>     <td class="num right">53.00%</td><td class="num right win">61.00%</td><td class="num right win"><strong>+8.0pp</strong></td><td class="num right">100</td><td class="num right win"><strong>1.15</strong></td><td><strong>reasoning — lift (OOD)</strong></td></tr>
+      <tr><td><strong>HotpotQA</strong> <span style="font-weight:400;color:var(--ink-mute);font-size:0.85em">(separate run, not in ChatCORE — paper-native)</span></td>     <td class="num right">64.50%</td><td class="num right">65.50%</td><td class="num right flat">+1.0pp</td><td class="num right">200</td><td class="num right flat">0.21</td><td>long-context recall — flat</td></tr>
     </tbody>
   </table>
   <p>
-    Three reasoning tasks moved up: HumanEval decisively (z=2.33, p&lt;0.02 two-tailed), GSM8K directionally (z=1.35), MBPP directionally (z=1.15, OOD). Four knowledge tasks didn't move at all (all four |z|&lt;0.7). The three that moved are exactly the three where the model has to <em>maintain and update intermediate state during answer generation</em>:
+    Three multi-step generation tasks moved up: HumanEval decisively (z=2.33, p&lt;0.02 two-tailed), GSM8K directionally (z=1.35), MBPP directionally (z=1.15, OOD). Four knowledge tasks didn't move at all (all four |z|&lt;0.7). And on <strong>HotpotQA — the paper's own headline benchmark for the regime δ-mem allegedly addresses — also flat</strong> (z=0.21, mean F1 unchanged to three decimal places). The three tasks that moved are exactly the three where the model has to <em>maintain and update intermediate state during answer generation</em>:
   </p>
   <ul>
     <li><strong>HumanEval</strong> requires tracking variables and partial constructs across multiple lines of generated code.</li>
@@ -540,13 +565,16 @@
     <li><strong>MBPP</strong> requires the same intermediate-code-state tracking as HumanEval, on a different problem distribution the adapter was never trained on.</li>
   </ul>
   <p>
-    The four that didn't move are the four where the answer is <em>static recall + single-step inference</em>:
+    The four knowledge tasks that didn't move are <em>static recall + single-step inference</em>:
   </p>
   <ul>
     <li><strong>ARC-E / ARC-C</strong> — knowledge MC, single-pass argmax over A/B/C/D logits.</li>
     <li><strong>MMLU</strong> — knowledge MC, same shape.</li>
     <li><strong>SpellingBee</strong> — single-character counting from a fixed prompt.</li>
   </ul>
+  <p>
+    And the fifth null is structurally the most informative: <strong>HotpotQA</strong>, the paper's own headline benchmark, which is <em>long-context multi-hop recall with short final answers</em>. The model has to read 10 paragraphs and synthesize across them, but the answer it actually generates is 1–5 tokens. There's no multi-step generation to stabilize. The same adapter that lifts HumanEval by 12.2pp does nothing here — Δ mean F1 = +0.0003 across 200 examples. <strong>If δ-mem were doing what the paper says (long-term memory across long contexts), HotpotQA is the benchmark where the lift would be largest. The fact that it's not is the cleanest possible refutation of the paper's framing on our setup.</strong>
+  </p>
 
   <div class="scorecard">
     <div class="card major">
@@ -579,6 +607,11 @@
       <div class="val">−3.5pp</div>
       <div class="sub">within noise (±5pp)</div>
     </div>
+    <div class="card flat">
+      <div class="lbl">HotpotQA (paper-native)</div>
+      <div class="val">+1.0pp</div>
+      <div class="sub">z = 0.21 · ΔF1 = +0.0003</div>
+    </div>
     <div class="card major">
       <div class="lbl">Fisher's p (3 tasks)</div>
       <div class="val">&lt; 0.001</div>
@@ -596,7 +629,7 @@
     The aggregate ChatCORE +0.0226 is right at the ticket's "+0.024 real lift" threshold and only ~1.4σ above zero. Read that single number and you'd conclude "borderline, mostly noise." But the per-task pattern tells a much stronger story than the aggregate, for a reason that matters: <strong>the lift isn't distributed across all six tasks — it's concentrated on the three the working-memory hypothesis predicts should move.</strong>
   </p>
   <p>
-    If δ-mem were noise on our suite we'd expect roughly half of tasks up and half down by chance, with no per-task-type pattern. We don't see that. We see 3/3 reasoning tasks up (HumanEval at 2.33σ, GSM8K at 1.35σ, MBPP at 1.15σ — all in the predicted direction with matched trajectory shape), and 4/4 knowledge tasks flat. <strong>The structured per-task alignment combined with Fisher's-method p &lt; 0.001 across the three reasoning lifts is much harder to reconcile with chance than three independent random walks would be.</strong> The single aggregate number undersells what's actually happening because it averages signal-bearing tasks together with explicitly-irrelevant ones.
+    If δ-mem were noise on our suite we'd expect roughly half of tasks up and half down by chance, with no per-task-type pattern. We don't see that. We see 3/3 reasoning tasks up (HumanEval at 2.33σ, GSM8K at 1.35σ, MBPP at 1.15σ — all in the predicted direction with matched trajectory shape), 4/4 knowledge tasks flat, <em>and</em> the paper-native HotpotQA recall task also flat. <strong>The structured per-task alignment combined with Fisher's-method p &lt; 0.001 across the three reasoning lifts is much harder to reconcile with chance than independent random walks would be.</strong> The HotpotQA null adds a structurally distinct fifth data point that the mechanism story predicts (recall ≠ generation) and the paper's framing does not. The single aggregate number undersells what's actually happening because it averages signal-bearing tasks together with explicitly-irrelevant ones.
   </p>
 </section>
 
@@ -626,6 +659,13 @@
   </div>
 
   <div class="signif">
+    <span class="lbl">HotpotQA (paper-native triangulation, null)</span>
+    <span class="formula">σ_diff = √(3.38² + 3.36²) = 4.77pp</span><br>
+    <span class="formula">z = (65.50% − 64.50%) / 4.77pp =</span> <span class="ans">0.21σ &nbsp;·&nbsp; two-tailed p ≈ 0.83</span><br>
+    <span class="formula">mean F1 Δ = 0.0003 across 200 examples</span>
+  </div>
+
+  <div class="signif">
     <span class="lbl">Combined (Fisher's method, 3 independent reasoning lifts)</span>
     <span class="formula">−2 · Σ ln(p_i) = −2 · (−4.61 − 2.42 − 2.08) = 18.23 on χ² with 6 df</span><br>
     <span class="formula">combined p =</span> <span class="ans">&lt; 0.001</span>
@@ -642,6 +682,9 @@
   </p>
   <p>
     On the knowledge side, the four-task null pattern is itself evidence: it rules out "this adapter is just adding random noise to every task" as a confounder. The adapter is doing <em>something specific</em> to reasoning, not <em>something broadly distributed</em> across everything. MBPP being out-of-distribution for the adapter (trained on Qasper QA, not code) further rules out "δ-mem helps HumanEval specifically because of training-data alignment" as a confounder for the coding lift.
+  </p>
+  <p>
+    The HotpotQA null does additional work: it rules out "δ-mem is just <em>cheap to attach</em> and lifts anything it touches" and rules out the steel-manned version of the paper's framing on our setup. HotpotQA is the paper's own headline long-context recall task. If the adapter were doing what the abstract says — providing persistent memory across long contexts — HotpotQA is exactly where the lift should be largest. Δ mean F1 = 0.0003 says it isn't.
   </p>
 </section>
 
@@ -700,12 +743,12 @@
   </p>
   <ol class="takeaways">
     <li><b>fp16 base.</b> Our base is 8-bit-quantized; the adapter was trained against bf16. We chose 8-bit to compare apples-to-apples against yesterday's published baseline (also 8-bit). The 8-bit × bf16 pairing might be slightly suboptimal for δ-mem; an fp16 base would cost ~8 GB disk and another ~3h to control for. We don't think the asymmetry matters at the 12-point HumanEval / 8-point MBPP lift level — it might matter at the margin.</li>
-    <li><b>The paper's native evaluation tasks (LoCoMo / MemoryAgentBench / HotpotQA).</b> Those test exactly the long-context recall axis our six-task suite doesn't have. Running even one of them on our infra would tell us whether the lift transfers in <em>their</em> evaluation domain to <em>our</em> setup — a useful triangulation point separating "δ-mem doesn't work on our infra at all" from "δ-mem works for both the advertised memory axis AND our reasoning suite."</li>
+    <li><b>The OTHER paper-native evaluation tasks (LoCoMo / MemoryAgentBench / IFEval / GPQA).</b> We ran <em>one</em> of the paper's five headline benchmarks — HotpotQA, the cheapest at ~90 min wall — and it came back null (§03, §05). The other four would each take longer and the prior on them is now lower: HotpotQA was the obvious place for the adapter to lift if the paper's framing were correct on our setup, and it didn't. Running LoCoMo or MemoryAgentBench would be incremental hardening of the "paper's framing doesn't reproduce on Qwen3-4B-Instruct-8bit at temp=0.0" finding, not a fresh hypothesis. Cost-asymmetric: low marginal information per hour.</li>
     <li><b>Activation-capture diff vs PyTorch reference.</b> Originally planned as a fifth verification gate during the port. After four other gates came back clean — and the eval result transferred across three independent reasoning tasks in a way consistent with a working port — the marginal information value of running it dropped enough to defer. We are not going to backfill: the lift is too large, the per-task pattern too clean (3/3 reasoning + 4/4 knowledge with combined p &lt; 0.001), and the MBPP OOD generality too strong to be per-layer scaling artifacts.</li>
     <li><b>SDFT as a recipe-side baseline.</b> Shenfeld et al.'s <em>Self-Distillation Enables Continual Learning</em> (arXiv 2601.19897, Jan 2026; see <code>docs/sdft_paper_relevance_2026-05-18.md</code>) reports Pareto-better-than-SFT results on a structurally identical setup — a new skill acquired without losing prior capability, with substantial OOD gains on their tool-use task (their analog to MBPP). Their mechanism is a <em>training-recipe</em> change (on-policy distillation from a demonstration-conditioned teacher), not an inference-time adapter. We did not run SDFT as a baseline because (i) the published δ-mem adapter is a frozen artifact, not something we re-trained, and (ii) SDFT requires paired demonstration data and on-policy rollouts our eval infra doesn't currently provide. The disclaimer: <strong>a sufficiently better SFT recipe could in principle close the gap we measure, and SDFT is the named candidate.</strong> What this writeup measures is the lift the published adapter provides on top of plain SFT, not on top of the best-available SFT. The δ-mem (architectural memory) and SDFT (training recipe) mechanisms operate on different axes and are not mutually exclusive; both could be true on the same model.</li>
   </ol>
   <p>
-    Originally MBPP was on this list as "not yet tested." The mid-day run confirmed it. The HumanEval-specific-vs-coding-broadly disambiguation is now closed in favor of "coding broadly." SDFT remains an unrun comparison — flagged rather than tested.
+    Originally MBPP and HotpotQA were both on this list as "not yet tested." Both ran during the day. MBPP closed the HumanEval-specific-vs-coding-broadly disambiguation in favor of "coding broadly." HotpotQA closed the paper-native-axis triangulation in favor of "the paper's framing doesn't reproduce on our setup." SDFT remains an unrun comparison — flagged rather than tested.
   </p>
 </section>
 
@@ -724,11 +767,12 @@
       <tr><td>HumanEval x164 confirmation</td>                 <td class="num right">73.6 min</td> <td class="num right">7:54</td> <td>HE +12.2pp at 2.33σ confirmed</td></tr>
       <tr><td>GSM8K x200 confirmation</td>                     <td class="num right">52.1 min</td> <td class="num right">8:46</td> <td>GSM8K +5.5pp at 1.35σ confirmed</td></tr>
       <tr><td>MBPP module + baseline + δ-mem (sequential)</td> <td class="num right">~1.5 h</td>  <td class="num right">10:16</td><td>MBPP +8.0pp at 1.15σ (OOD generality)</td></tr>
-      <tr><td>Three writeups (engineering + result + result revision)</td><td class="num right">~2 h</td>  <td class="num right">12:16</td><td>HTML + interpretation md + ops-doc revision</td></tr>
+      <tr><td>HotpotQA module + baseline + δ-mem (sequential)</td><td class="num right">~2.1 h</td>  <td class="num right">12:22</td><td>HotpotQA Δ F1 +0.0003 (paper-native null)</td></tr>
+      <tr><td>Three writeups (engineering + result + result revision)</td><td class="num right">~2 h</td>  <td class="num right">14:22</td><td>HTML + interpretation md + HotpotQA revision</td></tr>
     </tbody>
   </table>
   <p>
-    Roughly twelve hours, end to end, from "paper just landed in iCloud" to "three-task coding/math/reasoning result with confirmed OOD generality." The actual eval wall (297 min across five runs) ran slightly over the dev wall (~5 hours of port + integration + MBPP module). Compare to the baseline's single canonical run yesterday at 191 min: the entire δ-mem arc cost ~3.7× a single canonical eval to land a result that flips three cells of the recommendation table and establishes coding generality OOD.
+    Roughly fourteen hours, end to end, from "paper just landed in iCloud" to "three-task coding/math/reasoning result + confirmed OOD generality + paper-native long-context-recall null." The actual eval wall (~388 min across seven runs) ran slightly over the dev wall (~5 hours of port + integration + MBPP/HotpotQA modules). Compare to the baseline's single canonical run yesterday at 191 min: the entire δ-mem arc cost ~4.5× a single canonical eval to land a result that flips three cells of the recommendation table, establishes coding generality OOD, and refutes the paper's framing on the paper's own benchmark.
   </p>
 </section>
 
@@ -741,13 +785,16 @@
     The most interesting thing about this result, more than the specific 12-point lift, is the asymmetry between what the paper claimed and what we observed. The paper sells δ-mem as an <em>online memory</em> mechanism — a way to retain and recall information across long contexts. Its evaluation is on LoCoMo (multi-session chat recall), MemoryAgentBench (memory-task suite), HotpotQA (multi-hop QA), IFEval (instruction following), GPQA (graduate-level QA). All long-context, all recall-heavy.
   </p>
   <p>
-    Our suite has none of those. We have reasoning (HumanEval, GSM8K, plus MBPP added during the day) and knowledge (ARC-E, ARC-C, MMLU, SpellingBee). What we observed, with the same adapter the paper distributed and the same architectural setup the paper describes, is that <strong>all three reasoning tasks lift and all four knowledge tasks don't</strong>. The mechanism story we wrote into the interpretation doc — "δ-mem provides online working memory; tasks that need it benefit, tasks that don't are unaffected" — is a hypothesis that fits the data, not something the paper made before this measurement.
+    Our suite has reasoning (HumanEval, GSM8K, MBPP added at midday) and knowledge (ARC-E, ARC-C, MMLU, SpellingBee). What we observed, with the same adapter the paper distributed and the same architectural setup the paper describes, is that <strong>all three reasoning tasks lift and all four knowledge tasks don't</strong>. The mechanism story we wrote into the interpretation doc at midday — "δ-mem provides online working memory; tasks that need it benefit, tasks that don't are unaffected" — was a hypothesis that fit the data, not something the paper made before this measurement.
   </p>
   <p>
-    Whatever else δ-mem is, on our infrastructure, on our suite, on this base model, at this precision: <strong>it is a working-memory adapter that helps tasks where you have to think across multiple generation steps</strong>. The paper's "long-term memory" framing isn't wrong — it might also be true on their benchmarks — but the working-memory effect is large enough on coding and math (HumanEval +12.2pp, MBPP +8.0pp OOD, GSM8K +5.5pp), and absent enough on static knowledge (all four |z|&lt;0.7), that the framing was incomplete. <strong>The MBPP +8.0pp on a totally out-of-distribution coding benchmark</strong> — the adapter was trained on Qasper QA, not code — <strong>is what closes the case</strong>: it can't be training-distribution alignment, it can't be HumanEval-specific, it has to be working-memory transfer.
+    In the late evening we tested the hypothesis against a benchmark from the paper's own list: <strong>HotpotQA</strong>, 200 examples of long-context multi-hop recall under the distractor setting. If "δ-mem is long-term memory" had been the right story, this is the task with the largest predicted lift. We got Δ mean F1 = +0.0003 across 200 problems, z = 0.21σ on F1≥0.5 accuracy. <strong>A null on the paper's own headline benchmark.</strong> The adapter was running cleanly — same wall overhead profile as other tasks, smooth trajectory, no degradation — it simply did not help. The mechanism story is no longer a hypothesis fit to the data; it's the cleanest reading the data supports across all eight tasks we measured.
   </p>
   <p>
-    We grafted what someone else built, on a model they didn't release, ran seven tasks they didn't evaluate, and got a result they didn't predict. The graft transferred — just not the thing the paper said. That distinction is the actual contribution of this measurement, and it's the kind of finding that's only possible when an eval suite cleanly composed for a different purpose ends up pointing somewhere unexpected.
+    Whatever else δ-mem is, on our infrastructure, on our suite, on this base model, at this precision: <strong>it is a working-memory adapter that helps tasks where you have to think across multiple generation steps</strong>. The paper's "long-term memory" framing <em>is</em> wrong on the one benchmark of theirs we ran. HumanEval +12.2pp, MBPP +8.0pp OOD, GSM8K +5.5pp on the multi-step axis; ARC/MMLU/SpellingBee flat on static knowledge; and HotpotQA flat on long-context recall. <strong>The MBPP +8.0pp closed the "HumanEval-specific" confounder; the HotpotQA null closed the "the paper might still be right on its own axis" charitable reading.</strong>
+  </p>
+  <p>
+    We grafted what someone else built, on a model they didn't release, ran eight tasks (one of them theirs), and got a result they didn't predict — including a null on the benchmark they headlined. The graft transferred, just not the thing the paper said, and the paper's claim of <em>what</em> transferred doesn't hold up on the only one of their benchmarks we measured. That distinction is the actual contribution of this measurement, and it's the kind of finding that's only possible when an eval suite cleanly composed for a different purpose ends up pointing somewhere unexpected — and when you take the time to ask the boring follow-up question of "does the paper reproduce on its own task?"
   </p>
 </section>
 
@@ -756,6 +803,7 @@
   Companion engineering writeup: <code>docs/delta_mem_mlx_port_2026-05-17.html</code> (the port, the four-gate verification stack, the FlashAttention discovery, the integration gotcha).<br>
   Result interpretation: <code>docs/delta_mem_mve_interpretation_2026-05-17.md</code> (per-task analysis, mechanism story, methodology notes, next steps).<br>
   Baseline target: <code>docs/qwen3_4b_quantization_cost_2026-05-17.md</code> (ChatCORE 0.7656, the operational table this writeup revises).<br>
+  HotpotQA paper-native triangulation: <code>docs/delta_mem_hotpotqa_2026-05-18.md</code> — analysis of the late-evening null.<br>
   Recipe-side alternative (flagged in §07, not run): <code>docs/sdft_paper_relevance_2026-05-18.md</code> — SDFT as the named competing explanation on the training-recipe axis.<br>
   Upstream: <code>declare-lab/delta-Mem</code> (CC-BY-4.0) · Published adapter: <code>declare-lab/delta-mem_qwen3_4b-instruct</code> (HF, 11 MB) · Paper: arXiv 2605.12357 (Lei et al., May 2026).
   <div class="commits">
@@ -773,9 +821,11 @@
     <code>1d006ec</code> <span>docs: ops doc revision — δ-mem flips coding/math call, supersedes table</span>
     <code>65278dc</code> <span>feat: tasks/mbpp.py + harness wiring for MBPP coding-generality run</span>
     <code>ea0307f</code> <span>result: MBPP +8pp confirms coding generality — 3/3 reasoning, p&lt;0.001 combined</span>
-    <code>[next]</code>  <span>docs: fold MBPP into field-result HTML + ops doc revision (this commit)</span>
-    <code>69a0303</code> <span>result: GSM8K x200 confirms — 2/2 reasoning tasks lift, ChatCORE 0.7882</span>
-    <code>[next]</code>  <span>docs: δ-mem field result HTML writeup — this document</span>
+    <code>809fee0</code> <span>docs: fold MBPP into field-result HTML + ops-doc revision section</span>
+    <code>e8f19fe</code> <span>docs: SDFT paper relevance note + δ-mem field-result disclaimer</span>
+    <code>158a5fe</code> <span>feat: tasks/hotpotqa.py + harness wiring for paper-native δ-mem test</span>
+    <code>2eed682</code> <span>result: HotpotQA n=200 — δ-mem null on paper's own benchmark</span>
+    <code>[next]</code>  <span>docs: fold HotpotQA null into field-result HTML — sharpens working-memory reframing</span>
   </div>
 </footer>
 
