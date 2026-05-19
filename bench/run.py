@@ -76,6 +76,8 @@ def parse_args():
     p.add_argument("--K", type=int, default=16, help="MQAR: number of (key,value) pairs")
     p.add_argument("--M", type=int, default=16, help="MQAR: number of queries")
     p.add_argument("--T", type=int, default=128, help="MQAR: sequence length")
+    p.add_argument("--n-keys", type=int, default=32, help="MQAR: key vocab size (>= K)")
+    p.add_argument("--n-values", type=int, default=32, help="MQAR: value vocab size (>= K)")
     # Reproducibility & I/O
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--log-dir", default=None, help="write JSONL log to <log-dir>/<label>.jsonl")
@@ -85,6 +87,7 @@ def parse_args():
 def build_task(args):
     if args.task == "mqar":
         return make_task("mqar", K=args.K, M=args.M, T=args.T,
+                         n_keys=args.n_keys, n_values=args.n_values,
                          vocab_size=args.vocab_size)
     if args.task == "selective-copy":
         return make_task("selective-copy", vocab_size=args.vocab_size)
