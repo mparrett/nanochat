@@ -47,6 +47,7 @@ from nanochat.delta_mem_mlx import (
 )
 from tasks.arc import ARC
 from tasks.gsm8k import GSM8K, extract_answer as strict_extract_answer
+from tasks.hotpotqa import HotpotQA
 from tasks.humaneval import HumanEval
 from tasks.mbpp import MBPP
 from tasks.mmlu import MMLU
@@ -114,12 +115,12 @@ BONSAI_SHORT_NAMES = {
 }
 
 ALL_TASKS = ["ARC-Easy", "ARC-Challenge", "MMLU", "GSM8K", "HumanEval", "SpellingBee"]
-# MBPP is not in ALL_TASKS (so ChatCORE composite is unchanged) but is
-# selectable via -a MBPP for the δ-mem coding-generality confirmation.
+# MBPP and HotpotQA are not in ALL_TASKS (so ChatCORE composite is unchanged)
+# but are selectable via -a for δ-mem follow-up runs.
 BASELINE_ACC = {
     "ARC-Easy": 0.25, "ARC-Challenge": 0.25, "MMLU": 0.25,
     "GSM8K": 0.0, "HumanEval": 0.0, "SpellingBee": 0.0,
-    "MBPP": 0.0,
+    "MBPP": 0.0, "HotpotQA": 0.0,
 }
 
 TASK_CTORS = {
@@ -130,6 +131,7 @@ TASK_CTORS = {
     "HumanEval":     HumanEval,
     "SpellingBee":   partial(SpellingBee, size=256, split="test"),
     "MBPP":          MBPP,
+    "HotpotQA":      HotpotQA,
 }
 
 
@@ -202,6 +204,7 @@ def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
     n = min(len(task), max_problems or len(task))
     sampler = make_sampler(temp=temperature)
     passed, total = 0, 0
+    f1_sum, em_sum, aux_n = 0.0, 0, 0  # HotpotQA stashes _f1/_em on conv
     t0 = time.perf_counter()
     for i in range(n):
         if delta_mem_attached:
@@ -214,11 +217,17 @@ def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
         )
         passed += evaluate_completion(task, conv, completion, lenient)
         total += 1
+        if "_f1" in conv:
+            f1_sum += conv["_f1"]
+            em_sum += conv["_em"]
+            aux_n += 1
         if (i + 1) % 5 == 0 or i + 1 == n:
-            print(f"\r  [{i+1}/{n}] passed={passed} acc={passed/total:.3f}", end="", flush=True)
+            tail = f" f1={f1_sum/aux_n:.3f} em={em_sum/aux_n:.3f}" if aux_n else ""
+            print(f"\r  [{i+1}/{n}] passed={passed} acc={passed/total:.3f}{tail}", end="", flush=True)
     dt = time.perf_counter() - t0
     print(f"  ({dt:.1f}s)")
-    return passed / total, total
+    aux = {"f1_mean": f1_sum / aux_n, "em_mean": em_sum / aux_n} if aux_n else None
+    return passed / total, total, aux
 
 
 def chatcore(results):
@@ -231,7 +240,7 @@ def chatcore(results):
     return centered / len(ALL_TASKS)
 
 
-def write_report(out_path, model_id, results, totals, args, wall_total, chatcore_val):
+def write_report(out_path, model_id, results, totals, args, wall_total, chatcore_val, aux_by_task=None):
     delta_mem_line = f"δ-mem: {args.delta_mem}" if args.delta_mem else "δ-mem: off"
     caps_parts = [f"max_problems={args.max_problems}"]
     if args.max_problems_cat is not None:
@@ -258,6 +267,14 @@ def write_report(out_path, model_id, results, totals, args, wall_total, chatcore
         lines.append(f"| {t} | {results[t]:.4f} | {totals[t]} | {cent:+.4f} |")
     if chatcore_val is not None:
         lines.append(f"| **ChatCORE** | — | — | **{chatcore_val:.4f}** |")
+    if aux_by_task:
+        lines.append("")
+        lines.append("## Auxiliary metrics")
+        lines.append("")
+        lines.append("| Task | mean F1 | mean EM |")
+        lines.append("| --- | ---: | ---: |")
+        for t, aux in aux_by_task.items():
+            lines.append(f"| {t} | {aux['f1_mean']:.4f} | {aux['em_mean']:.4f} |")
     with open(out_path, "w") as f:
         f.write("\n".join(lines) + "\n")
 
@@ -323,7 +340,7 @@ def main():
         print(f"  δ-mem config: rank={cfg.rank} alpha={cfg.alpha} delta_heads={cfg.delta_heads}")
         delta_mem_attached = True
 
-    results, totals = {}, {}
+    results, totals, aux_by_task = {}, {}, {}
     wall_t0 = time.perf_counter()
     for tname in task_names:
         print(f"\n=== {tname} ===")
@@ -333,15 +350,19 @@ def main():
             acc, n = run_categorical(task, model, tokenizer,
                                       cap, args.no_system_prompt,
                                       delta_mem_attached)
+            aux = None
         else:
             cap = args.max_problems_gen if args.max_problems_gen is not None else args.max_problems
-            acc, n = run_generative(task, model, tokenizer,
-                                     cap, args.max_new_tokens,
-                                     args.temperature, args.no_system_prompt,
-                                     args.lenient_extract, delta_mem_attached)
+            acc, n, aux = run_generative(task, model, tokenizer,
+                                          cap, args.max_new_tokens,
+                                          args.temperature, args.no_system_prompt,
+                                          args.lenient_extract, delta_mem_attached)
         results[tname] = acc
         totals[tname] = n
-        print(f"  {tname}: {acc*100:.2f}% ({n} problems)")
+        if aux is not None:
+            aux_by_task[tname] = aux
+        aux_tail = f" [f1={aux['f1_mean']:.3f} em={aux['em_mean']:.3f}]" if aux else ""
+        print(f"  {tname}: {acc*100:.2f}% ({n} problems){aux_tail}")
     wall_total = time.perf_counter() - wall_t0
 
     cc = chatcore(results)
@@ -360,7 +381,7 @@ def main():
     print(f"  {'wall':<16} {wall_total:.1f}s")
 
     if args.output:
-        write_report(args.output, model_id, results, totals, args, wall_total, cc)
+        write_report(args.output, model_id, results, totals, args, wall_total, cc, aux_by_task)
         print(f"\nReport: {args.output}")
 
 
