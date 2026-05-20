@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Project map — the Hope/NL fork at day 22</title>
+<style>
+  :root {
+    --paper: #f5f1e8;
+    --paper-dim: #ebe5d6;
+    --paper-warm: #f0e8d4;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-mute: #8a857a;
+    --rule: #c9c2b0;
+    --accent: #b04a2f;
+    --accent-soft: #d97b5c;
+    --green: #4a7c3f;
+    --green-bright: #5a9c4f;
+    --gold: #b08a2a;
+    --blue: #3f5f7c;
+    --blue-soft: #6a89a8;
+    --code-bg: #1c1d1f;
+    --code-fg: #e8e3d4;
+    --code-mute: #8d8675;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Charter", "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(0,0,0,0.025) 31px 32px),
+      var(--paper);
+  }
+  .sheet { max-width: 940px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+
+  .masthead {
+    border-top: 4px double var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0 1rem;
+    margin-bottom: 3rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1rem;
+  }
+  .masthead .kicker {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+  }
+  .masthead h1 {
+    font-family: "Iowan Old Style", "Charter", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(2rem, 4.6vw, 3.2rem);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .masthead h1 em { font-style: italic; color: var(--accent); }
+  .masthead .meta {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+    text-align: right;
+    line-height: 1.55;
+  }
+  .masthead .meta strong { color: var(--ink); font-weight: 600; }
+
+  .lede { font-size: 1.22rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 2.5rem; max-width: 40em; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+  .lede em { color: var(--accent); font-style: italic; }
+
+  .pull {
+    border-left: 3px solid var(--accent);
+    padding: 1.2rem 1.5rem;
+    margin: 2.5rem 0;
+    background: var(--paper-dim);
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.12rem;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .pull .src {
+    display: block;
+    margin-top: 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-style: normal;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  section { margin: 3rem 0; }
+  section > .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+  section > h2 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.85rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0.2rem 0 1.2rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.6rem;
+  }
+  section h3 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 1.6rem 0 0.5rem;
+  }
+  p { margin: 0 0 1rem; }
+  p + p { text-indent: 1.5em; }
+
+  pre, code { font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace; }
+  code {
+    font-size: 0.92em;
+    background: var(--paper-dim);
+    padding: 0.05em 0.35em;
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 1.2rem 1.4rem;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    overflow-x: auto;
+    margin: 1.4rem 0;
+    border-left: 3px solid var(--code-mute);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.4rem 0;
+    font-size: 0.94rem;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+  }
+  th, td {
+    padding: 0.65rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--paper-dim); }
+  th {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 600;
+    border-bottom: 2px solid var(--ink);
+    background: var(--paper);
+  }
+  td.num { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; color: var(--ink); }
+  td.num.lo { color: var(--ink-mute); }
+  td.num.hi { color: var(--green); font-weight: 700; }
+  td.num.win { color: var(--accent); font-weight: 700; }
+  td.num.flat { color: var(--ink-mute); }
+  td.num.bad { color: var(--blue); font-weight: 700; }
+  td.center { text-align: center; }
+  td.right { text-align: right; }
+  th.right { text-align: right; }
+  tr.headline td { background: var(--paper-dim); font-weight: 700; }
+
+  /* arc map */
+  .arc {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    margin: 1.6rem 0 2.5rem;
+  }
+  .arc .phase {
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--ink-mute);
+    background: var(--paper);
+    padding: 0.8rem 1.1rem 0.85rem;
+    display: grid;
+    grid-template-columns: 6.5em 11em 1fr;
+    gap: 0.5rem 1rem;
+    align-items: start;
+  }
+  .arc .phase.q1 { border-left-color: var(--ink); }
+  .arc .phase.build { border-left-color: var(--gold); }
+  .arc .phase.verdict { border-left-color: var(--blue); }
+  .arc .phase.pivot { border-left-color: var(--ink); background: var(--paper-warm); }
+  .arc .phase.side { border-left-color: var(--ink-mute); background: var(--paper); opacity: 0.92; }
+  .arc .phase.reframe { border-left-color: var(--accent); }
+  .arc .phase.converge { border-left-color: var(--green-bright); }
+  .arc .phase.now { border-left-color: var(--green-bright); background: var(--paper-dim); border: 1px solid var(--green); border-left: 4px solid var(--green-bright); }
+  .arc .phase .date {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.76rem;
+    color: var(--ink-mute);
+    letter-spacing: 0.04em;
+    padding-top: 0.1rem;
+  }
+  .arc .phase .qtag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 700;
+    padding-top: 0.15rem;
+  }
+  .arc .phase .qtag.q1 { color: var(--ink); }
+  .arc .phase .qtag.build { color: var(--gold); }
+  .arc .phase .qtag.verdict { color: var(--blue); }
+  .arc .phase .qtag.pivot { color: var(--ink); }
+  .arc .phase .qtag.reframe { color: var(--accent); }
+  .arc .phase .qtag.converge { color: var(--green); }
+  .arc .phase .qtag.now { color: var(--green); }
+  .arc .phase .body { color: var(--ink); font-size: 0.96rem; line-height: 1.5; }
+  .arc .phase .body em { font-style: italic; color: var(--accent); }
+  .arc .phase .body strong { font-weight: 700; }
+  .vtag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.12em 0.55em;
+    border-radius: 2px;
+    margin-left: 0.4em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    vertical-align: 1px;
+  }
+  .vtag.neutral { background: var(--paper-dim); color: var(--ink-soft); border: 1px solid var(--ink-mute); }
+  .vtag.lift { background: var(--green); color: var(--paper); }
+  .vtag.flat { background: var(--ink-mute); color: var(--paper); }
+  .vtag.deferred { background: var(--blue); color: var(--paper); }
+  .vtag.frontier { background: var(--accent); color: var(--paper); }
+  .vtag.tool { background: var(--gold); color: var(--paper); }
+
+  /* scorecards */
+  .scorecard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1.6rem 0;
+  }
+  .scorecard .card {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--accent);
+    padding: 0.9rem 1rem 1rem;
+  }
+  .scorecard .card.flat { border-top-color: var(--ink-mute); }
+  .scorecard .card.lift { border-top-color: var(--green-bright); border-top-width: 4px; }
+  .scorecard .card.lose { border-top-color: var(--blue); border-top-width: 4px; }
+  .scorecard .card .lbl {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 0.4rem;
+  }
+  .scorecard .card .val {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.45rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--ink);
+  }
+  .scorecard .card.flat .val { color: var(--ink-mute); }
+  .scorecard .card.lift .val { color: var(--green); }
+  .scorecard .card.lose .val { color: var(--blue); }
+  .scorecard .card.win .val { color: var(--accent); }
+  .scorecard .card .sub {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.76rem;
+    color: var(--ink-mute);
+    margin-top: 0.3rem;
+    line-height: 1.4;
+  }
+
+  /* side-thread grid */
+  .threads {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 0.9rem;
+    margin: 1.6rem 0;
+  }
+  .threads .t {
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--ink-mute);
+    background: var(--paper);
+    padding: 0.9rem 1rem 1rem;
+  }
+  .threads .t.tool { border-top-color: var(--gold); }
+  .threads .t.dead { border-top-color: var(--blue); }
+  .threads .t.feeds { border-top-color: var(--green-bright); }
+  .threads .t .name {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 0.3rem;
+  }
+  .threads .t .meta {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    color: var(--ink-mute);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 0.55rem;
+  }
+  .threads .t p { font-size: 0.9rem; line-height: 1.5; margin: 0 0 0.5rem; }
+  .threads .t p:last-child { margin-bottom: 0; }
+  .threads .t .verd { font-family: "JetBrains Mono", monospace; font-size: 0.78rem; color: var(--ink); font-weight: 600; }
+
+  /* frontier list */
+  ol.frontier { list-style: none; counter-reset: f; padding: 0; margin: 1.4rem 0; }
+  ol.frontier li {
+    counter-increment: f;
+    padding-left: 3.5rem;
+    position: relative;
+    margin-bottom: 1.2rem;
+    min-height: 2.5rem;
+  }
+  ol.frontier li::before {
+    content: counter(f, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 1.1rem;
+    letter-spacing: 0.05em;
+  }
+  ol.frontier b { font-weight: 700; }
+  ol.frontier .cost {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.75rem;
+    color: var(--ink-mute);
+    margin-left: 0.5em;
+    letter-spacing: 0.04em;
+  }
+
+  ol.takeaways { list-style: none; counter-reset: t; padding: 0; margin: 1.4rem 0; }
+  ol.takeaways li { counter-increment: t; padding-left: 3rem; position: relative; margin-bottom: 1rem; }
+  ol.takeaways li::before {
+    content: counter(t, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+  }
+  ol.takeaways b { font-weight: 700; }
+
+  .colophon {
+    margin-top: 5rem;
+    padding-top: 1.5rem;
+    border-top: 4px double var(--ink);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--ink-mute);
+    line-height: 1.7;
+  }
+  .colophon a { color: var(--ink); }
+  .colophon .links { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.2rem; margin-top: 0.6rem; }
+  .colophon .links code { background: none; padding: 0; color: var(--ink-soft); }
+
+  hr.fancy { border: none; text-align: center; margin: 2.5rem 0; color: var(--ink-mute); }
+  hr.fancy::before { content: "·   ·   ·"; letter-spacing: 0.5em; }
+
+  @media (max-width: 700px) {
+    .sheet { padding: 2rem 1.1rem 4rem; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead .meta { text-align: left; }
+    .lede { font-size: 1.08rem; }
+    .arc .phase { grid-template-columns: 1fr; gap: 0.2rem; }
+    .arc .phase .date, .arc .phase .qtag { font-size: 0.7rem; }
+  }
+</style>
+</head>
+<body>
+<article class="sheet">
+
+<header class="masthead">
+  <div>
+    <div class="kicker">project map &nbsp;·&nbsp; day 22 of the Hope/NL fork</div>
+    <h1>Where we <em>are</em>,<br>and what we're looking for.</h1>
+  </div>
+  <div class="meta">
+    <strong>Date</strong> 2026-05-20<br>
+    <strong>Branch</strong> <code>experiment/hope-nested-learning</code><br>
+    <strong>Hardware</strong> MacBook M2, 24 GB<br>
+    <strong>Status</strong> back online, oriented
+  </div>
+</header>
+
+<p class="lede">
+  Twenty-two days ago this fork opened with one question: <strong>does Hope/Nested Learning's per-token mutable block memory help language modeling at our scale?</strong> Two weeks in, the d6/d8 LM-loss arc returned a clean <em>neutral, not net-positive</em> under recipe-controlled comparison; Stage 4 (multi-block memory) was deferred and the track was paused. Then a paper detour (δ-mem) and a synthetic-probe playground (<code>bench v0</code>) produced a reframing: memory mechanisms do help — but only on tasks demanding selective state-tracking across many generation steps, not on tasks demanding retrieval. <strong>Two independent mechanisms at very different scales showed the same axis-of-value.</strong> The d6 verdict didn't fall over; it gained a mechanism. This map is the read for anyone returning cold.
+</p>
+
+<div class="pull">
+  "LM-loss aggregates can hide architectural structure that synthetic probes will reveal in minutes."
+  <span class="src">— bench v0 result coda, 2026-05-20</span>
+</div>
+
+<section>
+  <div class="label">00 / At a glance</div>
+  <h2>The arc as a single column</h2>
+  <p>
+    The spine is the originating question. Each phase below either answered a sharper version of it, exposed a new question, or built tooling that made the next phase possible. Side-threads (LoRA, quant, perf, cross-arch eval) are summarized in <a href="#side-threads">§04</a>; this column is the architectural through-line.
+  </p>
+
+  <div class="arc">
+    <div class="phase q1">
+      <div class="date">Apr 29</div>
+      <div class="qtag q1">Origin · Question</div>
+      <div class="body">Fork nanochat to prototype Hope/NL (Behrouz et al., NeurIPS 2025) on top of a tested CPU/MPS pipeline. The bet: <em>does per-token mutable block memory help LM at depths we can afford?</em></div>
+    </div>
+
+    <div class="phase build">
+      <div class="date">May 1-2</div>
+      <div class="qtag build">Build · Stages 0-2</div>
+      <div class="body">Stage 0 plumbing → Stage 1 fixed-α/η linear-attention memory → Stage 2 learned per-token gates. <strong>W<sub>o</sub>=0 cold-start trap caught</strong> at Stage 1.5b via the MQAR probe — architectural lesson, not just a debugging save. <span class="vtag tool">tool</span></div>
+    </div>
+
+    <div class="phase verdict">
+      <div class="date">May 3-5</div>
+      <div class="qtag verdict">Verdict · LM val_bpb at d6</div>
+      <div class="body">Stage 2 d6 pretrain at <code>1.1743</code> (parity with baseline <code>1.174</code>). A2/A3/A3' rigour pass <strong>overturned the +1.8% SFT headline</strong>: modern-recipe baseline beats Stage 2 on both pretrain and SFT val_bpb. Verdict: neutral on aggregate val_bpb. <span class="vtag neutral">neutral</span></div>
+    </div>
+
+    <div class="phase verdict">
+      <div class="date">May 10-11</div>
+      <div class="qtag verdict">Verdict · d8 capacity</div>
+      <div class="body">d8 overnight pretrain on M2 → val_bpb <code>1.076</code>. SFT-A2 at matched token budget → ChatCORE <code>0.1622</code>, <strong>essentially ties d6_stage2's 0.1744</strong>. d8 doesn't pull memory ahead either. Stage 4 (multi-block memory) deferred — condition not met. <span class="vtag deferred">deferred</span></div>
+    </div>
+
+    <div class="phase pivot">
+      <div class="date">May 13</div>
+      <div class="qtag pivot">Pivot · ADR-008</div>
+      <div class="body"><strong>Pause the LM-loss arc.</strong> Move memory-mechanism research into a small synthetic harness (depth 2-4, MQAR + state-tracking + induction heads, &lt;5 min/variant). Local bonsai inference becomes a tool for distillation and feedback loops, not a graft target.</div>
+    </div>
+
+    <div class="phase side">
+      <div class="date">May 15-17</div>
+      <div class="qtag">Side · Cross-arch eval</div>
+      <div class="body"><code>chat_eval_mlx.py</code> + lenient extractor. Bonsai-1.7B/4B/8B-int2 and fp-Qwen3-4B-8bit on six-task ChatCORE. <strong>4B is the sweet spot; precision beats parameter count.</strong> d6_stage2 at 0.1744 vs Bonsai-4B at 0.6456 → cross-arch reframing of "what's a good local chat" is settled. <span class="vtag tool">tool</span></div>
+    </div>
+
+    <div class="phase reframe">
+      <div class="date">May 17-18</div>
+      <div class="qtag reframe">Reframe · δ-mem detour</div>
+      <div class="body">Ported δ-mem (Lei et al., May 2026) to MLX, evaluated on Qwen3-4B-8bit. <strong>Lifts 3/3 multi-step generation tasks (HumanEval +12.2pp), flat on 4/4 knowledge tasks, null on paper's own long-context recall.</strong> Reframed as a working-memory adapter, not a long-term-memory one. The axis is selective state-tracking, not retrieval. <span class="vtag lift">lift on axis</span></div>
+    </div>
+
+    <div class="phase converge">
+      <div class="date">May 18-20</div>
+      <div class="qtag converge">Converge · bench v0</div>
+      <div class="body">Built <code>bench/</code> playground (MQAR + SelectiveCopy probes, 3 arms, &lt;25 min/variant). <strong>Stage 2 wins SelectiveCopy by 2× (sat 100 vs 200), loses hard MQAR by 1.67× (sat 375 vs 225).</strong> η_init U-curve: no prior closes the gap. <strong>Same axis-of-value as δ-mem at 100× smaller scale, different mechanism.</strong> <span class="vtag lift">lift on selective</span> <span class="vtag flat">loss on recall</span></div>
+    </div>
+
+    <div class="phase now">
+      <div class="date">Now</div>
+      <div class="qtag now">Frontier</div>
+      <div class="body"><strong>n=1 seed on every bench v0 claim.</strong> Robustness check is the first move. Then: does d4 specialization survive at d6 (the architecture's native scale)? Is there a learnable input-conditional prior that dissolves the task-mix problem? Is induction-heads a third axis? <span class="vtag frontier">where we are</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="label">01 / The originating question</div>
+  <h2>"Does Hope/NL help LM at our scale?"</h2>
+  <p>
+    The fork opened on 2026-04-29 with a ticket from the sibling <code>trx4mr</code> project: prototype Hope / Nested Learning (Behrouz et al., arXiv:2512.24695) on top of nanochat's tested CPU/MPS pipeline rather than rebuilding from scratch. The architectural bet: a conventional transformer block is stateless — <code>output = f(x, params)</code>. Hope makes blocks carry input-driven, per-token mutable state — <code>output, state = f(x, params, state)</code>. The block returns an updated memory.
+  </p>
+  <p>
+    The originating equation we'd start from is from §2 of the paper:
+  </p>
+<pre>M_t = α_t · M_{t-1} + v_t · k_t^T   (rank-1 fast-weight update)
+y_t = M_t · q_t                      (read)</pre>
+  <p>
+    nanochat was chosen over picoGPT because it already had a working SFT + ChatCORE + RL pipeline on Apple Silicon, and because its single-complexity-dial discipline (<code>--depth</code> derives all other hyperparameters) is exactly the right constraint for an architectural-question experiment: any change has to work across depths, not just at one scale.
+  </p>
+  <p>
+    The strategic-plan staging (Stages 0-6) came from the trx4mr ticket. Stage 0 is plumbing (return <code>None</code> for memory_state, no behavior change). Stage 1 swaps the FFN in one block for fixed-α/η linear-attention memory. Stage 2 makes α and η per-token learned gates. Stages 3-6 generalize to chained memory blocks (CMS), the full Hope architecture, and the M3 optimizer. <strong>The originating bet was that Stage 2 or 3 would visibly help LM val_bpb at d6 on Apple Silicon.</strong>
+  </p>
+</section>
+
+<section>
+  <div class="label">02 / The build</div>
+  <h2>Stages 0, 1, 2 — what got constructed</h2>
+  <p>
+    Three weeks of construction landed Stages 0-2. Each stage's discipline was that the synthetic MQAR probe had to clear baseline before any d6 pretrain budget was spent. This rule paid out immediately:
+  </p>
+  <ul>
+    <li><strong>Stage 0</strong> — <code>memory_state</code> plumbing through <code>GPT.forward</code> and <code>Block.forward</code>. 6 contract tests pin bit-identical loss/logits with and without state. Commit <code>d2bbc0e</code>.</li>
+    <li><strong>Stage 1</strong> — <code>LinearAttentionMemory</code> module, swapped at one block via <code>hope_memory_layer</code>. Full d6 pretrain landed at val_bpb <code>1.179</code> vs baseline <code>1.174</code> — within seed noise. Commit <code>bc54858</code>.</li>
+    <li><strong>Stage 1.5</strong> — the MQAR probe (Multi-Query Associative Recall) became the gate. Stage 1's swap was <em>2× slower to grok</em> than baseline on recall. Followup found the cause: <code>W_o = 0</code> initialization creates a K/V/Q gradient-gating cold start. Fixing the W<sub>o</sub> init scale to 1.0 closed the gap at step-by-step level. Commits <code>3f54bc6</code>, <code>07e3312</code>. This was the project's first architectural lesson: <strong>probe-first methodology surfaced a real cold-start trap that LM val_bpb couldn't have isolated.</strong></li>
+    <li><strong>Stage 2</strong> — <code>LearnedGateLinearMemory</code>: per-token α<sub>t</sub> and η<sub>t</sub> as sigmoid projections of x<sub>t</sub>, vectorized via prefix log-products so the cost class is the same O(T²) as Stage 1 with no Python loop. Optimizer fix routed 1D gate biases to AdamW (Muon expects 2D). Commit <code>e559446</code>.</li>
+  </ul>
+  <p>
+    By 2026-05-02 the architecture was in place, the MQAR probe was the standing gate, and the W<sub>o</sub> init story was a real architectural finding rather than just a debug save. Stage 2's MQAR result was mixed — it saturated 25-50 steps slower than baseline at d4/T=128 with high seed variance — but the architecture <em>worked</em>: gates alive from step 1, prefix-log-product math correct. The next move was a real d6 pretrain.
+  </p>
+</section>
+
+<section>
+  <div class="label">03 / The d6 / d8 verdict</div>
+  <h2>Neutral on val_bpb, twice over</h2>
+
+  <h3>The "+1.8% SFT win" headline</h3>
+  <p>
+    Stage 2's d6 pretrain landed at val_bpb <code>1.1743</code> (parity with the baseline's <code>1.174</code>). SFT on top of it landed at <code>0.6518</code>, beating the historical baseline's <code>0.6639</code> by 1.8%. That looked like real architectural signal. A2 (three SFT seeds on the same Stage 2 pretrain → spread <code>0.0004</code>) ruled out an SFT-seed lottery.
+  </p>
+
+  <h3>A3-prime overturned the headline</h3>
+  <p>
+    The decisive move was A3-prime: re-run a <em>modern-recipe</em> vanilla d6 baseline (matching all the small recipe drift between historical baseline and current master — most prominently the ve_gate Muon→AdamW change in <code>840d3db</code>). Modern-recipe baseline pretrain: <code>1.1686</code>. SFT: <code>0.6483</code>. <strong>Beats both Stage 2 seeds.</strong> The "+1.8% SFT win" was overwhelmingly recipe drift, not architecture. Documented in full at <code>docs/hope_nl_a3_a3prime_2026-05-05.md</code>.
+  </p>
+
+  <div class="scorecard">
+    <div class="card lift">
+      <div class="lbl">A3' baseline · 5000 iter</div>
+      <div class="val">1.1686</div>
+      <div class="sub">pretrain val_bpb · modern recipe<br>SFT val_bpb 0.6483</div>
+    </div>
+    <div class="card flat">
+      <div class="lbl">Stage 2 d6 · 3 seeds</div>
+      <div class="val">1.171–1.174</div>
+      <div class="sub">pretrain val_bpb<br>SFT 0.6495 (s1)</div>
+    </div>
+    <div class="card flat">
+      <div class="lbl">Δ vs baseline</div>
+      <div class="val">~0.003</div>
+      <div class="sub">within seed noise<br>both pretrain &amp; SFT</div>
+    </div>
+  </div>
+
+  <h3>The d8 cross-check</h3>
+  <p>
+    A separate "does depth pull memory ahead" cross-check came via the d8 overnight pretrain (2026-05-10, val_bpb <code>1.076</code> at 5000 iter / 82M tokens) and d8 SFT-A2 at matched token budget (2026-05-11, val_bpb <code>0.6218</code>, ChatCORE <code>0.1622</code>). d8 <strong>essentially ties</strong> d6_stage2 on ChatCORE (0.1622 vs 0.1744 within stderr at -x 100). The d8 result did not change the architectural picture for memory — bigger plain attention is just as good as memory-bearing d6 at this scale.
+  </p>
+
+  <h3>Stage 4 deferred</h3>
+  <p>
+    Stage 4 (multi-block memory, the architecture's next layer of expressiveness) was <em>conditional on Stage 2 surviving</em>. Condition not met. Deferred per ADR-008. The d6/d8 from-scratch arc concluded with Stage 2 sitting at <em>neutral</em> on what LM val_bpb measures.
+  </p>
+
+  <p>
+    The methodological lesson: <strong>recipe drift is real, large, and silent.</strong> Roughly 0.016 of "free" SFT improvement had accumulated across 4 commits between the historical baseline checkpoint and current master — dwarfing the architectural delta. Every future architecture-class experiment needs a same-day re-baseline, not a comparison against an archived number.
+  </p>
+</section>
+
+<section>
+  <div class="label">04 / The strategic pivot</div>
+  <h2>ADR-008 · pause the LM arc, sharpen the question</h2>
+  <p>
+    On 2026-05-13 the project formally paused the d6/d8 from-scratch arc. The strategic pivot doc (<code>docs/strategic_pivot_2026-05-13.md</code>) articulates two related decisions:
+  </p>
+  <ol class="takeaways">
+    <li><b>Future memory-mechanism research moves to a small synthetic harness.</b> Depth 2-4, MQAR + selective copy + induction heads, cycle &lt; 5 min/variant. The d6/5000-iter LM budget (~3-18 h) is too slow for architectural iteration when the signal-to-noise per minute at probe scale is so much better.</li>
+    <li><b>"Own every parameter" only earns its pretrain cost when the change requires from-scratch retraining.</b> For LoRA-class additions to a frozen base, the right base isn't a d6/74M nanochat — it's a 4-8B local model running through MLX. This is what the bonsai cross-arch evaluation thread was setting up.</li>
+  </ol>
+  <p>
+    Crucially, "the graft target idea" — slot a memory mechanism onto a frozen 4-8B base — was <em>not</em> the chosen path. The operator's interest in bonsai was downstream (feedback loops, distillation, judge-models), not as somewhere to inject new memory layers.
+  </p>
+  <p>
+    The pivot wasn't surrender; it was a sharper question. The d6/d8 LM-loss aggregate had stopped distinguishing hypotheses. The right next move was a tool that <em>could</em> distinguish them.
+  </p>
+</section>
+
+<section id="side-threads">
+  <div class="label">05 / Side threads</div>
+  <h2>What got built around the spine</h2>
+  <p>
+    Five threads ran alongside the architectural arc. Some answered different questions (chat quality, persona retention). Some built tooling that the spine needed (preflight, grad checkpointing, eval-loop hardening). One — the δ-mem port — produced the reframing that the spine then converged on.
+  </p>
+
+  <div class="threads">
+    <div class="t feeds">
+      <div class="name">δ-mem MLX port</div>
+      <div class="meta">May 17-18 · feeds the spine</div>
+      <p>Ported Lei et al.'s δ-mem to MLX, evaluated on Qwen3-4B-8bit. Lifts 3/3 multi-step generation tasks (HumanEval +12.2pp, MBPP +8pp, GSM8K +5.5pp); flat on 4/4 knowledge tasks; null on the paper's own long-context recall benchmark (HotpotQA).</p>
+      <p class="verd">Verdict: working-memory adapter, not long-term memory. <strong>Same axis-of-value bench v0 found 2 days later at 100× smaller scale.</strong></p>
+    </div>
+
+    <div class="t tool">
+      <div class="name">Bonsai cross-arch eval</div>
+      <div class="meta">May 15-17 · tool, sweet-spot found</div>
+      <p>Built <code>chat_eval_mlx.py</code> (six-task ChatCORE for any MLX-loadable model) + lenient extractor (handles non-nanochat output formats). Ran Bonsai-1.7B/4B/8B-int2 and fp-Qwen3-4B-8bit at -x 200.</p>
+      <p class="verd">Verdict: 4B-int2 ChatCORE <code>0.6456</code>, 8B-int2 <code>0.7056</code>, fp-Qwen3-4B-8bit <code>0.7656</code>. <strong>Precision beats parameter count.</strong> 4B is the operational pick for local chat / distillation source / judge.</p>
+    </div>
+
+    <div class="t tool">
+      <div class="name">Training-perf arc</div>
+      <div class="meta">May 9-10 · enabling infrastructure</div>
+      <p><code>--grad-checkpoint</code> (Block.forward checkpointed) + <code>--no-compile</code>. Two patches in one: ~12% wall-clock win in pressured-but-feasible regimes (compile on), capacity unlock for d12/batch=8 (compile off). Bug fix: <code>torch.compile</code>'s inductor scheduler masks the patch's memory savings.</p>
+      <p class="verd">Verdict: d8 overnight pretrain on M2 24GB became feasible at single-grad-accum. Enabled the d8 capacity verdict in §03.</p>
+    </div>
+
+    <div class="t dead">
+      <div class="name">LoRA arc (L1 persona)</div>
+      <div class="meta">May 7 · adapter ceiling at 74M</div>
+      <p>L1 v2 (rank-16, Q+K+V+O target) solved persona retention: 0/30 → 19/30 all_three on held-out personas. Template-bleed appeared (<em>"You're [X]"</em> opener fires on every prompt). v3 (dataset diversity) regressed three-axis to 3/30. Working theory: rank-16 LoRA at 74M base is a <strong>one-pattern adapter</strong>.</p>
+      <p class="verd">Verdict: dataset/training-time levers at d6/74M have hit a ceiling. The strict-sense capacity argument now points at bigger base + LoRA, which the bonsai thread set up.</p>
+    </div>
+
+    <div class="t dead">
+      <div class="name">Quant arc (STE binary/ternary)</div>
+      <div class="meta">May 7-8 · clarifying ADR</div>
+      <p>Ported BinaryLinear/TernaryLinear from trx4mr. STE training works mechanically at d3 (validates infra) but pays +33-46% wall and +6.8-9.9% val_bpb gap. <strong>ADR-007</strong> clarified the memory accounting: STE training does <em>not</em> save memory (latent fp32 + STE op). The 14× memory win lives at <em>inference</em> via pack-to-1-bit.</p>
+      <p class="verd">Verdict: paused as a research direction on M2. The bonsai thread captures the same prize cheaper.</p>
+    </div>
+
+    <div class="t dead">
+      <div class="name">Chat-quality thread</div>
+      <div class="meta">May 6 · diagnostic-only</div>
+      <p>Operator-driven reframe: "d6 chatbot is kinda bad." Tested SFT-rebalance (cut MMLU/GSM8K → chatmix_a) and SFT-additive (2× SmolTalk). Both moved val_bpb by 0.05+ (huge by this codebase's standards) but the 7-prompt multi-turn rubric went 0/7 in either direction — <em>differently broken, not less broken</em>. Cosine-NN diagnostic (from sibling trx4mr Phase 5 retro): ~65% right-context drift, ~18% left-context collision.</p>
+      <p class="verd">Verdict: at d6/74M, recipe-rebalancing is rearranging which templates dominate. Real fix lives in capacity (bigger base) or codebook (binary/ternary, deferred per ADR-007).</p>
+    </div>
+  </div>
+
+  <p>
+    The pattern across the side-threads: <strong>tools that endured</strong> (chat_eval_mlx, grad-checkpoint, preflight, inherit-from, MPS fragmentation infrastructure) became part of the workbench. <strong>Adapter-class experiments hit a ceiling</strong> at d6/74M — the rank-16 LoRA result and the SFT-rebalance result point at the same thing from opposite directions. <strong>The δ-mem detour did something none of the others did:</strong> it generated a finding that didn't fit the spine's "neutral" verdict, and that mismatch was the prompt for bench v0.
+  </p>
+</section>
+
+<section>
+  <div class="label">06 / The reframe</div>
+  <h2>δ-mem pointed at the right axis</h2>
+  <p>
+    On 2026-05-17 the δ-mem paper (Lei et al., May 2026) landed in scope. The reference implementation was CUDA-only for training but the published rank-8 adapter (Qwen3-4B-Instruct-2507 backbone) was inference-viable on M2. We ported the forward math to MLX (<code>nanochat/delta_mem_mlx.py</code>, ~230 LOC, math verified to 2e-6 against the torch reference) and ran it through our own <code>chat_eval_mlx.py</code> harness extended with a <code>--delta-mem</code> flag.
+  </p>
+  <p>
+    The result didn't match the paper's framing of δ-mem as "long-term memory." Per-task pattern across 388 minutes of eval wall:
+  </p>
+
+  <table>
+    <thead><tr><th>Task class</th><th>Tasks</th><th>Δ vs Qwen3-4B-8bit baseline</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Multi-step generation</strong></td><td>HumanEval, GSM8K, MBPP</td><td class="num win">3/3 lift · combined p &lt; 0.001</td></tr>
+      <tr><td><strong>Knowledge / categorical</strong></td><td>ARC-E, ARC-C, MMLU, SpellingBee</td><td class="num flat">4/4 flat · all |z| &lt; 0.7</td></tr>
+      <tr><td><strong>Long-context recall</strong></td><td>HotpotQA (paper's own headline)</td><td class="num flat">null · ΔF1 = +0.0003 over n=200</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    Three out of three multi-step generation tasks lifted significantly. Four out of four knowledge tasks were flat. <strong>The paper's headline benchmark (HotpotQA, long-context recall) was null.</strong> The axis isn't long-term memory — it's selective state-tracking <em>during generation</em>. Whatever else δ-mem is, on this setup it is a working-memory adapter that helps tasks where the model has to write content, ignore noise, and carry selective state forward over many output tokens.
+  </p>
+  <p>
+    Full writeup at <a href="delta_mem_field_result_2026-05-18.html"><code>docs/delta_mem_field_result_2026-05-18.html</code></a>. The clean methodological observation: <strong>the paper's framing of its own mechanism was wrong on the benchmark it sells with.</strong> The mechanism is real, the axis-of-value is different from the published claim.
+  </p>
+  <p>
+    That observation had immediate implications for the paused Hope/NL track. The original Stage 1.5 probe (MQAR) tests <em>recall</em>; it cannot distinguish "memory engaged" from "memory engaged on the right axis." If δ-mem's axis was real, Stage 2's "neutral on val_bpb" might be an aggregate of two opposite effects: <em>wins on selective state, losses on uniform recall, canceling out on a mixed corpus.</em> That hypothesis was directly testable in the synthetic harness ADR-008 had already prescribed. <strong>The reframe was what bench v0 needed to know which probes to build.</strong>
+  </p>
+</section>
+
+<section>
+  <div class="label">07 / The convergence</div>
+  <h2>bench v0 — Stage 2's task signature, surfaced</h2>
+  <p>
+    From 2026-05-18 to 2026-05-20, the <code>bench/</code> playground got built and run. ~300 LOC of new code (<code>bench/tasks.py</code>, <code>bench/run.py</code>, marker), two probes, three architectural arms, eleven runs, ~250 min of M2 compute. Full writeup at <a href="bench_v0_result_2026-05-20.html"><code>docs/bench_v0_result_2026-05-20.html</code></a>. The findings:
+  </p>
+
+  <h3>Stage 1 vs Stage 2 specialize on opposite axes</h3>
+  <table>
+    <thead><tr>
+      <th>Architecture</th>
+      <th>SelectiveCopy (state-tracking)</th>
+      <th>MQAR hard (uniform recall)</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>baseline</strong> (attn + MLP)</td>
+        <td class="num">sat 200</td>
+        <td class="num">sat 225</td>
+      </tr>
+      <tr>
+        <td><strong>Stage 1</strong> (fixed-gate linear memory)</td>
+        <td class="num bad">sat 375 (1.88× slower)</td>
+        <td class="num lo">sat 250 (≈ baseline)</td>
+      </tr>
+      <tr class="headline">
+        <td><strong>Stage 2</strong> (learned per-token α/η)</td>
+        <td class="num win">sat 100 (2× faster than baseline)</td>
+        <td class="num bad">sat 375 (1.67× slower)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Stage 2 has a clean signature: <strong>2× faster than baseline on selective state-tracking, 1.67× slower on uniform recall.</strong> Stage 1 has the mirror image: ≈ baseline on recall, severely worse on state-tracking. The two memory architectures occupy different functional niches. Plain attention is the universal middle.
+  </p>
+
+  <h3>η_init can't fix MQAR — the cost is architectural</h3>
+  <p>
+    Five-arm sweep of η_init prior at {0.1, 0.3, 0.5, 0.8, 0.99} on Stage 2 hard MQAR produced a non-monotonic U-curve. Best: η=0.99 at sat 325. Worst: η=0.5 at sat 475. Baseline: 225. <strong>Even at the best prior, Stage 2 trails baseline by 100 steps.</strong> Tuning the prior covers ~50 steps of the gap; the remaining ~75-100 steps are an irreducible architectural floor — the cost of having learnable gate parameters in the optimization budget plus the inductive bias of "selectivity is possible." Stage 2 doesn't just need to learn the task; it needs to learn <em>not to use its own selectivity</em>.
+  </p>
+
+  <h3>The cross-scale convergence</h3>
+  <table>
+    <thead><tr>
+      <th>Mechanism</th>
+      <th>Selective state-tracking</th>
+      <th>Uniform recall</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>δ-mem</strong> · Qwen3-4B-8bit · 4B params</td>
+        <td class="num win">HumanEval +12.2pp, MBPP +8pp, GSM8K +5.5pp</td>
+        <td class="num flat">HotpotQA ΔF1 = +0.0003</td>
+      </tr>
+      <tr>
+        <td><strong>Stage 2</strong> · d4 nanochat · 37M params</td>
+        <td class="num win">SC sat 100 vs baseline 200</td>
+        <td class="num bad">MQAR sat 375 vs baseline 225</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Two completely different architectural mechanisms (rank-8 recurrent state with delta-rule updates vs additive linear-attention with per-token learned α/η), at scales 100× apart, on different tasks (real-world coding/math vs synthetic state-tracking and recall), show the same axis-of-value. <strong>What they share is learned selectivity at the per-token level.</strong> Both have parameters that decide, conditional on the input, how much to write into and read out of memory state. Fixed-gate architectures (Stage 1) don't have this knob. Pure-attention architectures (baseline) don't have memory state at all.
+  </p>
+
+  <h3>The d6 "neutral" verdict gained a mechanism</h3>
+  <p>
+    The 2026-05-05 synthesis concluded: <em>Stage 2 is neutral, not net-positive, on natural-language val_bpb at d6/5000-iter on ClimbMix.</em> That conclusion stands. bench v0 doesn't overturn it — it explains it. <strong>Natural language is a mix of selective and uniform demands. Stage 2's wins and losses on the two axes cancel out on aggregate val_bpb.</strong> The aggregate was correct; the underlying architecture has more to say. The d6/d8 LM arc cost ~30 h of M2 wall to conclude "neutral, defer." bench v0 cost ~2.5 h to add "wins on selective, loses on uniform, prior tuning is non-monotonic, architectural floor is irreducible." Different questions, different tools.
+  </p>
+</section>
+
+<section>
+  <div class="label">08 / What we're looking for now</div>
+  <h2>The frontier · three concrete questions</h2>
+  <p>
+    The originating question has split. Two sub-questions, both partly answered:
+  </p>
+  <ul>
+    <li><strong>"Does Hope/NL help LM val_bpb at our scale?"</strong> Answered. No. d6/d8 on ClimbMix is neutral under recipe-controlled comparison.</li>
+    <li><strong>"Does the architecture help on the tasks where memory <em>should</em> matter?"</strong> Partly answered. Yes at d4 on synthetic state-tracking (Stage 2 SC 2× win). Crossed-validated cross-mechanism by δ-mem at 100× scale. <strong>Not yet confirmed at the architecture's native scale (d6+), not yet bounded by seed variance, not yet generalized to a third probe.</strong></li>
+  </ul>
+  <p>
+    The interesting structural question is no longer "is memory good?" but "are memory mechanisms architecturally <em>specialized</em>, and what's the routing rule?" Live concrete priorities:
+  </p>
+
+  <ol class="frontier">
+    <li><b>n=2-3 seeds on the four bench v0 headline numbers.</b><span class="cost">~2 h wall · cheapest, most important</span><br>Stage 2 SC sat=100 (the win), Stage 2 MQAR sat=375 (the loss), η=0.5 sat=475 (U-curve worst), Stage 1 SC sat=375 (the mirror loss). Every current claim above this line is "n=1 seed." Bound the seed-noise component before any further architectural claim.</li>
+
+    <li><b>η_init sweep on hard SC (the mirror experiment).</b><span class="cost">~100 min wall</span><br>The MQAR U-curve says no global prior is optimal on recall. Is SC robustly good across η, or does it have its own U-shape with η=0.1 happening to land on the lucky side? This determines whether the bench v0 "Stage 2 wins SC" finding is structural or prior-dependent.</li>
+
+    <li><b>Stage 2 at d6 on hard MQAR + SC.</b><span class="cost">~200 min wall · bridges back to the LM arc</span><br>Does the d4 specialization survive at d6? If yes, the original LM "neutral" verdict gets its mechanism at the architecture's native scale, and the prediction "Stage 2 should win on selective-state-heavy benchmarks at d6" becomes testable.</li>
+  </ol>
+
+  <p>
+    Lower-priority but live:
+  </p>
+  <ul>
+    <li><strong>Induction-heads probe</strong> as a third axis between recall and state-tracking. The δ-mem axis and the SC vs MQAR axis are similar but not identical. A third probe would either consolidate the two-axis story or split it.</li>
+    <li><strong>Input-conditional gate priors.</strong> A small MLP on global input statistics that picks η_init per input. Tests whether the task-mix problem dissolves when priors are learnable rather than fixed — i.e., whether the architectural floor we found is intrinsic or just a poorly-chosen single-knob.</li>
+    <li><strong>Architectural variants on the niche.</strong> Swap topology vs additive, different memory layer placements, different gate parameterizations. Cheap on bench (each variant ~20 min), informative only if the seed-stability and d6-reproduction priorities have already cleared.</li>
+  </ul>
+
+  <p>
+    The 2026-05-13 strategic-pivot decision still holds: the d6/d8 from-scratch LM arc is paused; bench is where memory-mechanism iteration happens. The pivot bought us a ~10× cheaper iteration loop, and bench v0 used the first ~2.5 hours of that loop to produce more architectural traction than the prior 30+ hours of LM-loss work had.
+  </p>
+</section>
+
+<section>
+  <div class="label">09 / What we're not doing</div>
+  <h2>The closed paths</h2>
+  <p>
+    These were live questions at some point. They aren't anymore, and the doc-level rationale matters for not re-opening them by accident:
+  </p>
+  <ul>
+    <li><strong>Bigger from-scratch pretrains</strong> (d12+, 5B+ tokens). M2 wall budget doesn't permit. Per CLAUDE.md and the d8 capacity findings, d12 canonical Chinchilla is ~230 hours on this hardware. Not a live path until compute changes.</li>
+    <li><strong>Stage 4 (multi-block memory).</strong> Deferred per ADR-008. Conditional on Stage 2 surviving at d6; the condition is still not met. Bench v0 sharpens but does not change that calculus.</li>
+    <li><strong>The Hope-Attention variant (Stage 5).</strong> A real design block (~1-1.5 weeks). Not justified until Stage 2's d6 result is positive on the axis bench v0 cares about.</li>
+    <li><strong>Bigger LoRA variants on d6 nanochat.</strong> v3 falsified the dataset-diversity hypothesis; the rank-16 ceiling is an artifact of base capacity, not of the LoRA itself. Path forward for "useful local chatbot" runs through Bonsai-4B or Qwen3-4B-8bit + adapter, not d6 + adapter.</li>
+    <li><strong>STE binary/ternary training on M2.</strong> ADR-007 closes the memory-accounting case: STE training does not save memory; the 14× win lives at inference via pack-to-1-bit. Bonsai already paid that cost on bigger compute; we use it as a tool rather than rebuilding it.</li>
+    <li><strong>Cross-arch chatbot quality comparisons.</strong> Bonsai-4B beats d6_stage2 by 3.70× on ChatCORE, fp-Qwen3-4B-8bit by 4.39×. The cross-arch question is settled at this hardware envelope.</li>
+  </ul>
+</section>
+
+<hr class="fancy">
+
+<section>
+  <div class="label">10 / Coda</div>
+  <h2>What the project actually is now</h2>
+  <p>
+    The originating question was specific (does Hope/NL help LM val_bpb?) and the d6/d8 answer is specific (no, neutral, under recipe-controlled comparison). That answer is now load-bearing. It's also not the most interesting thing the fork has produced.
+  </p>
+  <p>
+    The more durable finding is the architectural shape: <strong>learned per-token selectivity is a specialization, not a universal improvement</strong>. It buys you state-tracking. It costs you uniform recall. Plain attention is the median tool that handles both tolerably; memory mechanisms are sharp tools that handle one well and the other badly. Two independent mechanisms at scales 100× apart converged on the same pattern, which makes it harder to dismiss as a single-architecture quirk.
+  </p>
+  <p>
+    The project's working hypothesis going into the next move is therefore: <em>memory mechanisms are architecturally additive only on tasks they're matched to. The design game is task-mechanism routing, not "memory yes/no."</em> Whether that hypothesis is true at d6 on natural-language task subsets, whether it survives seed variance, and whether a third axis (induction-heads) reorganizes the picture again — those are the next experiments. They're all bench-cheap. The first one (n=2-3 seeds) is the most important and the least exciting.
+  </p>
+  <p>
+    For anyone returning to this fork after time away, the spine to keep in mind is: <strong>originating question → d6 verdict (neutral) → side-thread that didn't fit (δ-mem) → reframe (selective axis) → convergence (bench v0) → frontier (robustness, scale, third axis).</strong> The bench is the live work surface. The d6/d8 LM arc is reference material. Side-threads either fed the spine (δ-mem), built the workbench (perf, eval, preflight), or hit ceilings worth knowing about (LoRA, STE quant, SFT rebalancing). The map ends where the seed-robustness experiment begins.
+  </p>
+</section>
+
+<footer class="colophon">
+  Compiled 2026-05-20 on M2 MacBook · branch <code>experiment/hope-nested-learning</code> · local-only per <code>feedback_local_only.md</code>.
+  <div class="links">
+    <code>Canonical reads</code>
+    <span>
+      <a href="bench_v0_result_2026-05-20.html"><code>bench_v0_result_2026-05-20.html</code></a> — the convergence, freshest result ·
+      <a href="delta_mem_field_result_2026-05-18.html"><code>delta_mem_field_result_2026-05-18.html</code></a> — the reframing, cross-mechanism validation ·
+      <code>docs/hope_nl_track_synthesis_2026-05-05.md</code> — original LM-arc verdict (pre-pivot) ·
+      <code>docs/strategic_pivot_2026-05-13.md</code> — ADR-008 rationale.
+    </span>
+    <code>Key ADRs</code>
+    <span>
+      ADR-001 · probe-first methodology (2026-05-01) ·
+      ADR-002 · Stage 2 design priors (2026-05-02) ·
+      ADR-003 · PR #544 dataloader deferral (2026-05-05, since closed) ·
+      ADR-004 · z-loss as standby (2026-05-05) ·
+      ADR-005 · dataloader-variant env gate (2026-05-06) ·
+      ADR-006 · quant integration tentative (2026-05-08) ·
+      ADR-007 · STE does NOT save training memory (2026-05-08) ·
+      ADR-008 · strategic pivot, pause LM arc (2026-05-13).
+    </span>
+    <code>Workbench</code>
+    <span>
+      <code>bench/{tasks,run}.py</code> · <code>nanochat/{lora,quant,delta_mem_mlx}.py</code> · <code>nanochat/gpt.py::LearnedGateLinearMemory</code> · <code>scripts/{chat_eval_mlx,chat_sft_lora}.py</code> · <code>dev/preflight_memory.py</code>.
+    </span>
+    <code>HANDOFF</code>
+    <span><code>HANDOFF.md</code> — chronological session-by-session log (3062 lines as of writing). Read the most recent entries for current state; read this map for the arc shape.</span>
+  </div>
+</footer>
+
+</article>
+</body>
+</html>
