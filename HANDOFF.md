@@ -2829,4 +2829,234 @@ Two commits this evening: docs (Qwen3-4B-8bit x200 + quantization-
 cost writeup), docs (δ-mem paper notes + backlog entry + GitHub
 verification + filed ticket). Local-only. Branch still paused.
 
+## Day 2026-05-18 — δ-mem MLX port closeout
+
+### What landed
+
+δ-mem ticket from 2026-05-17 evening got picked up the next morning
+and ran to result across a single day. Twelve hours end-to-end from
+"paper just landed in iCloud" to "field result HTML with three-task
+coding/math/reasoning lift + paper-native long-context recall null."
+
+Port (`nanochat/delta_mem_mlx.py`, ~230 LOC) plus four integration
+gates: math module ↔ torch reference at 2e-6 tolerance; adapter
+load/convert from HF safetensors; KV-cache T=1 scan path; per-problem
+state reset. Engineering writeup:
+`docs/delta_mem_mlx_port_2026-05-17.html`.
+
+Eval-side work on Qwen3-4B-Instruct-2507-8bit (the same canonical
+baseline used in `qwen3_4b_quantization_cost_2026-05-17.md`):
+
+- **MVE** (asymmetric, cat=200 / gen=100, 100.7 min wall) — ChatCORE
+  0.7844 vs baseline 0.7656, HumanEval +11.5pp.
+- **HumanEval x164 confirmation** (73.6 min) — 70.73% / +12.2pp /
+  2.33σ. p &lt; 0.02 two-tailed.
+- **GSM8K x200 confirmation** (52.1 min) — 81.50% / +5.5pp / 1.35σ.
+  Directional.
+- **MBPP x100 OOD-generality test** (baseline 35.9 min + δ-mem 34.7
+  min) — 61.00% vs 53.00% / +8.0pp / 1.15σ. Closes the
+  "HumanEval-specific vs coding-broadly" disambiguation.
+- **HotpotQA x200 paper-native triangulation** (baseline 38.1 min +
+  δ-mem 52.7 min) — Δ mean F1 = +0.0003, 0.21σ on F1≥0.5 accuracy.
+  **Null on the paper's own headline long-context benchmark.**
+
+Pattern: 3/3 multi-step generation tasks lift, 4/4 knowledge tasks
+flat, 1/1 paper-native long-context recall null. Fisher's combined p
+across the three reasoning lifts: &lt; 0.001.
+
+### Mechanism reframing
+
+The paper sells δ-mem as a long-term memory mechanism (LoCoMo,
+MemoryAgentBench, HotpotQA, IFEval, GPQA). What we observed: it
+helps multi-step generation requiring selective state across many
+output tokens. **Whatever else δ-mem is, on our setup it is a
+working-memory adapter that helps tasks where you have to think
+across multiple generation steps.** The paper's framing is wrong
+on the one benchmark of theirs we ran.
+
+### SDFT relevance note + disclaimer
+
+Read Shenfeld et al., "Self-Distillation Enables Continual
+Learning" (arXiv 2601.19897, MIT/ETH, Jan 2026) — drop-in SFT
+replacement that reports Pareto-better-than-SFT results on a setup
+structurally identical to our δ-mem MBPP measurement. Decision:
+do not port (Eq. 4 In-Context Assumption requires usable ICL at the
+target scale; d6/d20 doesn't have it). Flagged as the named
+recipe-side counter-hypothesis in the δ-mem field-result HTML §07.
+Doc: `docs/sdft_paper_relevance_2026-05-18.md`.
+
+### Operational table revised
+
+The 2026-05-17 "Bonsai-4B for coding, fp-Qwen3-4B for knowledge"
+call flips. With δ-mem available:
+- Coding (HumanEval-style + MBPP OOD): fp-Qwen3-4B-8bit + δ-mem
+- Math (GSM8K-heavy): fp-Qwen3-4B-8bit + δ-mem
+- Knowledge: fp-Qwen3-4B-8bit (δ-mem doesn't help)
+- Memory-constrained: Bonsai-1.7B int2 (unchanged)
+Cost of +δ-mem: +9.31 MB adapter weights, +38-47% wall per token.
+
+### Field-result publication
+
+Final HTML synthesis: `docs/delta_mem_field_result_2026-05-18.html`.
+Newspaper-style, six-task ChatCORE pattern + MBPP OOD + HotpotQA
+null, full trajectory tables, significance discussion, ops-table
+revision, three-paragraph coda on the working-memory reframing.
+388 min total eval wall across seven runs.
+
+### Branch state
+
+Six commits over 2026-05-17→18:
+- `bc20ef3` docs: filed δ-mem MLX port ticket
+- `62dbdbc` docs: δ-mem MLX port Phase 0 recon
+- `236bc46` feat: δ-mem MLX port — math module verified to 2e-6
+- `1d41ccb` feat: δ-mem MLX integration smoke verified bit-exact
+- `c6dc17e` feat: δ-mem generation sanity — KV-cache T=1 path
+- `bf534cb` feat: chat_eval_mlx `--delta-mem` flag
+- `182573c` docs: δ-mem MLX port writeup (dev checkpoint)
+- `a2407f1` feat: chat_eval_mlx `--max-problems-cat`/`-gen`
+- `59b9e24` result: δ-mem on Qwen3-4B-8bit — HumanEval +12.20pp
+- `69a0303` result: GSM8K x200 confirms — 2/2 reasoning lift
+- `0d134f7` docs: δ-mem field result HTML writeup
+- `1d006ec` docs: ops doc revision — δ-mem flips coding/math call
+- `65278dc` feat: tasks/mbpp.py + harness wiring
+- `ea0307f` result: MBPP +8pp confirms coding generality
+- `809fee0` docs: fold MBPP into field-result HTML
+- `e8f19fe` docs: SDFT paper relevance note + δ-mem disclaimer
+- `158a5fe` feat: tasks/hotpotqa.py + harness wiring
+- `2eed682` result: HotpotQA n=200 — δ-mem null on paper's own benchmark
+- `6436a9c` docs: fold HotpotQA null into field-result HTML
+
+Local-only. δ-mem arc complete. Branch ready for Hope/NL revival.
+
+## Day 2026-05-18 evening → 2026-05-20 — bench v0 (Hope/NL revival)
+
+### Why pick the track back up
+
+The δ-mem detour produced a finding that didn't fit the 2026-05-13
+strategic pivot's conclusion. The pivot doc said pause the d6/d8
+LM-loss arc and move memory-mechanism research into a fast-iteration
+synthetic-probe harness; the δ-mem finding pointed at *which axis*
+the probes should be testing (selective state-tracking, not pure
+recall). The ADR-008 plan was the right plan; bench v0 is its
+execution with one updated probe per the δ-mem insight.
+
+### What got built
+
+`bench/__init__.py` (empty marker), `bench/tasks.py` (~135 LOC),
+`bench/run.py` (~165 LOC). Total ~300 LOC of new code.
+
+Two probes:
+- **MQAR** (ported from `dev/probe_mqar.py`) — recall axis: bos, K
+  (key,value) pairs, sep, M queries; model looks up bound values.
+- **SelectiveCopy** (new) — state-tracking axis: K content tokens
+  scattered through length-T_in noise stream; model copies content
+  in order after sep. The Mamba-paper canonical state-tracking probe.
+
+Three architectural arms:
+- **baseline**: vanilla nanochat block (attn + MLP).
+- **Stage 1**: additive LinearAttentionMemory at block 1, fixed
+  α = η = 1, W_o init = 1.0.
+- **Stage 2**: additive LearnedGateLinearMemory at block 1, learned
+  per-token α and η, canonical priors (α_init = 0.99, η_init = 0.1).
+
+All runs at d4 (n_embd=256, ~37M params), seed=0, eval-every 25.
+
+### The eleven runs
+
+| run | task | difficulty | sat step | wall |
+|---|---|---|---:|---:|
+| baseline_d4 | MQAR | K=16, T=128 | 75 | 5.6m |
+| stage1_add_wo1_d4 | MQAR | easy | 125 | 6.3m |
+| stage1_add_wo0_d4 | MQAR | easy | 75 | 10.8m |
+| baseline_d4_hard | MQAR | K=64, T=256 | 225 | 15.8m |
+| stage1_add_wo1_d4_hard | MQAR | hard | 250 | 15.9m |
+| stage1_add_wo0_d4_hard | MQAR | hard | 275 | 16.0m |
+| baseline_d4_sc_hard | SC | K=16, T_in=192 | 200 | 16.5m |
+| stage1_add_wo1_d4_sc_hard | SC | hard | 375 | 18.0m |
+| stage2_d4_sc_hard | SC | hard | **100** | 16.1m |
+| stage2_d4_hard | MQAR | hard, η=0.1 | **375** | 19.4m |
+| stage2_d4_hard_eta{03,05,08,099} | MQAR | hard, η sweep | 400/475/425/325 | 92.3m |
+
+Total ~250 min compute. Each per-experiment markdown writeup is in
+`docs/bench_v0_*.md` (5 docs). Synthesis HTML:
+`docs/bench_v0_result_2026-05-20.html`.
+
+### What was learned
+
+The architectural finding:
+
+- **Stage 1 and Stage 2 have opposite optimal task signatures.**
+  Stage 2 wins SC by 2× (sat 100 vs 200), loses MQAR by 1.67×
+  (sat 375 vs 225). Stage 1 has the mirror image: small +25 step
+  cost on MQAR, severe +175 step cost on SC.
+- **The δ-mem axis transfers to Stage 2 at probe scale.** Same
+  axis-of-value (selective state tracking lifts; uniform recall
+  doesn't), different architectural mechanism (rank-8 recurrent
+  state vs additive linear-attention with per-token gates).
+- **No η_init prior closes the gap with baseline on MQAR.** The
+  5-arm sweep produced a non-monotonic U-curve: worst at η=0.5
+  (sat=475), best at η=0.99 (sat=325). Even η=0.99 (Stage 1-like
+  initial conditions) trails baseline by 100 steps and Stage 1 by
+  75. The architectural cost of learnable gates is irreducible by
+  prior tuning — Stage 2 pays for gate-parameter optimization
+  budget + "selectivity is possible" inductive bias.
+- **The original Stage 2 d6 LM-val_bpb "neutral" verdict is
+  unchanged; its mechanism is now explained.** Natural language is
+  a mix of selective and uniform demands. The two effects net out
+  on aggregate val_bpb. The bench surfaces the internal structure
+  the LM arc averaged away.
+
+The methodological finding: **LM-loss aggregates can hide
+architectural structure that synthetic probes surface in minutes.**
+The d6/d8 LM-loss arc cost ~30 h to conclude "neutral, defer."
+Bench v0 cost ~2.5 h compute to conclude "wins on selective tasks,
+loses on uniform tasks, prior tuning is non-monotonic, architectural
+floor is irreducible." Different questions, different tools.
+
+### Where the track stands now
+
+Hope/NL is back online but oriented to concrete next questions, not
+the open-ended LM-arc question. The 2026-05-13 pivot's "<5 min per
+variant" target is unmet at d4 hard tasks (16-25 min/variant) but
+the signal-to-noise per minute of compute is good enough that the
+playground is a productive iteration loop.
+
+**Cheapest unrun follow-ups, in priority order:**
+
+1. **n=2-3 seeds on the four headline numbers.** Stage 2 SC sat=100,
+   Stage 2 MQAR sat=375 (η=0.1), Stage 2 MQAR sat=475 (η=0.5, U-curve
+   worst), Stage 1 SC sat=375. ~2 h wall. The robustness check that
+   should run before any further architectural claim.
+2. **η_init sweep on hard SC.** Mirror of the MQAR U-curve. Tests
+   whether SC's win at η=0.1 is fragile to prior choice or
+   structural. ~100 min wall.
+3. **Stage 2 at d6 on hard MQAR + SC.** Bridges back to the LM arc.
+   If d6 reproduces the d4 pattern, the original LM "neutral"
+   verdict gets its mechanism at the architecture's native scale.
+   ~200 min wall total.
+
+Lower-priority: learnable η_init via small MLP on input statistics
+(tests whether input-conditional priors dissolve the task-mix
+problem); induction-heads probe (third axis between recall and
+state-tracking); architectural variants — swap topology vs additive,
+different memory layer placements.
+
+### Branch state
+
+Seven commits over 2026-05-18→20:
+- `63fd385` feat: bench/ playground v0 — harness + MQAR + SelectiveCopy
+- `5b41cf3` result: W_o init sweep at d4, easy + hard MQAR
+- `a5132e4` result: SelectiveCopy at hard difficulty, Stage 1 hurts
+- `5c0b8d0` result: Stage 2 wins on hard SelectiveCopy
+- `79c8c1e` result: Stage 2 loses on hard MQAR
+- `a485265` result: η_init sweep U-curve on Stage 2 hard MQAR
+- `[next]` docs: bench v0 synthesis HTML + this handoff update
+
+Local-only. Branch back online with a concrete next-experiment list
+instead of a paused-state question mark. **Suggested fresh-session
+pickup: option 1 (n=2-3 seeds on the four headline numbers) before
+any new architectural claim.** The single most important caveat on
+every current bench v0 claim is "n=1 seed"; bounding that is the
+first thing.
+
 

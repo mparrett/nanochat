@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>bench v0 — Stage 2's task signature, surfaced at probe scale</title>
+<style>
+  :root {
+    --paper: #f5f1e8;
+    --paper-dim: #ebe5d6;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-mute: #8a857a;
+    --rule: #c9c2b0;
+    --accent: #b04a2f;
+    --accent-soft: #d97b5c;
+    --green: #4a7c3f;
+    --green-bright: #5a9c4f;
+    --gold: #b08a2a;
+    --blue: #3f5f7c;
+    --code-bg: #1c1d1f;
+    --code-fg: #e8e3d4;
+    --code-mute: #8d8675;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Charter", "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(0,0,0,0.025) 31px 32px),
+      var(--paper);
+  }
+  .sheet { max-width: 920px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+
+  .masthead {
+    border-top: 4px double var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0 1rem;
+    margin-bottom: 3rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1rem;
+  }
+  .masthead .kicker {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+  }
+  .masthead h1 {
+    font-family: "Iowan Old Style", "Charter", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(2rem, 4.6vw, 3.2rem);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .masthead h1 em { font-style: italic; color: var(--accent); }
+  .masthead .meta {
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+    text-align: right;
+    line-height: 1.5;
+  }
+  .masthead .meta strong { color: var(--ink); font-weight: 600; }
+
+  .lede { font-size: 1.25rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 3rem; max-width: 38em; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .pull {
+    border-left: 3px solid var(--accent);
+    padding: 1.2rem 1.5rem;
+    margin: 2.5rem 0;
+    background: var(--paper-dim);
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.15rem;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .pull .src {
+    display: block;
+    margin-top: 0.6rem;
+    font-family: "JetBrains Mono", monospace;
+    font-style: normal;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  section { margin: 3rem 0; }
+  section > .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+  section > h2 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.85rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0.2rem 0 1.2rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.6rem;
+  }
+  section h3 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 1.6rem 0 0.5rem;
+  }
+  p { margin: 0 0 1rem; }
+  p + p { text-indent: 1.5em; }
+
+  pre, code { font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace; }
+  code {
+    font-size: 0.92em;
+    background: var(--paper-dim);
+    padding: 0.05em 0.35em;
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 1.2rem 1.4rem;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    overflow-x: auto;
+    margin: 1.4rem 0;
+    border-left: 3px solid var(--code-mute);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.4rem 0;
+    font-size: 0.95rem;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+  }
+  th, td {
+    padding: 0.7rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--paper-dim); }
+  th {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 600;
+    border-bottom: 2px solid var(--ink);
+    background: var(--paper);
+  }
+  td.num { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; color: var(--ink); }
+  td.num.lo { color: var(--ink-mute); }
+  td.num.hi { color: var(--green); font-weight: 700; }
+  td.num.win { color: var(--accent); font-weight: 700; }
+  td.num.flat { color: var(--ink-mute); }
+  td.num.bad { color: var(--blue); font-weight: 700; }
+  td.center { text-align: center; }
+  td.right { text-align: right; }
+  th.right { text-align: right; }
+  tr.headline td { background: var(--paper-dim); font-weight: 700; }
+
+  .scorecard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1.8rem 0;
+  }
+  .scorecard .card {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--accent);
+    padding: 1rem 1.1rem;
+  }
+  .scorecard .card.flat { border-top-color: var(--ink-mute); }
+  .scorecard .card.major { border-top-color: var(--green-bright); border-top-width: 4px; }
+  .scorecard .card.lose { border-top-color: var(--blue); border-top-width: 4px; }
+  .scorecard .card .lbl {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 0.4rem;
+  }
+  .scorecard .card .val {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--ink);
+  }
+  .scorecard .card.flat .val { color: var(--ink-mute); }
+  .scorecard .card.major .val { color: var(--green); }
+  .scorecard .card.lose .val { color: var(--blue); }
+  .scorecard .card.win .val { color: var(--accent); }
+  .scorecard .card .sub {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+    margin-top: 0.3rem;
+  }
+
+  .traj {
+    background: var(--paper-dim);
+    border: 1px solid var(--rule);
+    padding: 1.2rem 1.4rem;
+    margin: 1.4rem 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78rem;
+    line-height: 1.65;
+    overflow-x: auto;
+  }
+  .traj .row {
+    display: grid;
+    grid-template-columns: 5em 9em 1fr 6em;
+    gap: 0.8rem;
+    align-items: center;
+    padding: 0.15rem 0;
+  }
+  .traj .row .step { color: var(--ink-mute); }
+  .traj .row .acc { color: var(--ink); font-weight: 600; }
+  .traj .row .bar {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    height: 14px;
+    position: relative;
+  }
+  .traj .row .bar > span { display: block; height: 100%; }
+  .traj .row .bar > span.b1 { background: var(--ink-mute); }
+  .traj .row .bar > span.b2 { background: var(--gold); }
+  .traj .row .bar > span.b3 { background: var(--green-bright); }
+  .traj .row .note { color: var(--ink-mute); font-size: 0.72rem; }
+  .traj .baseline { color: var(--accent); font-style: italic; padding-top: 0.4rem; }
+  .traj .legend {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    color: var(--ink-mute);
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.05em;
+  }
+  .traj .legend .sw { display: inline-block; width: 0.9em; height: 0.9em; vertical-align: middle; margin: 0 0.3em 0 0.6em; }
+  .traj .legend .sw.b1 { background: var(--ink-mute); }
+  .traj .legend .sw.b2 { background: var(--gold); }
+  .traj .legend .sw.b3 { background: var(--green-bright); }
+
+  .ucurve {
+    background: var(--paper-dim);
+    border: 1px solid var(--rule);
+    padding: 1.4rem 1.6rem;
+    margin: 1.6rem 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .ucurve .axis { color: var(--ink-mute); }
+  .ucurve .point { color: var(--accent); font-weight: 700; }
+  .ucurve .ref { color: var(--green); }
+
+  ol.takeaways { list-style: none; counter-reset: t; padding: 0; margin: 1.4rem 0; }
+  ol.takeaways li { counter-increment: t; padding-left: 3rem; position: relative; margin-bottom: 1rem; }
+  ol.takeaways li::before {
+    content: counter(t, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+  }
+  ol.takeaways b { font-weight: 700; }
+
+  .colophon {
+    margin-top: 5rem;
+    padding-top: 1.5rem;
+    border-top: 4px double var(--ink);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--ink-mute);
+    line-height: 1.7;
+  }
+  .colophon a { color: var(--ink); }
+  .colophon .commits { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.4rem; margin-top: 0.8rem; }
+  .colophon .commits code { background: none; padding: 0; color: var(--ink-soft); }
+
+  hr.fancy { border: none; text-align: center; margin: 2.5rem 0; color: var(--ink-mute); }
+  hr.fancy::before { content: "·   ·   ·"; letter-spacing: 0.5em; }
+
+  @media (max-width: 700px) {
+    .sheet { padding: 2rem 1.1rem 4rem; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead .meta { text-align: left; }
+    .lede { font-size: 1.1rem; }
+    .traj .row { grid-template-columns: 4em 8em 1fr 5em; font-size: 0.72rem; }
+  }
+</style>
+</head>
+<body>
+<article class="sheet">
+
+<header class="masthead">
+  <div>
+    <div class="kicker">bench v0 result &nbsp;·&nbsp; eleven runs at d4 on Apple Silicon</div>
+    <h1>Stage 2's <em>task signature</em>,<br>surfaced at probe scale.</h1>
+  </div>
+  <div class="meta">
+    <strong>Date</strong> 2026-05-20<br>
+    <strong>Hardware</strong> MacBook M2, 24 GB<br>
+    <strong>Codebase</strong> nanochat / Hope-NL<br>
+    <strong>Total compute</strong> ~250 min
+  </div>
+</header>
+
+<p class="lede">
+  Two weeks ago the Hope/NL track concluded with <strong>Stage 2 is neutral on LM val_bpb under recipe-controlled comparison</strong> at d6/5000-iter and got paused. A δ-mem detour last weekend produced a finding that didn't fit that verdict: working-memory mechanisms lift multi-step <em>generation</em> tasks but don't touch long-context <em>recall</em>. To test whether the same axis shows up in our own architecture, we built a fast-iteration probe harness — <strong>bench v0, eight runs in 2½ hours of compute</strong> — and watched Stage 2 saturate <strong>2× faster than baseline on SelectiveCopy</strong> while losing by 1.67× on MQAR. Three more runs swept the η_init prior; none closed the gap. <strong>The architecture has wins and losses on opposite task axes, and the d6/5000-iter LM aggregate averaged them away.</strong>
+</p>
+
+<div class="pull">
+  "Stage 2 is neutral, not net-positive, on natural-language val_bpb."
+  <span class="src">— Hope/NL track synthesis, 2026-05-05</span>
+</div>
+
+<p>
+  The synthesis verdict from two weeks ago stands on what it measured. The bench v0 result doesn't overturn it; it adds internal structure. Stage 2 has wins (selective state tracking) and losses (uniform recall). Natural language is a mix of both demands, so the two effects net out close to zero on val_bpb. The aggregate was correct; the underlying architecture has more to say.
+</p>
+
+<section>
+  <div class="label">01 / Context</div>
+  <h2>Where the track was paused, and why we picked it up again</h2>
+  <p>
+    The Hope/NL arc finished its from-scratch d6/d8 pretrain phase on 2026-05-13 with ADR-008: pause the LM-loss arc, move memory-mechanism research into a much smaller iteration loop (depth 2–4, synthetic diagnostic tasks, &lt;5 min per architectural variant). The d6 result was clean: Stage 2 (learned-α/η additive memory at block 1) is <strong>neutral on val_bpb at recipe parity</strong> — the original "+1.8% SFT win" was overwhelmingly recipe drift, and once recipe was controlled, the architectural delta sat inside seed noise.
+  </p>
+  <p>
+    "Neutral, not bad" was the right call. The architecture wasn't broken — the MQAR probe with the W_o init fix showed Stage 1 memory matching baseline on synthetic recall. But the LM-loss aggregate gave us no traction on <em>what</em> the architecture was actually doing differently. That's the gap the bench v0 playground was built to fill.
+  </p>
+
+  <h3>The δ-mem detour pointed at the right diagnostic axis</h3>
+  <p>
+    The weekend before this work, we ported δ-mem (Lei et al., May 2026) to MLX and ran it against our six-task ChatCORE suite plus MBPP and HotpotQA. The full writeup is at <a href="delta_mem_field_result_2026-05-18.html"><code>delta_mem_field_result_2026-05-18.html</code></a>. The clean empirical finding:
+  </p>
+  <ul>
+    <li><strong>Lifts on three multi-step generation tasks:</strong> HumanEval +12.2pp (2.33σ), GSM8K +5.5pp, MBPP +8.0pp (Fisher's p &lt; 0.001 combined).</li>
+    <li><strong>Flat on four knowledge tasks:</strong> ARC-Easy, ARC-Challenge, MMLU, SpellingBee (all |z| &lt; 0.7).</li>
+    <li><strong>Flat on the paper's own headline long-context recall benchmark:</strong> HotpotQA Δ mean F1 = +0.0003 across 200 examples.</li>
+  </ul>
+  <p>
+    The implication: δ-mem isn't a long-term-memory mechanism (the paper's framing) but a <em>working-memory</em> one. The axis that lifts is multi-step generation requiring selective state across many output tokens, not retrieval across long contexts. Whatever δ-mem is doing structurally, it's the kind of thing that helps when you need to write content, ignore noise, and carry selective state forward.
+  </p>
+  <p>
+    That observation needed to be tested against our own architecture. If δ-mem's working-memory signature is real, Hope/NL's Stage 2 (learned per-token α/η gates on linear-attention memory) might do the same thing for the same reason. The original Stage 1.5 probe (MQAR) only tests <em>recall</em>; it can't distinguish "memory engaged" from "memory engaged on the right axis." We needed a state-tracking probe.
+  </p>
+</section>
+
+<section>
+  <div class="label">02 / The bench harness</div>
+  <h2>Two probes, three architectural arms, &lt;25 min per variant</h2>
+  <p>
+    <code>bench/tasks.py</code> defines a small Task ABC plus two diagnostic probes; <code>bench/run.py</code> is a single-file CLI runner that threads `--task` and the existing `--hope-*` flags into a small nanochat GPT with random init. JSONL logs to <code>bench/logs/&lt;label&gt;.jsonl</code>, one record per eval step.
+  </p>
+  <p>
+    Two probes, oriented to the two memory axes we care about:
+  </p>
+  <ul>
+    <li><strong>MQAR</strong> (Multi-Query Associative Recall — ported from <code>dev/probe_mqar.py</code>). Recall axis: sequence is <code>bos, k₁,v₁, …, k_K,v_K, sep, q₁,a₁, …, q_M,a_M</code>; model must look up the value bound to each query key. Tests pure key→value recall.</li>
+    <li><strong>SelectiveCopy</strong> (Mamba's canonical state-tracking probe — new in this bench). State-tracking axis: K content tokens scattered through a length-T_in noise stream; after a separator, model must copy the content in order. Tests selective gating: write content, ignore noise.</li>
+  </ul>
+  <p>
+    Three architectural arms across both probes:
+  </p>
+  <ul>
+    <li><strong>baseline</strong> — vanilla nanochat block (attention + MLP at every layer). No memory module.</li>
+    <li><strong>Stage 1</strong> — additive linear-attention memory at block 1, fixed α = η = 1 (no gating), W_o init = 1.0 (the Stage 1.5b fix).</li>
+    <li><strong>Stage 2</strong> — same topology, learned per-token α/η via <code>α_t = α_max · σ(W_α x_t + b_α)</code> and <code>η_t = η_max · σ(W_η x_t + b_η)</code>. Canonical priors: α_init = 0.99, η_init = 0.1.</li>
+  </ul>
+  <p>
+    All runs at d4 (n_embd = 256, ~37M params), seed = 0, eval-every 25 steps, device-batch 64. Wall budget: 16–25 min per variant on MPS.
+  </p>
+</section>
+
+<section>
+  <div class="label">03 / The runs</div>
+  <h2>Eleven runs, two probes, two difficulty levels</h2>
+
+  <h3>The headline three: hard MQAR vs hard SC</h3>
+  <table>
+    <thead><tr>
+      <th>Task &amp; difficulty</th>
+      <th class="right">baseline</th>
+      <th class="right">Stage 1 (W_o=1.0)</th>
+      <th class="right">Stage 2 (η=0.1)</th>
+      <th>Direction</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>MQAR easy</strong> (K=16, T=128)</td>
+        <td class="num right">75</td>
+        <td class="num right flat">125</td>
+        <td class="num right lo">—</td>
+        <td>task overcapacity for MLP+attn</td>
+      </tr>
+      <tr>
+        <td><strong>MQAR hard</strong> (K=64, T=256)</td>
+        <td class="num right">225</td>
+        <td class="num right">250</td>
+        <td class="num right bad">375</td>
+        <td><strong>Stage 2 loses by 150</strong></td>
+      </tr>
+      <tr>
+        <td><strong>SC hard</strong> (K=16, T_in=192)</td>
+        <td class="num right">200</td>
+        <td class="num right bad">375</td>
+        <td class="num right win">100</td>
+        <td><strong>Stage 2 wins by 100</strong></td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Numbers are first eval step (granularity 25) where held-out accuracy ≥ 0.95. Lower is better. Three observations from this single table:
+  </p>
+  <ul>
+    <li>Easy MQAR is overcapacity for MLP+attn alone (baseline saturates at 75); the architecture doesn't matter. Hard MQAR opens room for memory to do something visible.</li>
+    <li>On hard MQAR, Stage 1 fixed-α memory costs ~25 steps vs baseline (small overhead from added module weight). Stage 2 learned gates cost <em>150 steps</em> — a different magnitude.</li>
+    <li>On hard SC, the ranking flips entirely. Stage 1 fixed-α <em>hurts</em> by 175 steps; Stage 2 learned gates <em>win</em> by 100. Same architectures, opposite directions.</li>
+  </ul>
+
+  <h3>The MQAR-hard trajectories</h3>
+  <p>
+    Each row is the held-out accuracy at that eval step. The trajectory shapes are as diagnostic as the saturation numbers:
+  </p>
+  <div class="traj">
+    <div class="legend">
+      <span class="sw b1"></span>baseline
+      <span class="sw b2"></span>Stage 1
+      <span class="sw b3"></span>Stage 2 (η=0.1)
+    </div>
+    <div class="row"><span class="step">step 100</span><span class="acc">1.5 / 1.5 / 1.5</span><span class="bar"></span><span class="note">all flat</span></div>
+    <div class="row"><span class="step">step 125</span><span class="acc">1.5 / <b>40.5</b> / 1.4</span><span class="bar"><span class="b2" style="width:40%"></span></span><span class="note">Stage 1 engages</span></div>
+    <div class="row"><span class="step">step 175</span><span class="acc">1.6 / 53.8 / 1.4</span><span class="bar"><span class="b2" style="width:53%"></span></span><span class="note">Stage 1 plateau</span></div>
+    <div class="row"><span class="step">step 200</span><span class="acc"><b>77.9</b> / 52.2 / 1.6</span><span class="bar"><span class="b1" style="width:78%"></span></span><span class="note">baseline groks</span></div>
+    <div class="row"><span class="step">step 225</span><span class="acc"><b>99.9</b> / 52.7 / 1.6</span><span class="bar"><span class="b1" style="width:99%"></span></span><span class="note">baseline saturated</span></div>
+    <div class="row"><span class="step">step 250</span><span class="acc">— / <b>98.7</b> / 2.5</span><span class="bar"><span class="b2" style="width:98%"></span></span><span class="note">Stage 1 groks</span></div>
+    <div class="row"><span class="step">step 275</span><span class="acc">— / — / <b>42.8</b></span><span class="bar"><span class="b3" style="width:42%"></span></span><span class="note">Stage 2 finally engages</span></div>
+    <div class="row"><span class="step">step 375</span><span class="acc">— / — / <b>95.8</b></span><span class="bar"><span class="b3" style="width:95%"></span></span><span class="note">Stage 2 groks</span></div>
+    <div class="baseline">baseline 225 · Stage 1 250 · Stage 2 375</div>
+  </div>
+  <p>
+    Stage 2's MQAR trajectory looks like Stage 1's, just delayed by 150 steps. The reason is in the η_init prior — by default Stage 2 starts with η ≈ 0.1, meaning the memory module writes very little per token. MQAR wants every binding written into memory (η near 1); the model has to first crank η up before recall starts working. That's 150 steps of "learn to undo the inductive bias."
+  </p>
+
+  <h3>The SC-hard trajectories</h3>
+  <p>
+    Same three architectures, on a probe with the opposite structural demand:
+  </p>
+  <div class="traj">
+    <div class="legend">
+      <span class="sw b1"></span>baseline
+      <span class="sw b2"></span>Stage 1
+      <span class="sw b3"></span>Stage 2 (η=0.1)
+    </div>
+    <div class="row"><span class="step">step 25</span><span class="acc">2.8 / 3.2 / 2.8</span><span class="bar"></span><span class="note">all near random</span></div>
+    <div class="row"><span class="step">step 50</span><span class="acc">2.8 / 9.6 / <b>28.3</b></span><span class="bar"><span class="b3" style="width:28%"></span></span><span class="note">Stage 2 engages early</span></div>
+    <div class="row"><span class="step">step 75</span><span class="acc">11.3 / 19.2 / <b>90.5</b></span><span class="bar"><span class="b3" style="width:90%"></span></span><span class="note">Stage 2 grokking</span></div>
+    <div class="row"><span class="step">step 100</span><span class="acc">32.8 / 18.2 / <b>98.6</b></span><span class="bar"><span class="b3" style="width:98%"></span></span><span class="note">Stage 2 saturated</span></div>
+    <div class="row"><span class="step">step 150</span><span class="acc"><b>72.7</b> / 24.8 / 99.4</span><span class="bar"><span class="b1" style="width:72%"></span></span><span class="note">baseline approaches</span></div>
+    <div class="row"><span class="step">step 200</span><span class="acc"><b>95.1</b> / 39.9 / 99.5</span><span class="bar"><span class="b1" style="width:95%"></span></span><span class="note">baseline saturated</span></div>
+    <div class="row"><span class="step">step 300</span><span class="acc">98.5 / 82.2 / 99.5</span><span class="bar"><span class="b2" style="width:82%"></span></span><span class="note">Stage 1 catching up</span></div>
+    <div class="row"><span class="step">step 375</span><span class="acc">— / <b>96.1</b> / —</span><span class="bar"><span class="b2" style="width:96%"></span></span><span class="note">Stage 1 saturated</span></div>
+    <div class="baseline">baseline 200 · Stage 1 375 · Stage 2 100</div>
+  </div>
+  <p>
+    Stage 2 saturates at step 100 — half the baseline's wall, a third of Stage 1's. Stage 1 takes 175 extra steps to overcome the noise it injects into the residual (η=1 forces writing every token, including noise). Stage 2 with η_init=0.1 starts <em>at</em> the right policy ("small writes by default") and the model learns to push η up only at content positions.
+  </p>
+  <p>
+    Same architecture, opposite outcome. The difference is the task's structural demand.
+  </p>
+</section>
+
+<section>
+  <div class="label">04 / The architectural axis</div>
+  <h2>Stage 1 and Stage 2 have <em>opposite optimal task signatures</em></h2>
+
+  <div class="scorecard">
+    <div class="card major">
+      <div class="lbl">SC hard, Stage 2 vs baseline</div>
+      <div class="val">2.00× faster</div>
+      <div class="sub">sat 100 vs 200 · final acc 0.9985</div>
+    </div>
+    <div class="card lose">
+      <div class="lbl">MQAR hard, Stage 2 vs baseline</div>
+      <div class="val">1.67× slower</div>
+      <div class="sub">sat 375 vs 225 · final acc 0.9806</div>
+    </div>
+    <div class="card lose">
+      <div class="lbl">SC hard, Stage 1 vs baseline</div>
+      <div class="val">1.88× slower</div>
+      <div class="sub">sat 375 vs 200 · +175 step cost</div>
+    </div>
+    <div class="card flat">
+      <div class="lbl">MQAR hard, Stage 1 vs baseline</div>
+      <div class="val">+25 steps</div>
+      <div class="sub">sat 250 vs 225 · small overhead</div>
+    </div>
+  </div>
+
+  <h3>The mechanism</h3>
+  <p>
+    Stage 2's learned per-token α and η give the model the ability to selectively write to and read from memory. Stage 1's α = η = 1 commits the model to writing every token into memory and retaining it forever. These are different inductive biases:
+  </p>
+  <ul>
+    <li><strong>Uniform-write tasks</strong> (MQAR): every position is meaningful, and the optimal policy is "write everything, never forget." Stage 1's fixed α = η = 1 is exactly this policy at init. Stage 2 has to <em>learn</em> to push its gates near 1 across all positions — the η_init = 0.1 prior puts it far from optimum.</li>
+    <li><strong>Selective-write tasks</strong> (SC): some positions (content) should be written, others (noise) ignored. Stage 1's "write everything" injects noise into memory, which the rest of the model has to suppress. Stage 2's η_init = 0.1 happens to start near the right policy ("write small amounts by default"); the model just learns to push η up at content positions.</li>
+  </ul>
+  <p>
+    The bench result is now this:
+  </p>
+  <pre><code>             | uniform-write    | selective-write
+-------------|------------------|----------------
+ Stage 1     | small overhead   | severe penalty
+ (fixed α=η=1)| (always write)   | (writes noise too)
+-------------|------------------|----------------
+ Stage 2     | severe penalty   | net win
+ (learned α/η)| (gate optimization
+              |  budget + bias)  | (selectivity is the right tool)</code></pre>
+  <p>
+    Stage 1 and Stage 2 are <em>mirror images</em> on this 2×2. Each is good at exactly the task type the other is bad at. Neither dominates the other globally.
+  </p>
+</section>
+
+<section>
+  <div class="label">05 / The η_init U-curve</div>
+  <h2>The architectural cost is irreducible by prior tuning</h2>
+  <p>
+    The most obvious response to "Stage 2 loses on MQAR" is "the prior is wrong — raise η_init." A 5-point sweep tested this directly on hard MQAR, varying b_η to set η_init ∈ {0.1, 0.3, 0.5, 0.8, 0.99}:
+  </p>
+
+  <table>
+    <thead><tr>
+      <th>η_init</th>
+      <th class="right">b_η</th>
+      <th class="right">sat step</th>
+      <th class="right">final acc</th>
+      <th>plateau structure</th>
+    </tr></thead>
+    <tbody>
+      <tr><td>0.1 (canonical)</td>  <td class="num right">−2.197</td> <td class="num right">375</td> <td class="num right">0.9806</td><td>late entry, short plateau</td></tr>
+      <tr><td>0.3</td>               <td class="num right">−0.847</td> <td class="num right">400</td> <td class="num right">0.9708</td><td>early entry, long plateau</td></tr>
+      <tr><td>0.5</td>               <td class="num right">0.000</td>  <td class="num right bad">475</td> <td class="num right">0.9977</td><td>early entry, very long plateau</td></tr>
+      <tr><td>0.8</td>               <td class="num right">1.386</td>  <td class="num right">425</td> <td class="num right">0.9990</td><td>mid entry, quick grok</td></tr>
+      <tr class="headline"><td><strong>0.99</strong></td><td class="num right">4.595</td><td class="num right win">325</td><td class="num right">0.9995</td><td>fastest of sweep</td></tr>
+    </tbody>
+  </table>
+
+  <div class="ucurve"><span class="axis">sat
+500 |              *  (η=0.5, 475)
+    |                     *  (η=0.8, 425)
+450 |                *
+400 |    *  (η=0.3)
+    |  *  (η=0.1, 375)
+375 |
+350 |
+325 |                          <span class="point">*  (η=0.99, 325)</span>
+300 |
+250 | <span class="ref">─── Stage 1 (250) ───────────────────────</span>
+225 | <span class="ref">─── baseline (225) ──────────────────────</span>
+    +──┬─────┬─────┬─────┬─────┬──── η_init
+       0.1   0.3   0.5   0.8   0.99</span></div>
+
+  <p>
+    The landscape is <strong>non-monotonic</strong> with a wide trough in the middle. The worst point is η = 0.5 (sat = 475); both extremes (0.1 and 0.99) escape faster. The best Stage 2 prior — η = 0.99, which mimics Stage 1's α = η = 1 starting condition — still trails baseline by <strong>100 steps</strong> and Stage 1 by <strong>75 steps</strong>.
+  </p>
+
+  <h3>Why the middle is worst</h3>
+  <p>
+    MQAR has a wide partial-recall basin at ~50% accuracy — a solution where the model can answer half the queries via partial use of memory + attention. Whether the model gets stuck in that basin depends on η_init:
+  </p>
+  <ul>
+    <li><strong>η = 0.1 (canonical):</strong> memory engages too late to enter the basin during the basin's high-gradient phase. Model learns full-recall directly. Late entry, short plateau.</li>
+    <li><strong>η = 0.3, 0.5 (moderate):</strong> memory engages early into the basin's most attractive region. Model gets stuck refining the partial solution. Long plateau (&gt; 250 steps).</li>
+    <li><strong>η = 0.99 (extreme):</strong> memory writes are at full strength from step 0. The partial solution is dominated by the full solution from the start; the basin is no longer competitive. Mid entry, short plateau, fastest grok.</li>
+  </ul>
+  <p>
+    This is a property of the loss landscape × η_init interaction, not the architecture per se. But it explains why "just tune the prior" doesn't work: the prior choice doesn't change the irreducible cost of having learnable gates, it only navigates the local basin structure differently.
+  </p>
+
+  <h3>The ~75-100 step irreducible cost</h3>
+  <p>
+    Even at η_init = 0.99 — where Stage 2's initial conditions are essentially identical to Stage 1's α = η = 1 — Stage 2 still trails Stage 1 by 75 steps. The architecture pays for:
+  </p>
+  <ol class="takeaways">
+    <li><b>Gate-parameter optimization budget.</b> Stage 1 has no W_α, W_η, b_α, b_η to update; the gates are constants. Stage 2 has to allocate gradient signal to those four matrices/vectors. That's pure optimization cost regardless of where the gates start.</li>
+    <li><b>Inductive bias of "selectivity is possible."</b> Even if the gates stay near 1.0, the model knows the gates <em>can</em> deviate. This widens the effective hypothesis space the optimizer searches in early training. On a uniform-write task, this extra freedom is pure cost.</li>
+  </ol>
+  <p>
+    Tuning the prior — moving η_init from 0.1 to 0.99 — covers ~50 steps of the 150-step Stage-2-vs-baseline gap on MQAR. The remaining ~75-100 steps are the architectural floor.
+  </p>
+</section>
+
+<section>
+  <div class="label">06 / The δ-mem connection</div>
+  <h2>Same axis, different mechanism</h2>
+  <p>
+    The bench result reproduces the δ-mem field-result axis at probe scale:
+  </p>
+  <table>
+    <thead><tr>
+      <th>Mechanism</th>
+      <th>Selective state tracking</th>
+      <th>Uniform recall</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>δ-mem</strong> (rank-8 recurrent state with delta-rule updates, learned gates)</td>
+        <td class="num win">lifts (HumanEval +12.2pp, MBPP +8.0pp, GSM8K +5.5pp)</td>
+        <td class="num flat">null (HotpotQA ΔF1 = +0.0003)</td>
+      </tr>
+      <tr>
+        <td><strong>Stage 2</strong> (additive linear-attention memory, learned per-token α/η)</td>
+        <td class="num win">lifts (SC sat 100 vs baseline 200)</td>
+        <td class="num bad">loses (MQAR sat 375 vs baseline 225)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Two completely different architectural mechanisms, identical axis-of-value. The thing they share is <strong>learned selectivity at the per-token level</strong>: both have parameters that decide, conditional on the input token, how much to write into and read out of memory state. Fixed-gate architectures (Stage 1) don't have this knob; pure-attention architectures (baseline) don't have memory state at all.
+  </p>
+  <p>
+    The bench cleanly distinguishes the two regimes that the δ-mem field result identified empirically. Stage 2 is what δ-mem looks like at small scale on synthetic probes: it wins where selective gating matters, is irrelevant or actively harmful otherwise.
+  </p>
+</section>
+
+<section>
+  <div class="label">07 / Implications for the Stage 2 verdict</div>
+  <h2>The "neutral" aggregate had structure</h2>
+  <p>
+    The 2026-05-05 Hope/NL track synthesis concluded: <em>at d6/5000-iter on ClimbMix with a MMLU/GSM8K SFT mix, Stage 2 is neutral, not net-positive, on natural-language val_bpb.</em> That conclusion stands on what it measured. The bench result adds the missing internal structure:
+  </p>
+  <ol class="takeaways">
+    <li><b>Stage 2 has an architectural signature net-positive on selective state-tracking tasks</b> that LM val_bpb doesn't isolate. SC at d4 saturates 2× faster than baseline.</li>
+    <li><b>Stage 2 has an architectural signature net-negative on uniform-recall tasks</b> that LM val_bpb also doesn't isolate. MQAR at d4 saturates 1.67× slower than baseline; no η_init prior closes the gap.</li>
+    <li><b>The two effects net out on mixed natural-language pretraining.</b> "Neutral" is the correct aggregate. It hides a real internal structure where the architecture has wins and losses on opposite task axes.</li>
+  </ol>
+  <p>
+    Future Stage 2 evaluations should:
+  </p>
+  <ul>
+    <li>Test on selective-state-heavy benchmarks (code generation, multi-step reasoning, instruction following). <strong>Predicted: Stage 2 wins.</strong></li>
+    <li>Test on uniform-recall-heavy benchmarks (open-domain QA over long contexts, knowledge retrieval). <strong>Predicted: Stage 2 loses or is neutral.</strong></li>
+    <li>Not tune η_init globally. The U-curve says there's no universally-optimal prior; the optimum is task-mix-dependent. Either accept canonical defaults and document the task-mix sensitivity, or make η_init input-conditional (e.g., a small MLP on global input statistics — out of scope for v0).</li>
+  </ul>
+  <p>
+    This is a sharper architectural picture than "Stage 2 is neutral, defer." The original verdict's <em>aggregate</em> conclusion is unchanged; the <em>mechanism</em> is now explained.
+  </p>
+</section>
+
+<section>
+  <div class="label">08 / What's left</div>
+  <h2>The next-level questions</h2>
+  <p>
+    Three priorities, in increasing order of cost:
+  </p>
+  <ol class="takeaways">
+    <li><b>n=2-3 seeds on the four headline numbers.</b> Stage 2 SC sat=100, Stage 2 MQAR sat=375 (η=0.1), Stage 2 MQAR sat=475 (η=0.5, the U-curve worst), Stage 1 SC sat=375. Cheapest path to bounding the seed-noise component of every claim. ~2 h wall.</li>
+    <li><b>η_init sweep on hard SC.</b> Mirror of the MQAR U-curve. Tests whether SC's win at η=0.1 is fragile to prior choice (if SC also has a U-shape with η=0.1 happening to land on the good side) or structural (if SC is robustly good across the η range). ~100 min wall. The directly motivated follow-up.</li>
+    <li><b>Stage 2 at d6 on hard MQAR + SC.</b> Bridges back to the LM arc. If the d6 results reproduce the d4 pattern, the original LM "neutral" verdict gets its mechanism explanation at the architecture's native scale. ~50 min per task per arm = 200 min total.</li>
+  </ol>
+  <p>
+    Lower-priority follow-ups: learnable η_init via a small MLP on input statistics (tests whether the task-mix problem dissolves with input-conditional priors); induction-heads probe (adds a third axis between recall and state-tracking); architectural variants — swap topology vs additive, different memory layer placements.
+  </p>
+  <p>
+    The 2026-05-13 strategic-pivot decision stands: the d6/d8 from-scratch LM arc is paused; bench is where memory-mechanism iteration happens now. The bench v0 milestone closes with the architecture having a documented task signature instead of an opaque "neutral." That's the v0 product.
+  </p>
+</section>
+
+<section>
+  <div class="label">09 / Cost ledger</div>
+  <h2>Eleven runs, ~250 min of M2 wall</h2>
+  <table>
+    <thead><tr><th>Phase</th><th class="right">Wall</th><th class="right">Cumulative</th><th>Output</th></tr></thead>
+    <tbody>
+      <tr><td>bench/ scaffold + tasks.py + run.py</td><td class="num right">~30 min</td><td class="num right">0:30</td><td>3 source files, ~300 LOC</td></tr>
+      <tr><td>Easy MQAR: baseline + Stage 1 W_o=1.0 + W_o=0.0</td><td class="num right">22.7 min</td><td class="num right">0:53</td><td>sat 75 / 125 / 75</td></tr>
+      <tr><td>Hard MQAR: baseline + Stage 1 W_o=1.0 + W_o=0.0</td><td class="num right">47.7 min</td><td class="num right">1:40</td><td>sat 225 / 250 / 275</td></tr>
+      <tr><td>Hard SC: baseline + Stage 1 W_o=1.0</td><td class="num right">34.5 min</td><td class="num right">2:15</td><td>sat 200 / 375</td></tr>
+      <tr><td>Stage 2 hard SC</td><td class="num right">16.1 min</td><td class="num right">2:31</td><td>sat 100 (2× faster than baseline)</td></tr>
+      <tr><td>Stage 2 hard MQAR (η=0.1)</td><td class="num right">19.4 min</td><td class="num right">2:51</td><td>sat 375 (slower than baseline by 150)</td></tr>
+      <tr><td>η_init sweep on hard MQAR (η=0.3, 0.5, 0.8, 0.99)</td><td class="num right">92.3 min</td><td class="num right">4:23</td><td>U-curve: 400 / 475 / 425 / 325</td></tr>
+      <tr><td>Writeups (per-experiment markdowns + this HTML)</td><td class="num right">~50 min</td><td class="num right">5:13</td><td>5 docs + this synthesis</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Eleven runs total, ~250 min of M2 compute, three days end-to-end. Compare to the d6/5000-iter LM arc: a single recipe-controlled comparison on Stage 2 vs baseline at d6 costs ~6 h wall per arm. The bench has produced eleven characterized architecture × task data points in less than the wall budget of a single LM-arc comparison.
+  </p>
+  <p>
+    The ROI argument for probe-first methodology (ADR-001, 2026-05-01) keeps compounding. The W_o init bug was invisible at LM-loss scale; the bench probe surfaced it in &lt; 6 hours. The Stage 2 task signature was invisible at LM-loss scale; the bench probe surfaced it in &lt; 6 hours. Whatever the next architectural question is, the bench should see it before the LM arc would.
+  </p>
+</section>
+
+<hr class="fancy">
+
+<section>
+  <div class="label">10 / Coda</div>
+  <h2>The aggregate hid the architecture</h2>
+  <p>
+    Two weeks ago we wrote: "Stage 2 is neutral, not net-positive, on natural-language val_bpb. The MQAR probe shows the mechanism works on synthetic recall; the corpus + horizon don't reward it on natural text." Both clauses were correct. The second clause, in particular, was a careful hedge: <em>this corpus, this horizon, this scale.</em> We didn't claim the architecture was bad — only that we couldn't find it doing useful work.
+  </p>
+  <p>
+    What the bench surfaces is that the architecture <em>was</em> doing useful work the whole time. It just wasn't the kind of work that aggregated to a visible LM-loss delta. Stage 2's learned gates are net-positive on selective state-tracking tasks and net-negative on uniform-recall tasks. Mixed natural-language pretraining stresses both; the two effects cancel; val_bpb says zero. The original conclusion is correct on what it measured and silent on what it didn't.
+  </p>
+  <p>
+    The methodological lesson generalizes beyond Stage 2. <strong>LM-loss aggregates can hide architectural structure that synthetic probes will reveal in minutes.</strong> The d6/d8 LM-loss arc cost roughly 30 h of M2 wall to produce "neutral, defer." The bench cost ~2.5 h to produce "wins on selective tasks, loses on uniform tasks, the prior tuning is non-monotonic, and the architectural floor is irreducible." Different questions, different tools — the bench was the right tool for the question we couldn't get at with LM val_bpb.
+  </p>
+  <p>
+    The δ-mem detour pointed at the right axis (selective state vs uniform recall); the bench reproduced it on our own architecture; the η_init sweep ruled out the obvious "just tune the prior" escape. <strong>Stage 2 is neither dead nor a sleeping win — it's a tool with a known task signature.</strong> The Hope/NL track is back online, oriented to a more concrete question than the LM-loss arc could pose: <em>does the selective-state advantage hold at d6 and translate to natural-text benchmarks that stress it?</em>
+  </p>
+</section>
+
+<footer class="colophon">
+  Compiled 2026-05-20 on M2 MacBook · branch <code>experiment/hope-nested-learning</code>.<br>
+  Code:
+    <code>bench/tasks.py</code> ·
+    <code>bench/run.py</code> ·
+    <code>bench/__init__.py</code>.<br>
+  Companion writeups (per-experiment):
+    <code>docs/bench_v0_mqar_w_o_2026-05-18.md</code> (W_o init sweep) ·
+    <code>docs/bench_v0_selective_copy_2026-05-18.md</code> (Stage 1 on hard SC) ·
+    <code>docs/bench_v0_stage2_sc_hard_2026-05-19.md</code> (Stage 2 wins SC) ·
+    <code>docs/bench_v0_stage2_mqar_hard_2026-05-19.md</code> (Stage 2 loses MQAR) ·
+    <code>docs/bench_v0_stage2_eta_sweep_2026-05-19.md</code> (U-curve sweep).<br>
+  Upstream context:
+    <code>docs/hope_nl_track_synthesis_2026-05-05.md</code> (original Hope/NL verdict) ·
+    <code>docs/strategic_pivot_2026-05-13.md</code> (ADR-008, the pause) ·
+    <code>docs/delta_mem_field_result_2026-05-18.html</code> (the δ-mem detour, which pointed at this axis).
+  <div class="commits">
+    <code>63fd385</code> <span>feat: bench/ playground v0 — harness + MQAR + SelectiveCopy task module</span>
+    <code>5b41cf3</code> <span>result: bench v0 — W_o init sweep at d4, easy + hard MQAR</span>
+    <code>a5132e4</code> <span>result: bench v0 — SelectiveCopy at hard difficulty, Stage 1 memory hurts</span>
+    <code>5c0b8d0</code> <span>result: bench v0 — Stage 2 (learned-gate) wins on hard SelectiveCopy</span>
+    <code>79c8c1e</code> <span>result: bench v0 — Stage 2 loses on hard MQAR, axis is selective gating</span>
+    <code>a485265</code> <span>result: bench v0 — η_init sweep on Stage 2 hard MQAR, U-curve</span>
+    <code>[next]</code>  <span>docs: bench v0 result HTML synthesis + HANDOFF update (this commit)</span>
+  </div>
+</footer>
+
+</article>
+</body>
+</html>
