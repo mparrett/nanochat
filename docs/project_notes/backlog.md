@@ -6,6 +6,101 @@ literature or precedent. Move to `decisions.md` if/when picked up.
 
 ---
 
+## MeMo: parametric LLM-as-memory framework (2026-05-21)
+
+**Pitch.** Quek, Lee, Leong et al., **MeMo: Memory as a Model**, arXiv:2605.15156v2,
+May 2026 (NUS / A*STAR / Tokyo / Liquid AI / MIT CSAIL / AI Singapore / SMART).
+A *categorically different* take on "memory" from anything in our active axis:
+the memory is **an entire second LLM** (Qwen2.5-1.5B or 14B-Instruct) SFT'd to
+internalize a target corpus, queried by a frozen Executive (Qwen2.5-32B or
+Gemini-3-Flash) through a 3-stage multi-turn protocol (Grounding → Entity ID →
+Answer Synthesis). Two real technical contributions: (1) a 5-step reflection-QA
+synthesis pipeline whose Step 5 (cross-document synthesis) does the heavy
+lifting — ablating it collapses NarrativeQA from 24% → 6.37%; (2) the structured
+inference protocol where Memory responses are compact natural-language
+snippets, so retrieval cost is constant in corpus size.
+
+**Why it matters to us.**
+- **Matches the ADR-008 pivot direction** ("continuous-learning components
+  grafted onto pretrained 4-8B models running locally") exactly — except the
+  paper's reference design assumes H100/H200 training (90-180 GPU-h per Memory
+  model SFT, 150-240 GPU-h for data synthesis, 240 GPU-h for K=10 merging).
+- **Uses our hardware envelope's models as Memory.** The Memory model size in
+  their ablation (Qwen2.5-1.5B-Instruct) is roughly Bonsai-1.7B-class. Their
+  size-scaling table (Tab 4) shows 1.5B Memory loses meaningfully to 14B Memory
+  on all three benchmarks but is non-trivially functional.
+- **Different question from δ-mem / Hope/NL Stage 2.** Those are intrinsic
+  per-token state inside one model's forward pass; MeMo is external
+  composition of two models. Not competing approaches to the same question.
+  But MeMo's results suggest the long-context cross-document axis (where we
+  found δ-mem and Hope/NL Stage 2 both flat or null at HotpotQA) may need a
+  fundamentally different architectural shape than learned-gate recurrent
+  state — sub-query decomposition at the protocol level instead.
+
+**Headline numbers** (from Tab 2):
+
+| | BrowseComp-Plus | NarrativeQA | MuSiQue |
+|---|---:|---:|---:|
+| HippoRAG2 (best RAG) | 56.11 | 21.39 | 42.17 |
+| MeMo (Qwen2.5-32B exec) | 54.22 | 26.85 | 48.30 |
+| MeMo (Gemini-3-Flash exec) | **66.67** | **53.58** | **60.20** |
+| Perfect Retrieval (oracle) | 79.67 | 51.42 | 62.83 |
+
+Beats every RAG baseline on cross-document synthesis tasks; on NarrativeQA
+with Gemini-3-Flash Executive, **MeMo exceeds Perfect Retrieval** — the
+synthesized reflections carry information the raw evidence docs don't, when
+read with a strong reasoner. Also clean noise robustness vs RAG (5-6pp drop
+for RAG with 1×N distractors, MeMo ±2pp).
+
+**Why this is not an immediate experiment.**
+- **Full reproduction is CUDA-bound.** Step 5 of the synthesis pipeline is
+  O(k · C² · Q²); training is 3-epoch SFT on 600k-1.6M QA pairs with
+  FlashAttention 2 + DeepSpeed at LR 2e-5 on H100/H200. None of that runs on M2.
+- **Not on our active bench v0 axis.** bench v0's question is "do intrinsic
+  memory mechanisms specialize on selective vs uniform demands?" — concrete,
+  cheap, ~250 min/experiment. MeMo answers a different question.
+- **No published Memory model checkpoints.** The MEMORY models are corpus-
+  specific (one per BrowseComp-Plus / NarrativeQA / MuSiQue) and the paper
+  doesn't release them, so inference-only on a pretrained checkpoint isn't an
+  option the way it was for δ-mem.
+
+**Three viable engagement shapes if/when picked up.**
+1. **Read-only.** Log to backlog (this entry), no action. *Default and
+   probably correct unless a specific corpus motivates engagement.*
+2. **Inference-protocol-only** (~1 day). Skip both the synthesis pipeline and
+   the SFT. Use an existing Qwen3-4B-8bit or Bonsai-4B as both Memory and
+   Executive on a small test corpus; implement the 3-stage protocol in
+   `chat_eval_mlx.py`. Tests whether the *protocol* (sub-query decomposition
+   + entity narrowing + multi-turn synthesis) contributes anything orthogonal
+   to RAG even without trained reflections. Strong negative-result candidate:
+   if the protocol alone wins nothing, the SFT-on-reflections is doing the
+   work, which sharpens what MeMo really is.
+3. **Subset-pipeline** (~2-3 days). Steps 1-3 of synthesis are cheap (run via
+   API on a small corpus). Skip Step 5 (the expensive cross-document step),
+   accept the corresponding capability ceiling — Tab 9 says removing Step 5
+   drops NarrativeQA to 6.37 % — try SFT on a small Memory model on M2 using
+   the partial reflections. Cost-controlled capability-degraded reproduction.
+
+**Cost.** Engagement-dependent: 0 (default) / ~1 day (protocol-only) /
+~2-3 days (subset-pipeline) / weeks (full reproduction, would need CUDA box).
+
+**Status.** Open. Backlog only. Operator chose "log this for later" on
+2026-05-21 after reading the paper; no immediate experiment scheduled.
+
+**References.**
+- arXiv:2605.15156v2 (May 2026). Paper file at
+  `~/Library/Mobile Documents/com~apple~CloudDocs/Downloads/mem-2605.15156.pdf`.
+- Cited Cartridges (ref 65, `arXiv:2506.06266`) as the closest existing baseline
+  to MeMo; Cartridges scored 0.00 / 3.75 / 8.57 on Tab 2 (i.e., effectively
+  fails the cross-document synthesis question).
+- Cross-reference for our work: δ-mem field result
+  (`docs/delta_mem_field_result_2026-05-18.html`), strategic pivot ADR-008
+  (`docs/strategic_pivot_2026-05-13.md`), bench v0 result HTML
+  (`docs/bench_v0_result_2026-05-20.html`), project map
+  (`docs/project_map_2026-05-20.html`).
+
+---
+
 ## ~~δ-mem reproduction on fp-Qwen3-4B-Instruct~~ — MOVED TO INCOMING (2026-05-17)
 
 **Status:** Promoted from backlog to open ticket on 2026-05-17 after
