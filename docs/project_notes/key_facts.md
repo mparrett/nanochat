@@ -7,6 +7,16 @@
 ## Checkpoints
 - Layout: `$NANOCHAT_BASE_DIR/{base,chatsft,chatrl}_checkpoints/<model_tag>/`
 - Files: `model_<step>.pt`, `meta_<step>.json`, `optim_<step>_rank<N>.pt`
+- `optim_*.pt` is ~1.85× the model size and only needed to resume training.
+  Inference / eval / comparison only need `model_*.pt` + `meta_*.json`.
+- Canonical keepers (post 2026-05-24 Phase-1 cleanup):
+  `base_checkpoints/{d6_baseline_modern, d6_stage2, d8_overnight}` and
+  `chatsft_checkpoints/{d6_baseline_modern_sft, d6_stage2, d8_overnight_a2}`.
+- Cache forensics: if a future audit finds 0-byte "dirs" like `d6_a`/`d6_b`/`d6_b_iso`
+  under `base_checkpoints/`, they're dangling symlinks (legacy aliases to a
+  `d6` that was silently overwritten before `assert_checkpoint_dir_safe()` existed).
+  `[ -d "$path" ]` returns false because it dereferences — use `[ -L "$path" ]`
+  to detect, or `ls -la`. Safe to remove if target is gone.
 
 ## Compute / Precision
 - `COMPUTE_DTYPE` auto-detected (bf16 on SM 80+, fp32 elsewhere)
