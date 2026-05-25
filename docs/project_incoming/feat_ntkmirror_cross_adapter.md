@@ -109,13 +109,38 @@ Required mechanism components (~200-400 LOC port to a new
   NTK-Mirror's persona controller to a hypothetical other-task
   controller (e.g., self-correction) retain both?
 
-## Pre-launch hygiene
+## Pre-launch hygiene + memory-pressure dial list
 
-- Memory cleanup BEFORE launch (today's NTK-Mirror disjoint runner hit
-  4× slowdown from paging — much worse than nanochat training would).
-- `dev/preflight_memory.py` returning exit 0 is the gate.
-- Specifically kill `faprox.py` + `server.py` if not load-bearing for
-  that session.
+Today's disjoint runner hit ~4× slowdown from paging on M2 with ~0.5 GB
+free RAM. NTK-Mirror is more paging-sensitive than nanochat training
+because the forward-backward cycle is the dominant cost rather than the
+optimizer step. Operator's daemons (`faprox.py`, `server.py`, Adobe
+helpers, etc.) are load-bearing — **the only valid kill candidate is
+another MPS-heavy job using gigabytes**, not the standard daemon set.
+
+Run `dev/preflight_memory.py` for the read, but treat its output as
+informational rather than as a kill-list. Mitigation lives in the dial
+table below.
+
+### Memory-pressure dials (cheapest first, no-quality-risk first)
+
+| # | Intervention | Memory effect | Wall cost | Risk |
+|---|---|---|---|---|
+| 1 | Kill any concurrent MPS-heavy job (gigabytes) — NOT operator daemons | Direct, depends on what's running | Free | None |
+| 2 | `--max-length 256` (Qwen default is huge; persona-retention completions are ~80-200 tokens per `persona_retention_v1.jsonl` stats) | Reduces activation memory in proportion to seq-len cap | Free, possibly net-faster | None |
+| 3 | `--score-batches 8` (default 16) | Halves gate-selection memory peak | ~5% wall on a small phase | Top-K gate selection is robust to fewer batches |
+| 4 | `--gates 4000` (default 5000) | Tiny direct save; smaller controller | ~15-20% wall reduction (per-step gradient compute scales with gates) | Modest — composability worked at 5000 in today's disjoint smoke |
+| 5 | `--batch-size N/2` (default unknown — check) | Halves activation memory (the big consumer) | ~30-50% wall cost | None |
+| 6 | `--layers last:12` (Qwen2.5-0.5B has 24 layers; default "all") | Halves gate search space + hook overhead | Modest wall savings | Quality risk if NTK-Mirror benefits from gating early layers; untested in our hands |
+| 7 | `--dtype fp16` | Halves model + activation memory | Roughly neutral wall | Real — smoke ran fp32 cleanly; fp16 on MPS might trigger nanochat-style audit gaps |
+
+**Recommended starting bundle (dials 1-4):** `--max-length 256
+--score-batches 8 --gates 4000`. Likely net wall *win* vs defaults under
+paging, no quality risk. Achieves the operator's requested 10-20%
+memory headroom at zero wall cost.
+
+If still tight after launch, add dial 5 (`--batch-size`). Dials 6-7
+are reserved fallbacks.
 
 ## Recommendation
 
