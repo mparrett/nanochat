@@ -6,6 +6,87 @@ literature or precedent. Move to `decisions.md` if/when picked up.
 
 ---
 
+## NTK-Mirror: LoRA-free activation-space adapter, composability validated (2026-05-24)
+
+**Pitch.** Chlon (Hassana Labs), `leochlon/ntkmirror`, paper forthcoming.
+Frozen HF causal LM + sparse signed log-gates on decoder-layer output
+channels: `h' = exp(s) · h` with `|s| ≤ max_log_gate` (default 0.05).
+Gates selected by `|dL/ds|` (NTK-flavored), fit by AdamW. Default 5000
+gates / 240 steps / lr 5e-3. Compose via gate-space addition (additive
+in log-gate space ⇔ multiplicative in activation space). Persistent-
+memory store with retrieve+compose+attach. Same use-case envelope as
+MeMo at ~100,000× less compute.
+
+**Validated on M2 (smoke + composability runner, 2026-05-24).** Two runs
+on Qwen2.5-0.5B-Instruct via MPS, no source modifications required:
+
+- **Single-task smoke** (512g/40steps, math demo): loss 1.764 → 1.642,
+  "47 + 36 = ?" → "83" (correct).
+- **Disjoint composition** (5000g/240steps, GSM8K + MBPP, 64/32 train/eval):
+
+| controller | gsm8k NLL | mbpp NLL |
+|---|---:|---:|
+| base | 0.714 | 1.064 |
+| gsm8k | **0.600** | 1.058 |
+| mbpp | 0.736 | **0.813** |
+| **composed** (gsm8k + mbpp) | **0.614** | **0.911** |
+
+Composed controller retains **88% of GSM8K single-task gain and 61% of
+MBPP**. No catastrophic interference, no regression below base.
+Composition report: 5000 gates each, 80% gate overlap (Jaccard 0.66),
+near-orthogonal cosine (0.024) — controllers select the same channels
+but assign nearly orthogonal signed values, which is the structural
+condition the composability claim requires.
+
+**Why it matters to us.**
+- **Direct alternative to LoRA at our scale.** Our L1 LoRA v2 (rank-16
+  Q+K+V+O on d6 nanochat) hit a "one-pattern adapter" ceiling. NTK-Mirror
+  occupies a different design space — activation-space rescaling vs
+  weight-space rank-r additions. Direct head-to-head testable.
+- **Composability story extends.** Our LoRA work didn't test
+  task-arithmetic compositionality. NTK-Mirror's gate-space addition
+  has a cleaner algebraic justification than LoRA weight-addition,
+  and now empirically holds at this scale.
+- **Different point on the parameters-vs-adaptability spectrum** than
+  Hope/NL Stage 2 (intrinsic mechanism), δ-mem (recurrent state), and
+  MeMo (full second LLM).
+
+**Wall-pace lesson.** Memory pressure dramatically affects MPS step time
+(this run: ~42 s/step at 0.5 GB free → ~21 s/step after operator killed
+some background apps). For longer NTK-Mirror experiments on M2: aggressive
+memory preflight matters more than for nanochat training where optimizer
+compute dominates and paging effect is smaller.
+
+**Engagement shapes** (cheapest first):
+1. **Backlog only** — current state. Composability validated; no further
+   experiment.
+2. **Cross-adapter comparison on persona-retention** (~3-5h, Path A;
+   ~1-2d with graft, Path B). Filed as
+   `docs/project_incoming/feat_ntkmirror_cross_adapter.md`. Tests
+   whether NTK-Mirror beats L1 LoRA v2's 19/30 all_three.
+3. **Graft to nanochat** (~1d). Port the mechanism into `nanochat/gpt.py`
+   so it works on our d6 / d8 base models. Unlocks apples-to-apples
+   comparison with our existing LoRA + Stage 2 results. Notes inline in
+   the cross-adapter ticket.
+
+**Cost.** Engagement-dependent: 0 (default) / ~3-5h (Path A only) /
+~1d (graft only, no comparison yet) / ~1-2d (graft + comparison).
+
+**Status.** Open. Smoke validation done; cross-adapter and upstream-PR
+follow-ups filed as tickets.
+
+**References.**
+- Repo: `https://github.com/leochlon/ntkmirror` (MIT, paper forthcoming).
+- Local clone: `~/projects-new/3p/ntkmirror/` (main branch, fresh clone;
+  local patch on `scripts/run_disjoint_composition.sh` — see
+  `feat_ntkmirror_upstream_bash_pr.md`).
+- Outputs on disk: `~/projects-new/3p/ntkmirror/runs/disjoint_composition/`
+  (2 controllers + composed + 8 eval JSONs + composition_report.json).
+- Cross-reference: MeMo backlog entry (different mechanism, much heavier
+  compute envelope, same use-case shape).
+
+---
+
 ## MeMo: parametric LLM-as-memory framework (2026-05-21)
 
 **Pitch.** Quek, Lee, Leong et al., **MeMo: Memory as a Model**, arXiv:2605.15156v2,

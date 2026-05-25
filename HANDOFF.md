@@ -3156,4 +3156,116 @@ Four commits in window (`adbb284`, `6cbec84`, `0003197`, plus this
 docs commit). Local-only per `feedback_local_only.md`. Branch
 `experiment/hope-nested-learning` clean.
 
+## Day 2026-05-24 (later) — NTK-Mirror smokes #1 + #2, composability validated on MPS
+
+Followup to the project-map / MeMo-backlog / cache-cleanup work earlier
+today. Operator picked engagement option 1 (laptop smoke) from the
+NTK-Mirror discussion; the smoke escalated naturally to option 2
+(composability runner).
+
+### Smoke #1 — single-task fit on math demo (~30s wall, Qwen2.5-0.5B-Instruct, MPS)
+
+`DEVICE=mps GATES=512 STEPS=40 bash examples/run_demo.sh`
+
+- Loss 1.764 → 1.642 over 40 steps (clean monotonic descent).
+- Train NLL 1.768 → 1.635, token acc 0.577 → 0.611.
+- Held-out (2 examples): NLL 1.752 → 1.613, acc 0.614 → 0.629.
+- Generate: `Problem: 47 + 36 = ?\nSolution:` → ` 47 + 36 = 83\nQues: ...` ("83" correct).
+- **MPS portability**: passed without source modification. `transformers
+  5.9.0` (bleeding-edge vs the README's ≥4.43) didn't break. No bf16/fp16
+  patches needed, in contrast to nanochat's `optim.py` + `flash_attention.py`
+  MPS audit gaps.
+
+### Smoke #2 — disjoint composition (~3.5h wall, 5000g/240steps)
+
+`DEVICE=mps bash scripts/run_disjoint_composition.sh`
+
+GSM8K and MBPP controllers fit independently, composed via gate-space
+addition, evaluated on both tasks.
+
+**Fits:**
+- GSM8K controller: loss 0.698 → 0.493, train token_acc 0.865 (2.5h wall,
+  pre-cleanup paging).
+- MBPP controller: loss 1.025 → 0.530, train token_acc 0.832 (52min wall,
+  post-cleanup, ~3× faster pace).
+
+**Composition report:**
+- 5000 gates per controller, **80% gate overlap (Jaccard 0.66) but
+  near-orthogonal cosine (0.024)** — controllers select the same channels
+  but assign nearly orthogonal signed values. The structural condition
+  the composability claim requires.
+
+**Eval results** (4 controllers × 2 tasks, NLL ↓ is better):
+
+| controller | gsm8k NLL | mbpp NLL |
+|---|---:|---:|
+| base | 0.714 | 1.064 |
+| gsm8k | **0.600** | 1.058 |
+| mbpp | 0.736 | **0.813** |
+| **composed** | **0.614** | **0.911** |
+
+Composed retains **88% of GSM8K single-task gain and 61% of MBPP**. No
+catastrophic interference, no regression below base. **The composability
+claim survives empirically at this scale** (Qwen2.5-0.5B, 64 train/task).
+
+Asymmetry — MBPP loses more in composition — likely reflects
+`max_log_gate=0.05` clipping: MBPP's larger single-task magnitude (Δ −0.250)
+has more to lose when summed gates saturate the clip budget compared to
+GSM8K (Δ −0.114).
+
+The 8 evals ran via a manual shell loop after the runner's eval phase
+tripped on a bash strict-mode bug (`"${CARGS[@]}"` under `set -u` with
+empty array — line 43 of `scripts/run_disjoint_composition.sh`). Local
+patch applied to the ntkmirror clone; upstream-PR ticket filed at
+`docs/project_incoming/feat_ntkmirror_upstream_bash_pr.md`.
+
+### Wall-pace lesson
+
+Memory pressure dramatically affects MPS step time. Pre-cleanup (0.49 GB
+free, faprox + server.py + Adobe daemons running): **~42 s/step**.
+Post-cleanup (operator killed apps, ~12 GB freed): **~21 s/step**.
+**~2× speedup** from the cleanup alone.
+
+For longer NTK-Mirror experiments on M2: aggressive memory preflight
+matters more than for nanochat training, where the cost is dominated by
+optimizer iters and the relative paging effect is smaller.
+
+### Files added this session
+
+- `docs/project_notes/backlog.md` — NTK-Mirror entry (parallel structure
+  to MeMo entry from 2026-05-21; captures smoke + composability findings).
+- `docs/project_incoming/feat_ntkmirror_cross_adapter.md` — handoff
+  ticket for next-experiment (Path A on Qwen2.5-0.5B native, Path B via
+  graft to nanochat; pass/fail vs L1 LoRA v2's 19/30 all_three).
+- `docs/project_incoming/feat_ntkmirror_upstream_bash_pr.md` — tiny
+  ticket for the upstream bash-fix PR if/when revisited.
+
+### Outputs on disk (in ntkmirror clone, not in nanochat repo)
+
+- `~/projects-new/3p/ntkmirror/runs/disjoint_composition/`:
+  2 controllers + composed controller + 8 eval JSONs + composition_report.json.
+- `~/projects-new/3p/ntkmirror/scripts/run_disjoint_composition.sh`:
+  local 2-line patch for the bash bug (uncommitted; for upstream PR per
+  the ticket).
+
+### What's next — grafting question
+
+Operator asked whether NTK-Mirror is "far enough along to try grafting
+into nanochat." Short answer: yes, ~1d port effort. The mechanism (gate
+selection by `|dL/ds|`, multiplicative per-channel intervention, AdamW
+on gate params, save/compose as sparse dicts) maps cleanly onto
+nanochat's `Block`. The cross-adapter ticket
+(`feat_ntkmirror_cross_adapter.md`) has detailed graft notes inline.
+
+Recommended sequence: **Path A** (cross-adapter on Qwen2.5-0.5B native,
+no graft, ~3-5h) first → if NTK-Mirror beats L1 LoRA v2's 19/30, **then
+Path B** (graft + apples-to-apples on d6 nanochat base, ~1d port + ~3-5h
+experiment).
+
+### Branch state
+
+This commit: docs additions only. Three new files + 1 HANDOFF addendum.
+Local-only per `feedback_local_only.md`. Branch
+`experiment/hope-nested-learning` clean.
+
 
