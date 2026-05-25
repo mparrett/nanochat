@@ -3268,4 +3268,97 @@ This commit: docs additions only. Three new files + 1 HANDOFF addendum.
 Local-only per `feedback_local_only.md`. Branch
 `experiment/hope-nested-learning` clean.
 
+## Day 2026-05-25 — NTK-Mirror Path A: parity with L1 LoRA, Path B shelved
+
+Followup to yesterday's NTK-Mirror smoke + composability validation +
+cross-adapter ticket. Ran Path A end-to-end on M2/MPS in ~70 min wall.
+
+### Result
+
+| Arm | all_three |
+|---|---:|
+| Qwen2.5-0.5B-Instruct base | 10/30 (33%) |
+| NTK-Mirror s0 (default train order) | 20/30 (67%) |
+| NTK-Mirror s1 (shuffle, seed=1) | 17/30 (57%) |
+| NTK-Mirror s2 (shuffle, seed=2) | 17/30 (57%) |
+| **NTK mean (n=3)** | **18.0/30 (60%)** |
+| L1 LoRA v2 reference (d6, n=1) | 19/30 (63%) |
+
+**Robust claim** (all seeds): +27pp over Qwen base. 16/30 rows pass
+across every seed; 9/30 fail across every seed; 5/30 are seed-sensitive.
+
+**Lucky-order outlier:** the s0 = 20/30 single-seed reading would have
+been "beats LoRA" headline. Bracketing collapsed it to mean 18.0. Ticket
+was right to require n=2-3 bracketing for this band.
+
+**Cross-base attribution caveat stands.** L1 LoRA v2 was on
+`d6_baseline_modern_sft` (~85M); NTK-Mirror was on Qwen2.5-0.5B-Instruct
+(~500M, different tokenizer, different instruct-tune). Mean 18 vs 19
+shares only the dataset and substring rubric.
+
+### Mechanism characteristic worth noting
+
+NTK-Mirror's gate selection is a one-shot pass over the first
+`score_batches` chunks (we used 8 = 64 examples). The bad-first-64 →
+suboptimal sparse mask → ceiling on what subsequent AdamW recovery can
+do, visible directly in s1's loss curve (only -15% reduction vs s0's
+-55%). Worth flagging upstream if revisited — stratified or learned
+sampling for the scoring pass would likely reduce this variance.
+
+### Qualitative win — instruct-tune attractor suppression
+
+Qwen base deflects with "I am Qwen, an AI created by Alibaba Cloud" on
+7/30 rows. NTK-Mirror suppresses this to 1/30 (row 16) across all seeds.
+A sparse channel intervention reshaping a strong attractor without
+retraining weights is the mechanism's headline claim, and it
+materializes cleanly here. The residual failures are different in kind
+(topic-continuation dodges, partial recall, substring brittleness).
+
+### Decision — Path B shelved
+
+Per the cross-adapter ticket's pass criteria, mean 18/30 lands in the
+"13-19 noisy / inconclusive" band (upper edge). **Path B (graft into
+nanochat, ~1d port) is not compellingly justified** by the cross-adapter
+signal alone. Not ruled out either — parity at 400× smaller adapter
+(4000 sparse floats vs LoRA's ~6M params) is a real architectural
+difference. Backlog status flipped from "Open" to "Closed-but-reopenable"
+— reopen if a downstream need (composability, persistent-memory store,
+bench v0 third arm) makes the graft asset itself worth building.
+
+### Files added this session
+
+- `docs/ntkmirror_persona_comparison_2026-05-25.md` — markdown writeup
+  (insurance per CLAUDE.md convention).
+- `docs/ntkmirror_persona_comparison_2026-05-25.html` — publication-style
+  HTML narrative.
+- `bench/adapt_persona_to_qwen.py` — JSONL adapter (Qwen chat template).
+- `bench/eval_persona_qwen.py` — scoring script mirroring
+  `dev/eval_persona_retention.py::score_response`.
+- `bench/shuffle_train.py` — deterministic JSONL shuffler for seed
+  injection (NTK-Mirror's fit has no `--seed` knob).
+- Backlog entry updated: status flipped, engagement shapes annotated
+  with the verdict.
+
+### Outputs on disk (in ntkmirror clone, not nanochat repo)
+
+`~/projects-new/3p/ntkmirror/runs/persona_qwen/`:
+- `train.jsonl`, `train_s1.jsonl`, `train_s2.jsonl`, `eval.jsonl`
+- `persona_controller{,_s1,_s2}.pt` + manifest jsons
+- `eval_base.json`, `eval_ntk{,_s1,_s2}.json`
+- `logs/fit_*.log`
+
+### Wall-pace data point
+
+Persona-retention prompts are ~half the length of yesterday's GSM8K
+prompts (~150 tokens vs ~300). Step time scaled accordingly: **~2.8 s/step**
+at the start of the session vs yesterday's 21-42 s/step. ~12 min/fit total.
+Memory pressure was a concern at launch (0.73 GB free) but the dial
+bundle absorbed it cleanly.
+
+### Branch state
+
+This commit: 5 new files (3 in `bench/`, 2 in `docs/`) + backlog edit +
+HANDOFF addendum. Local-only per `feedback_local_only.md`. Branch
+`experiment/hope-nested-learning` clean.
+
 

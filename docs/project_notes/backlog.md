@@ -58,22 +58,24 @@ memory preflight matters more than for nanochat training where optimizer
 compute dominates and paging effect is smaller.
 
 **Engagement shapes** (cheapest first):
-1. **Backlog only** — current state. Composability validated; no further
-   experiment.
-2. **Cross-adapter comparison on persona-retention** (~3-5h, Path A;
-   ~1-2d with graft, Path B). Filed as
-   `docs/project_incoming/feat_ntkmirror_cross_adapter.md`. Tests
-   whether NTK-Mirror beats L1 LoRA v2's 19/30 all_three.
-3. **Graft to nanochat** (~1d). Port the mechanism into `nanochat/gpt.py`
-   so it works on our d6 / d8 base models. Unlocks apples-to-apples
-   comparison with our existing LoRA + Stage 2 results. Notes inline in
-   the cross-adapter ticket.
+1. **Backlog only** — current state. Composability validated; cross-adapter
+   ran and landed at parity; no further experiment justified by the result.
+2. **Cross-adapter comparison on persona-retention** (Path A — ✅ done
+   2026-05-25). Result: mean 18/30 all_three across n=3 seeds (range 17-20)
+   on Qwen2.5-0.5B-Instruct, **parity** with L1 LoRA v2's 19/30 on
+   `d6_baseline_modern_sft`. Writeup:
+   `docs/ntkmirror_persona_comparison_2026-05-25.md`.
+3. **Graft to nanochat** (Path B, ~1d). **Shelved** per the cross-adapter
+   ticket's pass criteria — parity result doesn't justify the engineering.
+   Reopen if a downstream need (composability, persistent-memory store,
+   sparse-dict adapters as a bench v0 third arm) makes the graft asset
+   worth building for its own sake.
 
-**Cost.** Engagement-dependent: 0 (default) / ~3-5h (Path A only) /
-~1d (graft only, no comparison yet) / ~1-2d (graft + comparison).
+**Cost.** 0 (default; cross-adapter done and shelved).
 
-**Status.** Open. Smoke validation done; cross-adapter and upstream-PR
-follow-ups filed as tickets.
+**Status.** Closed-but-reopenable. Smoke validation done; cross-adapter
+landed at parity (writeup committed); Path B graft shelved unless
+downstream demand surfaces. Upstream-PR ticket still open if revisited.
 
 **References.**
 - Repo: `https://github.com/leochlon/ntkmirror` (MIT, paper forthcoming).
