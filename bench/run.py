@@ -81,6 +81,12 @@ def parse_args():
     p.add_argument("--T-in", type=int, default=96, help="SelectiveCopy: input noise+content stream length")
     # Reproducibility & I/O
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--n-seeds", type=int, default=1,
+                   help="run N seeds in [seed, seed+1, ..., seed+N-1]. "
+                        "When >1, labels are auto-suffixed with _s{seed} and "
+                        "an aggregate mean/range summary prints at the end. "
+                        "Per the 2026-05-25 bracketing falsifications: "
+                        "n=3 should be the default for any 'X beats Y' claim.")
     p.add_argument("--log-dir", default=None, help="write JSONL log to <log-dir>/<label>.jsonl")
     return p.parse_args()
 
@@ -148,19 +154,16 @@ def evaluate(model, task, n_seqs, batch_size, device, rng):
     return correct / total if total else 0.0
 
 
-def main():
-    args = parse_args()
-
-    device_type = autodetect_device_type()
-    _ddp, _rank, _local_rank, _ws, device = compute_init(device_type)
-    torch.manual_seed(args.seed)
+def run_one_seed(args, seed: int, label: str, device) -> dict:
+    """Train + eval one seed. Returns summary dict."""
+    torch.manual_seed(seed)
 
     task = build_task(args)
     model, config = build_model(args, task, device)
     n_params = sum(p.numel() for p in model.parameters())
-    print(f"[{args.label}] task={args.task} T={task.T} vocab={task.vocab_size}")
-    print(f"[{args.label}] params: {n_params:,} ({n_params/1e6:.2f}M)  depth={args.depth}  n_embd={config.n_embd}")
-    print(f"[{args.label}] hope: swap={args.hope_memory_layer} add={args.hope_additive_memory_layer} "
+    print(f"[{label}] task={args.task} T={task.T} vocab={task.vocab_size}")
+    print(f"[{label}] params: {n_params:,} ({n_params/1e6:.2f}M)  depth={args.depth}  n_embd={config.n_embd}")
+    print(f"[{label}] hope: swap={args.hope_memory_layer} add={args.hope_additive_memory_layer} "
           f"w_o={args.hope_memory_w_o_init_scale} kind={args.hope_memory_kind}")
 
     optimizer = model.setup_optimizer(
@@ -171,20 +174,20 @@ def main():
         weight_decay=0.0,
     )
 
-    train_rng = np.random.default_rng(args.seed)
-    eval_rng = np.random.default_rng(args.seed + 1_000_000)
+    train_rng = np.random.default_rng(seed)
+    eval_rng = np.random.default_rng(seed + 1_000_000)
 
     log_records = []
     log_path = None
     if args.log_dir:
         log_dir = Path(args.log_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
-        log_path = log_dir / f"{args.label}.jsonl"
+        log_path = log_dir / f"{label}.jsonl"
         if log_path.exists():
             log_path.unlink()
 
     t_start = time.time()
-    sat_step = None  # first step where eval acc >= 0.95
+    sat_step = None
     for step in range(args.num_iterations):
         inputs, targets = task.generate_batch(args.device_batch_size, train_rng)
         inputs = inputs.to(device, dtype=torch.int32)
@@ -203,7 +206,7 @@ def main():
             if sat_step is None and acc >= 0.95:
                 sat_step = step + 1
             sat_str = f"sat@{sat_step}" if sat_step is not None else "—"
-            print(f"[{args.label}] step {step+1:04d}/{args.num_iterations} | "
+            print(f"[{label}] step {step+1:04d}/{args.num_iterations} | "
                   f"loss {loss.item():.4f} | acc {acc:.4f} | {sat_str} | "
                   f"elapsed {elapsed/60:.1f}m", flush=True)
             rec = {
@@ -218,9 +221,56 @@ def main():
                 with open(log_path, "a") as f:
                     f.write(json.dumps(rec) + "\n")
 
+    wall_min = (time.time() - t_start) / 60
     final = log_records[-1] if log_records else {}
-    print(f"[{args.label}] done in {(time.time()-t_start)/60:.2f}m  "
+    print(f"[{label}] done in {wall_min:.2f}m  "
           f"final_acc={final.get('acc', 0):.4f}  saturation_step={sat_step}")
+    return {
+        "seed": seed,
+        "label": label,
+        "sat_step": sat_step,
+        "final_acc": float(final.get("acc", 0)),
+        "wall_minutes": wall_min,
+    }
+
+
+def print_aggregate(label: str, summaries: list[dict]) -> None:
+    """Print mean / range / per-seed summary table."""
+    sats = [s["sat_step"] for s in summaries if s["sat_step"] is not None]
+    accs = [s["final_acc"] for s in summaries]
+    print(f"\n=== [{label}] aggregate across n={len(summaries)} seeds ===")
+    print(f"  {'seed':>4} {'sat_step':>10} {'final_acc':>10} {'wall_min':>9}")
+    for s in summaries:
+        sat = "—" if s["sat_step"] is None else f"{s['sat_step']}"
+        print(f"  {s['seed']:>4} {sat:>10} {s['final_acc']:>10.4f} {s['wall_minutes']:>9.2f}")
+    if sats:
+        mean_sat = sum(sats) / len(sats)
+        print(f"  sat_step  mean={mean_sat:.1f}  min={min(sats)}  max={max(sats)}  range={max(sats)-min(sats)}")
+    n_unsat = len(summaries) - len(sats)
+    if n_unsat:
+        print(f"  {n_unsat}/{len(summaries)} seed(s) never saturated (acc < 0.95 by end of run)")
+    print(f"  final_acc mean={sum(accs)/len(accs):.4f}  min={min(accs):.4f}  max={max(accs):.4f}")
+
+
+def main():
+    args = parse_args()
+
+    device_type = autodetect_device_type()
+    _ddp, _rank, _local_rank, _ws, device = compute_init(device_type)
+
+    if args.n_seeds == 1:
+        # Backwards-compat: label exactly as before, no suffix, no aggregate.
+        run_one_seed(args, args.seed, args.label, device)
+        return
+
+    summaries = []
+    for i in range(args.n_seeds):
+        seed = args.seed + i
+        label = f"{args.label}_s{seed}"
+        print(f"\n=== [{args.label}] seed {seed} ({i+1}/{args.n_seeds}) ===")
+        summaries.append(run_one_seed(args, seed, label, device))
+
+    print_aggregate(args.label, summaries)
 
 
 if __name__ == "__main__":
