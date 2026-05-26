@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bench v0 — Stage 2 SC headline falsified by seed bracketing — 2026-05-25</title>
+<style>
+  :root { --bg: #1a1a2e; --fg: #e0e0e0; --accent: #e94560; --accent2: #0f3460;
+          --good: #4ade80; --bad: #f87171; --mid: #fbbf24; --card: #16213e;
+          --blue: #60a5fa; --dim: #888; --violet: #a78bfa; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg);
+         color: var(--fg); line-height: 1.75; padding: 2rem 1.5rem; max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 1.85rem; margin-bottom: 0.4rem; color: #fff; letter-spacing: -0.025em; line-height: 1.25; }
+  h2 { font-size: 1.3rem; margin: 2.8rem 0 0.8rem; color: var(--accent); letter-spacing: -0.01em;
+       border-bottom: 1px solid #2a2a4a; padding-bottom: 0.3rem; }
+  h3 { font-size: 1.05rem; margin: 1.8rem 0 0.4rem; color: var(--blue); }
+  p { margin: 0.7rem 0; font-size: 0.95rem; }
+  .subtitle { color: var(--dim); font-size: 0.88rem; margin-bottom: 0.5rem; }
+  .byline { color: var(--dim); font-size: 0.78rem; margin-bottom: 2rem;
+            font-family: 'JetBrains Mono', monospace; }
+  .lede { font-size: 1.05rem; color: #ddd; margin: 1.2rem 0 2rem;
+          line-height: 1.85; padding-left: 1rem; border-left: 3px solid var(--accent); }
+  code { background: #222; padding: 0.12em 0.35em; border-radius: 3px; font-size: 0.85em;
+         font-family: 'JetBrains Mono', 'SF Mono', monospace; color: var(--blue); }
+  a { color: var(--blue); text-decoration: none; border-bottom: 1px solid #2a4470; }
+  em { color: #ddd; font-style: italic; }
+  strong { color: #fff; }
+  pre { background: #0d0d1a; border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0;
+        font-family: 'JetBrains Mono', 'SF Mono', monospace; font-size: 0.82rem;
+        overflow-x: auto; line-height: 1.5; border-left: 3px solid var(--violet);
+        color: #ddd; white-space: pre-wrap; word-break: break-word; }
+  pre code { background: none; padding: 0; color: #ddd; font-size: inherit; }
+  blockquote { background: rgba(167,139,250,0.06); border-left: 3px solid var(--violet);
+               padding: 0.9rem 1.2rem; margin: 1.4rem 0; border-radius: 6px;
+               font-style: italic; color: #ddd; font-size: 0.92rem; }
+  .pull { font-size: 1.05rem; color: #fff; padding: 1.2rem 1.5rem; margin: 1.8rem 0;
+          background: linear-gradient(135deg, rgba(233,69,96,0.08), rgba(167,139,250,0.04));
+          border-radius: 10px; border-left: 4px solid var(--accent);
+          line-height: 1.6; font-style: italic; }
+  .insight { padding: 0.9rem 1.1rem; margin: 1.4rem 0; border-radius: 8px;
+             background: rgba(74,222,128,0.05); border-left: 3px solid var(--good);
+             font-size: 0.9rem; }
+  .insight.warn { background: rgba(251,191,36,0.05); border-left-color: var(--mid); }
+  .insight.bad  { background: rgba(248,113,113,0.05); border-left-color: var(--bad); }
+  .insight strong { color: #fff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+  th { background: var(--card); padding: 0.5rem 0.7rem; text-align: left; color: #aaa;
+       font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  td { padding: 0.5rem 0.7rem; border-bottom: 1px solid #1f1f3a; }
+  td.mono { font-family: 'JetBrains Mono', monospace; }
+  td.win  { color: var(--good); }
+  td.lose { color: var(--bad); }
+  td.dim  { color: var(--dim); }
+  td.right { text-align: right; }
+  ul, ol { margin: 0.5rem 0 0.5rem 1.4rem; }
+  li { margin: 0.4rem 0; }
+  .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #2a2a4a;
+            color: var(--dim); font-size: 0.78rem; }
+</style>
+</head>
+<body>
+
+<h1>The convergence wasn't</h1>
+<p class="subtitle">Stage 2 SC sat=100 was a lucky seed. Bracketing collapses the headline gap to ~5%, inside both arms' variance.</p>
+<p class="byline">nanochat · experiment/hope-nested-learning · 2026-05-25</p>
+
+<p class="lede">
+  Two weeks ago bench v0 reported Stage 2 saturating on hard SelectiveCopy
+  at step 100, vs baseline at step 200 — a clean <em>2× architectural win</em>
+  and the centerpiece of the project map's "convergence" framing. Today's
+  seed bracketing falsifies it. With n=3 on Stage 2 and n=4 on baseline,
+  the mean gap is 11 steps (~5%) and Stage 2's variance is wider than
+  baseline's. The s0=100 reading was a lucky seed. The architectural
+  difference is invisible against the seed-noise floor at this scale.
+</p>
+
+<h2>The session in one table</h2>
+
+<table>
+<thead>
+<tr><th>Arm</th><th class="right">s0</th><th class="right">s1</th><th class="right">s2</th><th class="right">s3</th><th class="right">n</th><th class="right">mean</th><th class="right">range</th></tr>
+</thead>
+<tbody>
+<tr><td>baseline (no memory)</td><td class="right">200</td><td class="right">300</td><td class="right">225</td><td class="right">150</td><td class="right"><strong>4</strong></td><td class="right"><strong>219</strong></td><td class="right">150</td></tr>
+<tr><td>Stage 2 add (learned α/η)</td><td class="right win">100</td><td class="right">200</td><td class="right lose">325</td><td class="right dim">—</td><td class="right"><strong>3</strong></td><td class="right"><strong>208</strong></td><td class="right lose">225</td></tr>
+</tbody>
+</table>
+
+<div class="pull">
+  Stage 2's range (100–325) is a <em>superset of</em> baseline's (150–300).
+  Baseline's best seed (150) beats Stage 2's median (200). The mean gap
+  is ~0.1 standard deviations of pooled spread.
+</div>
+
+<h2>The falsification arc</h2>
+
+<p>Each additional seed pulled the headline gap toward zero:</p>
+
+<table>
+<thead>
+<tr><th>After adding</th><th class="right">Stage 2 n</th><th class="right">baseline n</th><th class="right">gap (mean)</th></tr>
+</thead>
+<tbody>
+<tr><td>(bench v0, n=1 each)</td><td class="right">1</td><td class="right">1</td><td class="right win">-100 (2× faster)</td></tr>
+<tr><td>Stage 2 s1</td><td class="right">2</td><td class="right">1</td><td class="right">-50 (1.33×)</td></tr>
+<tr><td>Stage 2 s2</td><td class="right">3</td><td class="right">1</td><td class="right">-8 (≈tied)</td></tr>
+<tr><td>baseline s1</td><td class="right">3</td><td class="right">2</td><td class="right">-42 (17% faster)</td></tr>
+<tr><td>baseline s2</td><td class="right">3</td><td class="right">3</td><td class="right">-34 (14% faster)</td></tr>
+<tr><td><strong>baseline s3</strong></td><td class="right">3</td><td class="right">4</td><td class="right lose"><strong>-11 (5%, inside noise)</strong></td></tr>
+</tbody>
+</table>
+
+<p>
+  Classic n=1 → n=N collapse. Each new seed shrank the apparent advantage
+  monotonically. The qualitative story changed three times in 90 minutes.
+</p>
+
+<h2>What's qualitatively different about s0</h2>
+
+<p>
+  The original headline rested on s0's distinctive "grokking" trajectory.
+  Stage 2's three trajectories side-by-side:
+</p>
+
+<table>
+<thead>
+<tr><th class="right">step</th><th class="right">s0 (lucky)</th><th class="right">s1</th><th class="right">s2 (slow)</th></tr>
+</thead>
+<tbody>
+<tr><td class="right">25</td><td class="right">0.028</td><td class="right">0.036</td><td class="right">0.038</td></tr>
+<tr><td class="right">50</td><td class="right win">0.283</td><td class="right">0.083</td><td class="right">0.097</td></tr>
+<tr><td class="right">75</td><td class="right win">0.905</td><td class="right">0.336</td><td class="right">0.163</td></tr>
+<tr><td class="right">100</td><td class="right win">0.986</td><td class="right">0.821</td><td class="right">0.168</td></tr>
+<tr><td class="right">150</td><td class="right">0.994</td><td class="right">0.928</td><td class="right">0.440</td></tr>
+<tr><td class="right">200</td><td class="right">0.995</td><td class="right">0.961</td><td class="right">0.903</td></tr>
+<tr><td class="right">325</td><td class="right">0.998</td><td class="right">0.983</td><td class="right">0.963 (sat)</td></tr>
+</tbody>
+</table>
+
+<p>
+  At step 50, s0 is at 28%; s1 and s2 are at 8-10%. The grokking jump
+  that drove the headline was specific to s0's init — not a property of
+  the Stage 2 mechanism.
+</p>
+
+<h2>What this falsifies</h2>
+
+<p>From <code>docs/bench_v0_stage2_sc_hard_2026-05-19.md</code>:</p>
+
+<blockquote>
+  Stage 2 saturates <strong>2× faster than baseline</strong> and
+  <strong>3.75× faster than Stage 1</strong>. Final accuracy higher
+  than both. This is a clean architectural win on the state-tracking
+  axis at d4.
+</blockquote>
+
+<ul>
+  <li><strong>"2× faster than baseline"</strong> → ✗ falsified. Mean ratio 219/208 = 1.05.</li>
+  <li><strong>"3.75× faster than Stage 1"</strong> → Stage 1 wasn't bracketed today. Best-case still-defensible after Stage 1 bracketing pending.</li>
+  <li><strong>"Final accuracy higher than both"</strong> → ~1pp gap (0.999 vs 0.988). Real but not load-bearing.</li>
+  <li><strong>"A clean architectural win on the state-tracking axis at d4"</strong> → ✗ falsified.</li>
+</ul>
+
+<p>The writeup itself anticipated this exact possibility, to its credit:</p>
+
+<blockquote>
+  n=1 seed. Need at least n=2-3 before declaring "Stage 2 wins on
+  state-tracking" as more than a lucky-seed result. Magnitude (100 vs
+  200) makes pure-luck hard to swallow but doesn't rule it out.
+</blockquote>
+
+<p>Pure-luck turned out to be the explanation.</p>
+
+<h2>What it means for the project map</h2>
+
+<p>
+  <code>docs/project_map_2026-05-20.html</code> framed the 22-day arc as
+  <em>originating question → d6 verdict → side-thread (δ-mem) → reframe
+  (selective axis) → <strong>convergence (bench v0)</strong> → frontier</em>.
+  The convergence node — bench v0 as the architectural traction the LM
+  arc missed — is the piece that doesn't survive.
+</p>
+
+<div class="insight bad">
+  <strong>The map's spine needs a revision.</strong> The "convergence"
+  framing should become "attempted convergence falsified by seed
+  bracketing." The architectural-shape hypothesis ("memory mechanisms
+  are specialized, not universal") is still live — but its bench v0
+  d4 evidence is no longer load-bearing. The δ-mem field result on
+  hard MQAR at 100× scale is now the only independent evidence still
+  standing for that hypothesis.
+</div>
+
+<h2>The other three bench v0 headlines</h2>
+
+<p>
+  The same n=1 vulnerability almost certainly applies to:
+</p>
+
+<ul>
+  <li><strong>Stage 2 MQAR sat=375</strong> (the U-curve "loss" claim).</li>
+  <li><strong>η=0.5 sat=475</strong> (the U-curve worst-point claim).</li>
+  <li><strong>Stage 1 SC sat=375</strong> (the "Stage 1 actively hurts SC" claim — conspicuously slow vs baseline=219; might collapse to ≈ baseline under bracketing).</li>
+</ul>
+
+<p>
+  Prior on these three is now "almost certainly also overstated."
+  Queued for next session as a high-priority follow-up.
+</p>
+
+<h2>Methodology lesson</h2>
+
+<div class="pull">
+  <strong>n=1 is insufficient for any architectural claim on bench/.</strong>
+  Seed variance at d4/500-iter scale is large enough to swamp the
+  architectural differences bench v0 reported as "wins."
+</div>
+
+<p>
+  Today's session is the second instance of n=1 → n=N collapse this
+  morning. NTK-Mirror Path A earlier today reported +1/30 over LoRA
+  on persona-retention; bracketing collapsed it to parity. The same
+  lesson now applies one tier down at our own bench v0 results.
+</p>
+
+<p>
+  Proposed bench/ default going forward: <strong>every architectural
+  comparison runs n=3 minimum</strong> before any "X beats Y" claim.
+  An <code>--n-seeds N</code> flag on <code>bench/run.py</code> would
+  make this trivial (10-15 line change, internal loop, report
+  mean ± range). Worth doing if any further bench/ work happens.
+</p>
+
+<h2>What does NOT change</h2>
+
+<ul>
+  <li><strong>The d6/5000-iter LM verdict</strong> ("Stage 2 neutral
+    on natural-language val_bpb under recipe-controlled comparison").
+    That had its own multi-seed validation in
+    <code>docs/hope_nl_stage2_seed_variance_2026-05-04.md</code>.</li>
+  <li><strong>The δ-mem field result on hard MQAR at 100× scale.</strong>
+    Independent evidence on different scale and different mechanism;
+    stands on its own.</li>
+  <li><strong>The architectural-shape hypothesis itself</strong>
+    ("memory mechanisms are task-mechanism-routing problems, not
+    'memory yes/no'"). The hypothesis is still live; the d4 bench v0
+    evidence for it just isn't.</li>
+</ul>
+
+<h2>Cost ledger and next steps</h2>
+
+<p>
+  This session: 5 new runs at ~17 min each = ~90 min wall. Plus the
+  original 2 single-seed runs from May 18-19 = 7 runs of cumulative
+  SC-hard data. Memory pressure (0.68 GB free at session start) had
+  no measurable effect on wall — d4 bench/ models aren't memory-bound
+  the way the Qwen-0.5B work earlier today was.
+</p>
+
+<p>For next session, in priority order:</p>
+
+<ol>
+  <li><strong>Bracket the other three bench v0 headlines.</strong> ~150 min wall total if each gets n=3 with two new seeds. Likely to find the same pattern.</li>
+  <li><strong>Project map revision.</strong> The convergence framing needs updating; the spine paragraph needs to acknowledge the falsification.</li>
+  <li><strong>Add <code>--n-seeds N</code> to <code>bench/run.py</code>.</strong> Defensive against repeating the methodology error.</li>
+  <li><strong>Stage 1 SC bracketing.</strong> If Stage 1 sat=375 collapses to ≈ baseline, the "Stage 1 actively hurts SC" claim also dies.</li>
+</ol>
+
+<p class="footer">
+  Source data: <code>bench/logs/{stage2_d4_sc_hard,baseline_d4_sc_hard}_s{1,2,3}.jsonl</code>
+  · References: <a href="bench_v0_stage2_sc_hard_2026-05-19.md"><code>bench_v0_stage2_sc_hard_2026-05-19.md</code></a> (the falsified writeup),
+  <a href="bench_v0_result_2026-05-20.html"><code>bench_v0_result_2026-05-20.html</code></a> (the synthesis),
+  <a href="project_map_2026-05-20.html"><code>project_map_2026-05-20.html</code></a> (needs revision),
+  <a href="ntkmirror_persona_comparison_2026-05-25.md"><code>ntkmirror_persona_comparison_2026-05-25.md</code></a> (parallel falsification today).
+</p>
+
+</body>
+</html>

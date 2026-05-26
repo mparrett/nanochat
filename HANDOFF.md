@@ -3361,4 +3361,110 @@ This commit: 5 new files (3 in `bench/`, 2 in `docs/`) + backlog edit +
 HANDOFF addendum. Local-only per `feedback_local_only.md`. Branch
 `experiment/hope-nested-learning` clean.
 
+## Day 2026-05-25 (continued) — bench v0 SC headline falsified by seed bracketing
+
+Direct followup to today's NTK-Mirror Path A lesson. Applied the same
+n=1 → n=N falsification pattern to bench v0's headline "Stage 2 SC
+sat=100" result. **The headline does not survive.**
+
+### Result
+
+| Arm | s0 (May-19) | s1 | s2 | s3 | n | mean | range |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| baseline (no memory) | 200 | 300 | 225 | 150 | **4** | **219** | 150 |
+| Stage 2 add (learned α/η) | **100** | 200 | 325 | — | **3** | **208** | 225 |
+
+Mean gap: 11 steps (~5%), inside both arms' seed-variance range.
+Stage 2's variance is *wider* than baseline's. Baseline's best seed
+(150) beats Stage 2's median (200).
+
+### Falsification arc
+
+Each additional seed pulled the apparent gap toward zero monotonically:
+
+- n=1 each: -100 (2× faster) — the original headline
+- Stage 2 s1 added: -50 (1.33×)
+- Stage 2 s2 added: -8 (≈tied)
+- baseline s1 added: -42 (17%)
+- baseline s2 added: -34 (14%)
+- baseline s3 added: **-11 (5%, inside noise)** ← final
+
+### What's falsified
+
+From `docs/bench_v0_stage2_sc_hard_2026-05-19.md`:
+- "2× faster than baseline" → ✗ falsified (mean ratio 1.05)
+- "Clean architectural win on the state-tracking axis at d4" → ✗ falsified
+- The grokking-trajectory s0 (28% acc at step 50 vs s1/s2 at 8-10%) was
+  qualitatively unique to that seed's init, not a mechanism property.
+
+The writeup itself explicitly flagged this risk:
+> "n=1 seed. Need at least n=2-3 before declaring 'Stage 2 wins on
+> state-tracking' as more than a lucky-seed result."
+
+Pure-luck turned out to be the explanation.
+
+### What this means for the project map
+
+`docs/project_map_2026-05-20.html` framed the 22-day arc as:
+> originating question → d6 verdict → side-thread → reframe →
+> **convergence (bench v0)** → frontier
+
+The **convergence** node — bench v0's Stage 2 SC win as the
+architectural traction the d6/5000-iter LM arc missed — is the piece
+that doesn't survive. The map's spine needs a revision noting the
+falsification. The δ-mem field result on hard MQAR at 100× scale
+remains independent evidence for the selective-gating hypothesis.
+
+### What it implies for the other three bench v0 headlines
+
+Same n=1 vulnerability applies to:
+- Stage 2 MQAR sat=375 (the U-curve "loss" claim)
+- η=0.5 sat=475 (U-curve worst-point)
+- Stage 1 SC sat=375 (the "Stage 1 actively hurts SC" claim)
+
+Prior on these three is now "almost certainly also overstated." High
+priority for next session.
+
+### Methodology lesson
+
+n=1 is insufficient for any architectural claim on `bench/`. Seed
+variance at d4/500-iter scale swamps the architectural differences
+bench v0 reported as "wins." Today is the **second instance** of
+n=1 → n=N collapse — NTK-Mirror Path A this morning showed the same
+pattern at the adapter scale. New bench/ default: n=3 minimum before
+any "X beats Y" claim. An `--n-seeds N` flag on `bench/run.py` (10-15
+line change) would make this trivial; worth doing if any further
+bench/ work happens.
+
+### What does NOT change
+
+- d6/5000-iter LM verdict (Stage 2 neutral on natural-language val_bpb)
+  — that had its own multi-seed validation
+  (`docs/hope_nl_stage2_seed_variance_2026-05-04.md`).
+- δ-mem field result on hard MQAR at 100× scale — independent
+  evidence, different scale, different mechanism.
+- Architectural-shape hypothesis ("memory mechanisms are
+  task-mechanism-routing problems") — still live; just lost its d4
+  bench v0 evidence.
+
+### Cost ledger
+
+5 new runs at ~17 min each = ~90 min wall this evening. Plus the
+2 single-seed runs from May-18/19 = 7 runs of cumulative SC-hard data.
+Memory pressure (0.68 GB free) had no measurable effect on wall —
+bench d4 models aren't memory-bound the way Qwen-0.5B inference was.
+
+### Files added this evening
+
+- `docs/bench_v0_seed_bracketing_2026-05-25.md` — markdown writeup
+- `docs/bench_v0_seed_bracketing_2026-05-25.html` — publication HTML
+- `bench/logs/{stage2_d4_sc_hard,baseline_d4_sc_hard}_s{1,2,3}.{jsonl,stdout.log}`
+  (5 new JSONL + 5 stdout logs)
+
+### Branch state
+
+This commit: 2 new docs + 10 new bench log files + HANDOFF addendum.
+Local-only per `feedback_local_only.md`. Branch
+`experiment/hope-nested-learning` clean.
+
 
