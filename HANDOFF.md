@@ -3467,4 +3467,125 @@ This commit: 2 new docs + 10 new bench log files + HANDOFF addendum.
 Local-only per `feedback_local_only.md`. Branch
 `experiment/hope-nested-learning` clean.
 
+## Day 2026-05-28 — bench v0 four-headline audit completes the falsification
+
+Completed the n=3 bracketing of the remaining three bench v0 headlines
+(the first — Stage 2 SC win — was done 2026-05-25). All four headlines
+now have a verdict. The aggregate "Stage 2 specializes" architectural
+narrative is dead; Stage 2 is a worse mechanism, not a specialized one.
+Stage 1's "recall-shaped" framing is the only headline that fully
+survives.
+
+Used the new `--n-seeds N` flag (commit `8f77ab1`) for all three
+bracketings. The flag worked cleanly — runs auto-suffix labels to
+`{label}_s{seed}` and print an aggregate table on stdout.
+
+### Combined result
+
+| Headline (May-19 n=1) | Original | n=3 mean | Verdict |
+|---|---:|---:|---|
+| Stage 2 wins SC (2× faster) | 100 | 208 | ✗ falsified (5% gap) |
+| Stage 2 loses MQAR | 375 | 412.5 | ✓ + worse (1/3 catastrophic) |
+| η=0.5 U-curve worst | 475 | 450 | 🔶 weakened (gap 100→37) |
+| Stage 1 hurts SC | 375 | 375 | ✓ survives (156 vs 175 gap) |
+
+### Key new facts
+
+- **1/3 catastrophic-failure rate is a Stage 2 MQAR property**, not
+  concentrated at any particular η. Seeds 1 of both η=0.1 and η=0.5
+  bracketings produced complete training failures (loss barely moved
+  over 500 steps; acc stayed near random throughout). This is a
+  load-bearing fact the original n=1 framing lost entirely.
+- **U-curve worst-point gap shrinks from 100 → 37 steps** after
+  bracketing both endpoints. Within-η variance is comparable to
+  between-η variance. The shape claim cannot be made from n=1.
+- **Stage 1 SC has no catastrophic-failure mode.** Range only 100 across
+  3 seeds, all saturated. Consistent with "fixed-α writes everything"
+  story — the mechanism is unstable in magnitude but doesn't collapse.
+- **Reproducibility wobble visible.** May-19 s0 sat values reproduce
+  with ±30-50 step drift when re-run today (Stage 2 MQAR May-19=375,
+  today=425; Stage 1 SC May-18=375, today=325). Small but real —
+  likely torch/transformers minor version drift; doesn't change
+  verdicts.
+
+### Architectural narrative after audit
+
+What dies:
+- "Stage 2 specializes" — Stage 2 has no SC advantage *and* large
+  MQAR disadvantage *and* 33% failure rate. Not specialization, just
+  worse.
+- "Convergence (bench v0)" project-map node — the architectural
+  traction recovery doesn't exist.
+- "U-curve as evidence for structured η_init landscape" — shape
+  cannot be claimed at this evidence level.
+
+What survives:
+- Stage 1's recall-shaped framing (the only fully-surviving headline).
+- δ-mem field result at 100× scale (independent, different mechanism).
+- d6/5000-iter LM verdict ("Stage 2 neutral on val_bpb") — had its
+  own multi-seed validation.
+- The architectural-shape hypothesis ("memory mechanisms are
+  task-mechanism-routing") — still live, but its bench v0 evidence
+  reduces to Stage 1 + δ-mem.
+
+### Project map revision
+
+Added a banner aside at the top of
+`docs/project_map_2026-05-20.html` pointing at this audit as the
+canonical post-falsification source. Preserves the May-20 snapshot
+in place (don't rewrite history).
+
+### Methodology lessons (audit-specific, beyond the general n≥3 rule)
+
+- **Catastrophic-failure rate is a separate property from saturation
+  step.** Mean/range only hides 1/3 failures. Pass-rate reporting
+  alongside central tendency is now required.
+- **Shape claims across a sweep require bracketing at every point.**
+  The U-curve example: bracketing two of five η values already
+  shrunk the worst-point gap by 60% and equalized the failure rate
+  across positions.
+
+Both lessons are now in the writeup but worth flagging in memory if
+re-engaged.
+
+### Cost ledger
+
+| Run | Wall |
+|---|---:|
+| Stage 2 MQAR n=3 | 67 min |
+| Stage 1 SC n=3 | 61 min |
+| η=0.5 n=3 | 77 min |
+| **Audit total (2026-05-28)** | **~3.4 h** |
+
+Plus 2026-05-25 SC falsification (~90 min). Plus 2026-05-25 NTK-Mirror
+Path A (~70 min). Plus writeups. Total bench bracketing arc: ~6.5 h
+wall over two days.
+
+### Files added this audit
+
+- `docs/bench_v0_audit_2026-05-28.md` — full markdown writeup
+- `docs/bench_v0_audit_2026-05-28.html` — publication HTML
+- `docs/project_map_2026-05-20.html` — banner edit pointing at audit
+- `bench/logs/{stage2_d4_mqar_hard,stage1_add_d4_sc_hard,stage2_d4_mqar_hard_eta05}_s{0,1,2}.{jsonl,stdout.log}` (9 new bench logs)
+
+### What's next (suggested for next session)
+
+1. **Bracket baseline MQAR n=3** — makes the Stage 2 MQAR / η=0.5
+   comparisons fully rigorous. ~50 min. Confirms whether catastrophic
+   failure is mechanism-specific.
+2. **Bracket η=0.99** — the U-curve "best" endpoint at n=1=325. If
+   it lands near 412 (η=0.1's mean), the U-shape is entirely flat
+   and the eta_init mechanism story dies completely. ~58 min.
+3. **Re-think the architectural hypothesis.** Stage 1 + δ-mem is
+   what's left. The induction-heads probe from the May-20 lower-priority
+   list might now be a higher-priority third axis. Open question to
+   the operator: is the hypothesis still worth investing in, given
+   that the bench v0 evidence-base shrunk by ~75%?
+
+### Branch state
+
+This commit: 3 new/edited docs + 9 new bench logs (untracked per
+convention) + HANDOFF addendum. Local-only per `feedback_local_only.md`.
+Branch `experiment/hope-nested-learning` clean.
+
 

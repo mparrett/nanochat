@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bench v0 audit — four headlines bracketed, architectural story dead — 2026-05-28</title>
+<style>
+  :root { --bg: #1a1a2e; --fg: #e0e0e0; --accent: #e94560; --accent2: #0f3460;
+          --good: #4ade80; --bad: #f87171; --mid: #fbbf24; --card: #16213e;
+          --blue: #60a5fa; --dim: #888; --violet: #a78bfa; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg);
+         color: var(--fg); line-height: 1.75; padding: 2rem 1.5rem; max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 1.85rem; margin-bottom: 0.4rem; color: #fff; letter-spacing: -0.025em; line-height: 1.25; }
+  h2 { font-size: 1.3rem; margin: 2.8rem 0 0.8rem; color: var(--accent); letter-spacing: -0.01em;
+       border-bottom: 1px solid #2a2a4a; padding-bottom: 0.3rem; }
+  h3 { font-size: 1.05rem; margin: 1.8rem 0 0.4rem; color: var(--blue); }
+  p { margin: 0.7rem 0; font-size: 0.95rem; }
+  .subtitle { color: var(--dim); font-size: 0.88rem; margin-bottom: 0.5rem; }
+  .byline { color: var(--dim); font-size: 0.78rem; margin-bottom: 2rem;
+            font-family: 'JetBrains Mono', monospace; }
+  .lede { font-size: 1.05rem; color: #ddd; margin: 1.2rem 0 2rem;
+          line-height: 1.85; padding-left: 1rem; border-left: 3px solid var(--accent); }
+  code { background: #222; padding: 0.12em 0.35em; border-radius: 3px; font-size: 0.85em;
+         font-family: 'JetBrains Mono', 'SF Mono', monospace; color: var(--blue); }
+  a { color: var(--blue); text-decoration: none; border-bottom: 1px solid #2a4470; }
+  em { color: #ddd; font-style: italic; }
+  strong { color: #fff; }
+  pre { background: #0d0d1a; border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0;
+        font-family: 'JetBrains Mono', 'SF Mono', monospace; font-size: 0.82rem;
+        overflow-x: auto; line-height: 1.5; border-left: 3px solid var(--violet);
+        color: #ddd; white-space: pre-wrap; word-break: break-word; }
+  pre code { background: none; padding: 0; color: #ddd; font-size: inherit; }
+  blockquote { background: rgba(167,139,250,0.06); border-left: 3px solid var(--violet);
+               padding: 0.9rem 1.2rem; margin: 1.4rem 0; border-radius: 6px;
+               font-style: italic; color: #ddd; font-size: 0.92rem; }
+  .pull { font-size: 1.05rem; color: #fff; padding: 1.2rem 1.5rem; margin: 1.8rem 0;
+          background: linear-gradient(135deg, rgba(233,69,96,0.08), rgba(167,139,250,0.04));
+          border-radius: 10px; border-left: 4px solid var(--accent);
+          line-height: 1.6; font-style: italic; }
+  .insight { padding: 0.9rem 1.1rem; margin: 1.4rem 0; border-radius: 8px;
+             background: rgba(74,222,128,0.05); border-left: 3px solid var(--good);
+             font-size: 0.9rem; }
+  .insight.warn { background: rgba(251,191,36,0.05); border-left-color: var(--mid); }
+  .insight.bad  { background: rgba(248,113,113,0.05); border-left-color: var(--bad); }
+  .insight strong { color: #fff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+  th { background: var(--card); padding: 0.5rem 0.7rem; text-align: left; color: #aaa;
+       font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  td { padding: 0.5rem 0.7rem; border-bottom: 1px solid #1f1f3a; }
+  td.mono { font-family: 'JetBrains Mono', monospace; }
+  td.win  { color: var(--good); }
+  td.lose { color: var(--bad); }
+  td.dim  { color: var(--dim); }
+  td.right { text-align: right; }
+  ul, ol { margin: 0.5rem 0 0.5rem 1.4rem; }
+  li { margin: 0.4rem 0; }
+  .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #2a2a4a;
+            color: var(--dim); font-size: 0.78rem; }
+</style>
+</head>
+<body>
+
+<h1>The convergence didn't survive the audit</h1>
+<p class="subtitle">Four bench v0 headlines bracketed. Two falsified, one weakened, one survives. Stage 2 isn't specialized — it's just worse.</p>
+<p class="byline">nanochat · experiment/hope-nested-learning · 2026-05-28</p>
+
+<p class="lede">
+  The 2026-05-25 SC falsification took down the first of four bench v0
+  headline numbers. This audit covers the remaining three and pulls
+  them into a single verdict. The full picture is that bench v0's
+  "Stage 2 specializes" architectural narrative emerged from four n=1
+  measurements, three of which had material problems under n=3
+  bracketing. Stage 2's claimed SC advantage is gone; its claimed
+  MQAR disadvantage is real <em>and worse than reported</em>, with a
+  1/3 catastrophic-failure rate; the U-curve worst-point gap shrinks
+  by 60% and the same failure rate appears at <em>every</em> η. Stage 1's
+  recall-shape framing is the only headline that fully survives. The
+  project map's "convergence" node needs to become a "convergence
+  falsified" node.
+</p>
+
+<h2>The audit at a glance</h2>
+
+<table>
+<thead>
+<tr><th>Headline (May-19 n=1)</th><th class="right">Original sat</th><th class="right">n=3 mean</th><th>Verdict</th></tr>
+</thead>
+<tbody>
+<tr><td>Stage 2 wins SC (2× faster than baseline)</td><td class="right">100</td><td class="right lose">208</td><td class="lose">✗ falsified (gap 5%, inside noise)</td></tr>
+<tr><td>Stage 2 loses MQAR</td><td class="right">375</td><td class="right">412.5</td><td>✓ + worse (1/3 catastrophic)</td></tr>
+<tr><td>η=0.5 U-curve worst point</td><td class="right">475</td><td class="right">450</td><td class="warn">🔶 weakened (gap shrinks 60%)</td></tr>
+<tr><td>Stage 1 hurts SC</td><td class="right">375</td><td class="right win">375</td><td class="win">✓ survives (gap 156 vs 175)</td></tr>
+</tbody>
+</table>
+
+<div class="pull">
+  Two of four falsified or weakened. One survives with smaller gap.
+  One fully survives. The aggregate architectural story — Stage 2 as
+  a specialized-trade mechanism — doesn't survive.
+</div>
+
+<h2>The four bracketings</h2>
+
+<h3>1. Stage 2 SC win — falsified (covered 2026-05-25)</h3>
+
+<p>
+  Full detail in <a href="bench_v0_seed_bracketing_2026-05-25.md">bench_v0_seed_bracketing_2026-05-25.md</a>.
+</p>
+
+<table>
+<thead><tr><th>Arm</th><th class="right">seeds</th><th class="right">n</th><th class="right">mean</th><th class="right">range</th></tr></thead>
+<tbody>
+<tr><td>baseline (no memory)</td><td class="mono right">150, 200, 225, 300</td><td class="right">4</td><td class="right">219</td><td class="right">150</td></tr>
+<tr><td>Stage 2 add (learned α/η)</td><td class="mono right">100, 200, 325</td><td class="right">3</td><td class="right">208</td><td class="right lose">225</td></tr>
+</tbody>
+</table>
+
+<p>
+  Stage 2's range exceeds baseline's. The s0=100 reading drove the
+  entire "2× faster" headline; it was a single seed with a distinctive
+  grokking trajectory (28% acc at step 50 vs 8-10% for the other two
+  seeds on the same architecture). Mean ratio: 219/208 = 1.05.
+</p>
+
+<h3>2. Stage 2 MQAR loss — survives, gets worse</h3>
+
+<table>
+<thead><tr><th class="right">Seed</th><th class="right">sat_step</th><th class="right">final_acc</th><th class="right">wall</th></tr></thead>
+<tbody>
+<tr><td class="right mono">s0</td><td class="right">425</td><td class="right">0.999</td><td class="right">21.8m</td></tr>
+<tr><td class="right mono">s1</td><td class="right lose"><strong>NEVER</strong></td><td class="right lose"><strong>0.014</strong></td><td class="right">23.3m</td></tr>
+<tr><td class="right mono">s2</td><td class="right">400</td><td class="right">0.998</td><td class="right">22.1m</td></tr>
+<tr><td class="right"><strong>mean (saturating)</strong></td><td class="right"><strong>412.5</strong></td><td class="right dim">—</td><td class="right dim">—</td></tr>
+<tr><td class="right"><strong>catastrophic-fail rate</strong></td><td class="right lose"><strong>1/3 (33%)</strong></td><td class="right dim">—</td><td class="right dim">—</td></tr>
+</tbody>
+</table>
+
+<p>
+  s1 is the cleanest possible training failure — loss 4.89 → 4.49
+  over 500 steps, acc never moves off random (0.009 → 0.014). Not
+  "trying and failing" — completely stuck. The mechanism under that
+  init is degenerate.
+</p>
+
+<div class="insight bad">
+  <strong>The original "150 steps slower than baseline" framing understates the problem.</strong>
+  Stage 2 on hard MQAR isn't just slower than baseline — it has a 33%
+  catastrophic-failure rate. Aggregate-only reporting (mean / range)
+  loses this; explicit pass-rate is load-bearing.
+</div>
+
+<h3>3. η=0.5 U-curve worst point — weakened</h3>
+
+<table>
+<thead><tr><th class="right">Seed</th><th class="right">sat_step</th><th class="right">final_acc</th></tr></thead>
+<tbody>
+<tr><td class="right mono">s0</td><td class="right">450</td><td class="right">0.999</td></tr>
+<tr><td class="right mono">s1</td><td class="right lose"><strong>NEVER</strong></td><td class="right lose"><strong>0.015</strong></td></tr>
+<tr><td class="right mono">s2</td><td class="right">450</td><td class="right">0.998</td></tr>
+<tr><td class="right"><strong>mean (saturating)</strong></td><td class="right"><strong>450</strong></td><td class="right dim">—</td></tr>
+<tr><td class="right"><strong>catastrophic-fail rate</strong></td><td class="right lose"><strong>1/3 (33%)</strong></td><td class="right dim">—</td></tr>
+</tbody>
+</table>
+
+<p>Cross-η comparison after bracketing both points:</p>
+
+<table>
+<thead><tr><th class="right">η_init</th><th class="right">original n=1</th><th class="right">new n=3 mean</th><th class="right">failure rate</th></tr></thead>
+<tbody>
+<tr><td class="right mono">0.1</td><td class="right">375</td><td class="right">412.5</td><td class="right lose">1/3</td></tr>
+<tr><td class="right mono">0.5</td><td class="right">475 (worst)</td><td class="right">450</td><td class="right lose">1/3</td></tr>
+</tbody>
+</table>
+
+<div class="insight warn">
+  <strong>The worst-point gap shrinks from 100 → 37 steps</strong> and
+  the catastrophic-failure rate is identical at both η values. The
+  failure mode is η-independent, not concentrated at the worst point.
+  The variance <em>within</em> a single η is comparable to the variance
+  <em>between</em> η values. The U-curve shape is suspect without
+  bracketing the endpoints (η=0.99 in particular, the "best" point
+  at n=1=325).
+</div>
+
+<h3>4. Stage 1 SC hurt — survives with smaller gap</h3>
+
+<table>
+<thead><tr><th class="right">Seed</th><th class="right">sat_step</th><th class="right">final_acc</th></tr></thead>
+<tbody>
+<tr><td class="right mono">s0</td><td class="right">325</td><td class="right">0.984</td></tr>
+<tr><td class="right mono">s1</td><td class="right">425</td><td class="right">0.968</td></tr>
+<tr><td class="right mono">s2</td><td class="right">375</td><td class="right">0.975</td></tr>
+<tr><td class="right"><strong>mean</strong></td><td class="right win"><strong>375</strong></td><td class="right">0.976</td></tr>
+<tr><td class="right">range</td><td class="right">100</td><td class="right dim">—</td></tr>
+</tbody>
+</table>
+
+<p>
+  Stage 1 mean (375) vs baseline SC mean (219) → gap <strong>156 steps
+  (~71% slower)</strong>. Original headline gap: 175. New gap: 156.
+  ~10% smaller but qualitatively survives. No catastrophic-failure
+  mode — all seeds saturated, range tighter than any other Stage 1/2
+  arm.
+</p>
+
+<div class="insight">
+  <strong>Stage 1's "fixed-α writes everything, hurts state-tracking"
+  mechanism story is consistent with these numbers.</strong> The only
+  headline that fully survives — and consistent with the
+  "memory-mechanisms-are-task-routing" hypothesis as a single-direction
+  claim (Stage 1's recall-shaped bias hurts SC).
+</div>
+
+<h2>The architectural story, after the audit</h2>
+
+<p>What dies:</p>
+
+<ul>
+  <li><strong>"Stage 2 specializes."</strong> The bench v0 architectural
+    narrative was that Stage 2 trades general performance for
+    state-tracking ability. Audit verdict: Stage 2 has <em>no SC
+    advantage</em> <em>and</em> a large MQAR disadvantage <em>and</em>
+    a 33% catastrophic-failure rate. That isn't specialization — that's
+    a worse mechanism than baseline.</li>
+  <li><strong>The "convergence" framing of the 22-day arc.</strong> The
+    project map cited bench v0's Stage 2 SC win as the architectural
+    traction the d6/5000-iter LM arc had missed. That recovery doesn't
+    exist.</li>
+  <li><strong>The U-curve as evidence for a structured η_init landscape.</strong>
+    Worst-point gap shrinks from 100 → 37 steps and 1/3 failure is
+    η-independent. The shape cannot be claimed from n=1 at each point.</li>
+</ul>
+
+<p>What survives:</p>
+
+<ul>
+  <li><strong>Stage 1's "recall-shaped" framing.</strong> Fixed-α
+    memory helps recall slightly, hurts state-tracking substantially.
+    The only fully-surviving headline.</li>
+  <li><strong>The δ-mem field result on hard MQAR at 100× scale.</strong>
+    Independent evidence on different scale and mechanism. Stands.</li>
+  <li><strong>The d6/5000-iter LM verdict</strong> (Stage 2 neutral on
+    natural-language val_bpb). Had its own multi-seed validation.
+    Stands.</li>
+  <li><strong>The architectural-shape hypothesis</strong> ("memory
+    mechanisms are task-mechanism-routing"). Still a live hypothesis,
+    just with weaker bench v0 evidence than the May-20 map suggested.
+    What remains is the Stage 1 result + δ-mem. Stage 2's evidence
+    is now a net negative.</li>
+</ul>
+
+<h2>What this implies for the project map spine</h2>
+
+<p>
+  The May-20 spine was:
+  <em>originating question → d6 verdict → side-thread → reframe →
+  convergence → frontier.</em>
+</p>
+
+<p>Revised:</p>
+
+<blockquote>
+  originating question → d6 verdict (neutral) → side-thread (δ-mem
+  at 100× scale, partial support) → reframe (selective axis as the
+  architectural question worth asking) → <strong>attempted
+  convergence (bench v0) → falsified under seed bracketing
+  (2026-05-25 SC + 2026-05-28 audit)</strong> → revised frontier
+  (mechanism stability is itself the variable to study; n=3 default;
+  baseline-MQAR bracketing; surviving Stage 1 recall-shape signal
+  at d4 vs δ-mem at d≥40).
+</blockquote>
+
+<p>
+  The May-20 project map gets a banner pointing here, rather than
+  being rewritten in place. Preserves the historical snapshot.
+</p>
+
+<h2>Methodology lessons</h2>
+
+<p>
+  This audit is the <strong>third instance</strong> in the last week
+  of n=1 → n=N collapse on a load-bearing claim:
+</p>
+
+<ol>
+  <li>NTK-Mirror Path A: single-seed +1/30 over LoRA → mean parity at n=3.</li>
+  <li>bench v0 Stage 2 SC: single-seed 2× faster → ~5% gap at n=3/n=4.</li>
+  <li>This audit: "Stage 2 specializes" four-headline picture → three of four headlines have material problems at n=3.</li>
+</ol>
+
+<p>
+  The new bench/ default (<code>--n-seeds N</code> flag) is wired in
+  the runner (commit <code>8f77ab1</code>). The methodology lesson
+  is in cross-session memory
+  (<code>feedback_bench_seed_default.md</code>).
+</p>
+
+<p>Two new specific lessons from this audit:</p>
+
+<div class="insight warn">
+  <strong>1. Catastrophic-failure rate is a property worth measuring
+  separately from saturation step.</strong> Stage 2 MQAR's "175 step
+  slowdown" headline understates the mechanism's actual behavior;
+  "1/3 catastrophic failure" is a load-bearing additional fact.
+  Aggregate-only reporting (mean/range) loses this; explicit
+  pass-rate reporting alongside the central tendency is needed.
+</div>
+
+<div class="insight warn">
+  <strong>2. Cross-η or cross-arm sweeps need bracketing at every
+  point before any "shape" claim.</strong> The U-curve was four
+  interpretable points; bracketing two of them already shrank the
+  worst-point gap by 60% and made the failure rate identical across
+  positions. The shape might still be real, but cannot be claimed
+  from n=1 at each.
+</div>
+
+<h2>Cost ledger</h2>
+
+<table>
+<thead><tr><th>Run</th><th class="right">Wall</th></tr></thead>
+<tbody>
+<tr><td>Stage 2 SC n=3 (2026-05-25)</td><td class="right mono">51 min</td></tr>
+<tr><td>baseline SC n=4 (2026-05-25)</td><td class="right mono">56 min</td></tr>
+<tr><td>Stage 2 MQAR n=3</td><td class="right mono">67 min</td></tr>
+<tr><td>Stage 1 SC n=3</td><td class="right mono">61 min</td></tr>
+<tr><td>η=0.5 n=3</td><td class="right mono">77 min</td></tr>
+<tr><td><strong>Audit total</strong></td><td class="right mono"><strong>~5.2 h</strong></td></tr>
+</tbody>
+</table>
+
+<p>
+  Plus NTK-Mirror Path A bracketing (2026-05-25 morning, ~70 min).
+  Plus the runner-flag commit. Plus writeups.
+</p>
+
+<h2>What's next</h2>
+
+<ol>
+  <li><strong>Update project map.</strong> Banner on the May-20 HTML pointing at this audit (~5 min).</li>
+  <li><strong>Bracket baseline MQAR n=3.</strong> Makes the Stage 2 MQAR comparison fully rigorous. Tests whether catastrophic failure is mechanism-specific. ~50 min.</li>
+  <li><strong>Bracket η=0.99</strong> (U-curve "best" endpoint, n=1=325). If it lands ≈ 412 (η=0.1's mean), the U-shape is flat and the eta_init mechanism story dies entirely. ~58 min.</li>
+  <li><strong>Re-think the live hypothesis.</strong> If Stage 1's recall-shape and δ-mem are the only surviving "specialization" evidence, what's the next bench-cheap probe that could constitute new evidence? Induction-heads (May-20 lower-priority) might now be elevated as a third axis.</li>
+</ol>
+
+<p class="footer">
+  Source data: <code>bench/logs/{stage2_d4_sc_hard,baseline_d4_sc_hard,stage2_d4_mqar_hard,stage1_add_d4_sc_hard,stage2_d4_mqar_hard_eta05}_s*.jsonl</code>
+  · References: <a href="bench_v0_seed_bracketing_2026-05-25.md"><code>bench_v0_seed_bracketing_2026-05-25.md</code></a>,
+  <a href="ntkmirror_persona_comparison_2026-05-25.md"><code>ntkmirror_persona_comparison_2026-05-25.md</code></a>,
+  <a href="project_map_2026-05-20.html"><code>project_map_2026-05-20.html</code></a>,
+  <a href="delta_mem_field_result_2026-05-18.html"><code>delta_mem_field_result_2026-05-18.html</code></a>,
+  original bench v0 writeups in <code>docs/bench_v0_*_2026-05-1{8,9}.md</code> (now superseded).
+</p>
+
+</body>
+</html>
