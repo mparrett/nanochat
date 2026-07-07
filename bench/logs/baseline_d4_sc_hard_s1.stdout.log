@@ -1,0 +1,27 @@
+Autodetected device type: mps
+2026-05-25 20:39:28,103 - nanochat.common - [32m[1mINFO[0m - Distributed world size: 1
+[baseline_d4_sc_hard_s1] task=selective-copy T=210 vocab=32768
+[baseline_d4_sc_hard_s1] params: 36,700,290 (36.70M)  depth=4  n_embd=256
+[baseline_d4_sc_hard_s1] hope: swap=-1 add=-1 w_o=0.0 kind=linear
+Scaling the LR for the AdamW parameters ∝1/√(256/768) = 1.732051
+[baseline_d4_sc_hard_s1] step 0025/500 | loss 3.4782 | acc 0.0386 | — | elapsed 0.9m
+[baseline_d4_sc_hard_s1] step 0050/500 | loss 3.4863 | acc 0.0300 | — | elapsed 1.7m
+[baseline_d4_sc_hard_s1] step 0075/500 | loss 3.4808 | acc 0.0356 | — | elapsed 2.7m
+[baseline_d4_sc_hard_s1] step 0100/500 | loss 3.4518 | acc 0.0457 | — | elapsed 3.7m
+[baseline_d4_sc_hard_s1] step 0125/500 | loss 3.3380 | acc 0.0867 | — | elapsed 4.6m
+[baseline_d4_sc_hard_s1] step 0150/500 | loss 3.1229 | acc 0.1433 | — | elapsed 5.5m
+[baseline_d4_sc_hard_s1] step 0175/500 | loss 2.3728 | acc 0.3184 | — | elapsed 6.4m
+[baseline_d4_sc_hard_s1] step 0200/500 | loss 1.3202 | acc 0.5896 | — | elapsed 7.4m
+[baseline_d4_sc_hard_s1] step 0225/500 | loss 0.6699 | acc 0.7734 | — | elapsed 8.3m
+[baseline_d4_sc_hard_s1] step 0250/500 | loss 0.3305 | acc 0.9045 | — | elapsed 9.2m
+[baseline_d4_sc_hard_s1] step 0275/500 | loss 0.2207 | acc 0.9375 | — | elapsed 10.3m
+[baseline_d4_sc_hard_s1] step 0300/500 | loss 0.1278 | acc 0.9587 | sat@300 | elapsed 11.3m
+[baseline_d4_sc_hard_s1] step 0325/500 | loss 0.0732 | acc 0.9741 | sat@300 | elapsed 12.2m
+[baseline_d4_sc_hard_s1] step 0350/500 | loss 0.0403 | acc 0.9839 | sat@300 | elapsed 13.2m
+[baseline_d4_sc_hard_s1] step 0375/500 | loss 0.0393 | acc 0.9900 | sat@300 | elapsed 14.1m
+[baseline_d4_sc_hard_s1] step 0400/500 | loss 0.0265 | acc 0.9900 | sat@300 | elapsed 15.1m
+[baseline_d4_sc_hard_s1] step 0425/500 | loss 0.0844 | acc 0.9858 | sat@300 | elapsed 16.0m
+[baseline_d4_sc_hard_s1] step 0450/500 | loss 0.0313 | acc 0.9846 | sat@300 | elapsed 16.9m
+[baseline_d4_sc_hard_s1] step 0475/500 | loss 0.0204 | acc 0.9905 | sat@300 | elapsed 17.8m
+[baseline_d4_sc_hard_s1] step 0500/500 | loss 0.0350 | acc 0.9951 | sat@300 | elapsed 18.8m
+[baseline_d4_sc_hard_s1] done in 18.79m  final_acc=0.9951  saturation_step=300

@@ -1,0 +1,92 @@
+Autodetected device type: mps
+2026-05-28 17:30:56,850 - nanochat.common - [32m[1mINFO[0m - Distributed world size: 1
+
+=== [stage2_d4_mqar_hard_eta05] seed 0 (1/3) ===
+[stage2_d4_mqar_hard_eta05_s0] task=mqar T=256 vocab=32768
+[stage2_d4_mqar_hard_eta05_s0] params: 36,962,948 (36.96M)  depth=4  n_embd=256
+[stage2_d4_mqar_hard_eta05_s0] hope: swap=-1 add=1 w_o=1.0 kind=learned_gate
+Scaling the LR for the AdamW parameters ∝1/√(256/768) = 1.732051
+[stage2_d4_mqar_hard_eta05_s0] step 0025/500 | loss 4.8878 | acc 0.0090 | — | elapsed 1.3m
+[stage2_d4_mqar_hard_eta05_s0] step 0050/500 | loss 4.8677 | acc 0.0138 | — | elapsed 2.5m
+[stage2_d4_mqar_hard_eta05_s0] step 0075/500 | loss 4.8343 | acc 0.0143 | — | elapsed 3.9m
+[stage2_d4_mqar_hard_eta05_s0] step 0100/500 | loss 4.7998 | acc 0.0187 | — | elapsed 5.1m
+[stage2_d4_mqar_hard_eta05_s0] step 0125/500 | loss 3.3829 | acc 0.4158 | — | elapsed 6.1m
+[stage2_d4_mqar_hard_eta05_s0] step 0150/500 | loss 1.9084 | acc 0.5382 | — | elapsed 7.1m
+[stage2_d4_mqar_hard_eta05_s0] step 0175/500 | loss 1.9439 | acc 0.5430 | — | elapsed 8.2m
+[stage2_d4_mqar_hard_eta05_s0] step 0200/500 | loss 1.9111 | acc 0.5366 | — | elapsed 9.4m
+[stage2_d4_mqar_hard_eta05_s0] step 0225/500 | loss 1.9922 | acc 0.5314 | — | elapsed 10.5m
+[stage2_d4_mqar_hard_eta05_s0] step 0250/500 | loss 1.8555 | acc 0.5480 | — | elapsed 11.7m
+[stage2_d4_mqar_hard_eta05_s0] step 0275/500 | loss 1.8823 | acc 0.5369 | — | elapsed 12.9m
+[stage2_d4_mqar_hard_eta05_s0] step 0300/500 | loss 1.8036 | acc 0.5518 | — | elapsed 14.1m
+[stage2_d4_mqar_hard_eta05_s0] step 0325/500 | loss 1.7963 | acc 0.5448 | — | elapsed 15.3m
+[stage2_d4_mqar_hard_eta05_s0] step 0350/500 | loss 1.6700 | acc 0.5464 | — | elapsed 16.4m
+[stage2_d4_mqar_hard_eta05_s0] step 0375/500 | loss 1.8011 | acc 0.5479 | — | elapsed 17.6m
+[stage2_d4_mqar_hard_eta05_s0] step 0400/500 | loss 1.5344 | acc 0.5923 | — | elapsed 18.8m
+[stage2_d4_mqar_hard_eta05_s0] step 0425/500 | loss 0.4588 | acc 0.8850 | — | elapsed 20.1m
+[stage2_d4_mqar_hard_eta05_s0] step 0450/500 | loss 0.0634 | acc 0.9849 | sat@450 | elapsed 21.3m
+[stage2_d4_mqar_hard_eta05_s0] step 0475/500 | loss 0.0090 | acc 0.9957 | sat@450 | elapsed 22.6m
+[stage2_d4_mqar_hard_eta05_s0] step 0500/500 | loss 0.0020 | acc 0.9995 | sat@450 | elapsed 23.7m
+[stage2_d4_mqar_hard_eta05_s0] done in 23.74m  final_acc=0.9995  saturation_step=450
+
+=== [stage2_d4_mqar_hard_eta05] seed 1 (2/3) ===
+[stage2_d4_mqar_hard_eta05_s1] task=mqar T=256 vocab=32768
+[stage2_d4_mqar_hard_eta05_s1] params: 36,962,948 (36.96M)  depth=4  n_embd=256
+[stage2_d4_mqar_hard_eta05_s1] hope: swap=-1 add=1 w_o=1.0 kind=learned_gate
+Scaling the LR for the AdamW parameters ∝1/√(256/768) = 1.732051
+[stage2_d4_mqar_hard_eta05_s1] step 0025/500 | loss 4.8989 | acc 0.0066 | — | elapsed 1.4m
+[stage2_d4_mqar_hard_eta05_s1] step 0050/500 | loss 4.8616 | acc 0.0103 | — | elapsed 2.8m
+[stage2_d4_mqar_hard_eta05_s1] step 0075/500 | loss 4.8300 | acc 0.0132 | — | elapsed 4.1m
+[stage2_d4_mqar_hard_eta05_s1] step 0100/500 | loss 4.8005 | acc 0.0132 | — | elapsed 5.5m
+[stage2_d4_mqar_hard_eta05_s1] step 0125/500 | loss 4.7540 | acc 0.0148 | — | elapsed 7.0m
+[stage2_d4_mqar_hard_eta05_s1] step 0150/500 | loss 4.7358 | acc 0.0134 | — | elapsed 8.4m
+[stage2_d4_mqar_hard_eta05_s1] step 0175/500 | loss 4.7164 | acc 0.0166 | — | elapsed 9.7m
+[stage2_d4_mqar_hard_eta05_s1] step 0200/500 | loss 4.6676 | acc 0.0145 | — | elapsed 11.1m
+[stage2_d4_mqar_hard_eta05_s1] step 0225/500 | loss 4.6343 | acc 0.0166 | — | elapsed 12.4m
+[stage2_d4_mqar_hard_eta05_s1] step 0250/500 | loss 4.6328 | acc 0.0127 | — | elapsed 13.8m
+[stage2_d4_mqar_hard_eta05_s1] step 0275/500 | loss 4.5926 | acc 0.0177 | — | elapsed 15.4m
+[stage2_d4_mqar_hard_eta05_s1] step 0300/500 | loss 4.5490 | acc 0.0160 | — | elapsed 17.0m
+[stage2_d4_mqar_hard_eta05_s1] step 0325/500 | loss 4.5469 | acc 0.0171 | — | elapsed 18.3m
+[stage2_d4_mqar_hard_eta05_s1] step 0350/500 | loss 4.5163 | acc 0.0151 | — | elapsed 19.7m
+[stage2_d4_mqar_hard_eta05_s1] step 0375/500 | loss 4.4806 | acc 0.0166 | — | elapsed 21.1m
+[stage2_d4_mqar_hard_eta05_s1] step 0400/500 | loss 4.4800 | acc 0.0167 | — | elapsed 22.4m
+[stage2_d4_mqar_hard_eta05_s1] step 0425/500 | loss 4.4710 | acc 0.0166 | — | elapsed 23.6m
+[stage2_d4_mqar_hard_eta05_s1] step 0450/500 | loss 4.4843 | acc 0.0139 | — | elapsed 24.8m
+[stage2_d4_mqar_hard_eta05_s1] step 0475/500 | loss 4.4337 | acc 0.0161 | — | elapsed 25.9m
+[stage2_d4_mqar_hard_eta05_s1] step 0500/500 | loss 4.4546 | acc 0.0151 | — | elapsed 27.0m
+[stage2_d4_mqar_hard_eta05_s1] done in 27.05m  final_acc=0.0151  saturation_step=None
+
+=== [stage2_d4_mqar_hard_eta05] seed 2 (3/3) ===
+[stage2_d4_mqar_hard_eta05_s2] task=mqar T=256 vocab=32768
+[stage2_d4_mqar_hard_eta05_s2] params: 36,962,948 (36.96M)  depth=4  n_embd=256
+[stage2_d4_mqar_hard_eta05_s2] hope: swap=-1 add=1 w_o=1.0 kind=learned_gate
+Scaling the LR for the AdamW parameters ∝1/√(256/768) = 1.732051
+[stage2_d4_mqar_hard_eta05_s2] step 0025/500 | loss 4.9284 | acc 0.0095 | — | elapsed 1.3m
+[stage2_d4_mqar_hard_eta05_s2] step 0050/500 | loss 4.9050 | acc 0.0079 | — | elapsed 2.5m
+[stage2_d4_mqar_hard_eta05_s2] step 0075/500 | loss 4.8245 | acc 0.0239 | — | elapsed 3.8m
+[stage2_d4_mqar_hard_eta05_s2] step 0100/500 | loss 2.4862 | acc 0.4972 | — | elapsed 5.0m
+[stage2_d4_mqar_hard_eta05_s2] step 0125/500 | loss 2.1267 | acc 0.5084 | — | elapsed 6.3m
+[stage2_d4_mqar_hard_eta05_s2] step 0150/500 | loss 2.1296 | acc 0.5023 | — | elapsed 7.6m
+[stage2_d4_mqar_hard_eta05_s2] step 0175/500 | loss 2.0908 | acc 0.5068 | — | elapsed 8.9m
+[stage2_d4_mqar_hard_eta05_s2] step 0200/500 | loss 2.0191 | acc 0.5155 | — | elapsed 10.3m
+[stage2_d4_mqar_hard_eta05_s2] step 0225/500 | loss 2.0204 | acc 0.5166 | — | elapsed 11.6m
+[stage2_d4_mqar_hard_eta05_s2] step 0250/500 | loss 2.0972 | acc 0.5127 | — | elapsed 13.0m
+[stage2_d4_mqar_hard_eta05_s2] step 0275/500 | loss 1.9678 | acc 0.5154 | — | elapsed 14.2m
+[stage2_d4_mqar_hard_eta05_s2] step 0300/500 | loss 1.9940 | acc 0.5160 | — | elapsed 15.6m
+[stage2_d4_mqar_hard_eta05_s2] step 0325/500 | loss 1.9147 | acc 0.5062 | — | elapsed 17.0m
+[stage2_d4_mqar_hard_eta05_s2] step 0350/500 | loss 1.8465 | acc 0.5160 | — | elapsed 18.3m
+[stage2_d4_mqar_hard_eta05_s2] step 0375/500 | loss 1.9036 | acc 0.5225 | — | elapsed 19.7m
+[stage2_d4_mqar_hard_eta05_s2] step 0400/500 | loss 1.6297 | acc 0.6571 | — | elapsed 21.0m
+[stage2_d4_mqar_hard_eta05_s2] step 0425/500 | loss 0.3835 | acc 0.8988 | — | elapsed 22.4m
+[stage2_d4_mqar_hard_eta05_s2] step 0450/500 | loss 0.0130 | acc 0.9962 | sat@450 | elapsed 23.7m
+[stage2_d4_mqar_hard_eta05_s2] step 0475/500 | loss 0.0087 | acc 0.9987 | sat@450 | elapsed 25.1m
+[stage2_d4_mqar_hard_eta05_s2] step 0500/500 | loss 0.0073 | acc 0.9979 | sat@450 | elapsed 26.4m
+[stage2_d4_mqar_hard_eta05_s2] done in 26.44m  final_acc=0.9979  saturation_step=450
+
+=== [stage2_d4_mqar_hard_eta05] aggregate across n=3 seeds ===
+  seed   sat_step  final_acc  wall_min
+     0        450     0.9995     23.74
+     1          —     0.0151     27.05
+     2        450     0.9979     26.44
+  sat_step  mean=450.0  min=450  max=450  range=0
+  1/3 seed(s) never saturated (acc < 0.95 by end of run)
+  final_acc mean=0.6709  min=0.0151  max=0.9995
