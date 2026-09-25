@@ -36,7 +36,7 @@ from pathlib import Path
 
 import mlx.core as mx
 from mlx_lm import load
-from mlx_lm.generate import generate
+from mlx_lm.generate import stream_generate
 from mlx_lm.sample_utils import make_sampler
 
 from nanochat.delta_mem_mlx import (
@@ -200,7 +200,8 @@ def run_categorical(task, model, tokenizer, max_problems, no_system_prompt, delt
 
 
 def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
-                   temperature, no_system_prompt, lenient, delta_mem_attached):
+                   temperature, no_system_prompt, lenient, delta_mem_attached,
+                   dump=None):
     n = min(len(task), max_problems or len(task))
     sampler = make_sampler(temp=temperature)
     passed, total = 0, 0
@@ -211,12 +212,26 @@ def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
             reset_delta_mem_states(model)
         conv = task[i]
         prompt_str = render_prompt(tokenizer, conv, no_system_prompt)
-        completion = generate(
+        # stream_generate rather than generate: the final response carries
+        # finish_reason, which tells a cap-truncated completion from a finished one.
+        completion, last = "", None
+        for last in stream_generate(
             model, tokenizer, prompt=prompt_str, max_tokens=max_new_tokens,
-            sampler=sampler, verbose=False,
-        )
-        passed += evaluate_completion(task, conv, completion, lenient)
+            sampler=sampler,
+        ):
+            completion += last.text
+        ok = evaluate_completion(task, conv, completion, lenient)
+        passed += ok
         total += 1
+        if dump is not None:
+            dump.write(json.dumps({
+                "task": type(task).__name__, "idx": i, "passed": bool(ok),
+                "gen_tokens": last.generation_tokens,
+                "finish_reason": last.finish_reason,
+                "hit_cap": last.finish_reason == "length",
+                "completion": completion,
+            }) + "\n")
+            dump.flush()
         if "_f1" in conv:
             f1_sum += conv["_f1"]
             em_sum += conv["_em"]
@@ -311,6 +326,10 @@ def main():
                    "adapter.safetensors + delta_mem_config.json). Per-problem "
                    "state reset is applied automatically. See "
                    "scripts/convert_delta_mem_adapter.py.")
+    p.add_argument("--dump-jsonl", default=None, metavar="PATH",
+                   help="Append one record per generative problem (completion, "
+                   "gen_tokens, finish_reason, hit_cap, passed). Written "
+                   "incrementally so a partial run is still readable.")
     args = p.parse_args()
 
     model_id = BONSAI_SHORT_NAMES.get(args.model.lower(), args.model)
@@ -340,6 +359,7 @@ def main():
         print(f"  δ-mem config: rank={cfg.rank} alpha={cfg.alpha} delta_heads={cfg.delta_heads}")
         delta_mem_attached = True
 
+    dump = open(args.dump_jsonl, "a") if args.dump_jsonl else None
     results, totals, aux_by_task = {}, {}, {}
     wall_t0 = time.perf_counter()
     for tname in task_names:
@@ -356,7 +376,8 @@ def main():
             acc, n, aux = run_generative(task, model, tokenizer,
                                           cap, args.max_new_tokens,
                                           args.temperature, args.no_system_prompt,
-                                          args.lenient_extract, delta_mem_attached)
+                                          args.lenient_extract, delta_mem_attached,
+                                          dump)
         results[tname] = acc
         totals[tname] = n
         if aux is not None:
@@ -364,6 +385,8 @@ def main():
         aux_tail = f" [f1={aux['f1_mean']:.3f} em={aux['em_mean']:.3f}]" if aux else ""
         print(f"  {tname}: {acc*100:.2f}% ({n} problems){aux_tail}")
     wall_total = time.perf_counter() - wall_t0
+    if dump is not None:
+        dump.close()
 
     cc = chatcore(results)
     print(f"\n{'='*50}")
