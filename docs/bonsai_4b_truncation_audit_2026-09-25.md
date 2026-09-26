@@ -64,8 +64,30 @@ model itself and not only from greedy decoding. Substituting these draws would p
 HumanEval near 0.81, but that mixes decoding strategies, so treat it as rough.
 A sampled run over the whole task is the clean comparison.
 
+## Does a presence penalty break the rest?
+
+The 32 problems still capped after sampling were rerun with a presence penalty
+of 1.5 over a 2048-token window. The sampling params and seed were unchanged.
+mlx-lm's default window is 20 tokens, which is far shorter than these loops.
+
+| | n | passed | finished | still capped |
+| --- | ---: | ---: | ---: | ---: |
+| GSM8K | 5 | 0 | 1 | 4 |
+| HumanEval | 27 | 9 | 8 | 19 |
+
+9 more HumanEval problems pass. There was no unpenalized second draw on these 32,
+so some of that gain could be ordinary seed-to-seed variance and not the penalty.
+
+The 23 still capped are not repeating text. Their median share of duplicated
+lines is 2%, against 4% for the same problems without the penalty. The median
+completion has 16 "Wait"/"But" pivots, and 15 of the 23 have already written
+code. The model is second-guessing its answer, often over an ambiguous
+docstring, so a token-level penalty has little to act on.
+
 ## Going forward
 
 Evaluate generative tasks with `--max-new-tokens 2048` or more and the fixed
-extractor. Sampling alone leaves about 70% of the loops in place. The next lever
-to try is the presence penalty of 1.5 that stopped the v1 tool-call loops (bonsai ADR-005).
+extractor. With sampling and the penalty, about 12% of HumanEval (19 of 164) and 4 GSM8K problems
+still doesn't converge. That is a capability limit of the model, not a
+measurement artifact. Stacking the rescue attempts puts HumanEval at 142/164,
+but that is closer to pass@3 than to a single-sample score.

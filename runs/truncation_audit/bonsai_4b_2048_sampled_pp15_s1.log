@@ -1,0 +1,21 @@
+Loading prism-ml/Ternary-Bonsai-4B-mlx-2bit...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00, 28897.76it/s]
+  loaded in 1.9s
+  vocab=151669 arch=mlx_lm.models.qwen3
+
+=== GSM8K ===
+  [5/5] passed=0 acc=0.000  (219.6s)
+  GSM8K: 0.00% (5 problems)
+
+=== HumanEval ===
+  [5/27] passed=3 acc=0.600  [10/27] passed=4 acc=0.400  [15/27] passed=5 acc=0.333  [20/27] passed=7 acc=0.350  [25/27] passed=8 acc=0.320  [27/27] passed=9 acc=0.333  (1432.5s)
+  HumanEval: 33.33% (27 problems)
+
+==================================================
+Summary — prism-ml/Ternary-Bonsai-4B-mlx-2bit
+==================================================
+  GSM8K              0.00%  centered=+0.0000  (n=5)
+  HumanEval         33.33%  centered=+0.3333  (n=27)
+  wall             1654.8s
+
+Report: runs/truncation_audit/bonsai_4b_2048_sampled_pp15_s1.md
