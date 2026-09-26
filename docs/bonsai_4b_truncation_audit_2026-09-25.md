@@ -47,8 +47,25 @@ comes from ARC, MMLU and SpellingBee. On GSM8K and HumanEval Bonsai already
 tied or led Qwen. Bonsai's ChatCORE rises about 0.04 with these fixes, but
 Qwen was not re-measured, and it may gain too.
 
+## Does sampling break the loops?
+
+The 46 problems still capped at 2048 were rerun with the card's sampling
+params (temp 0.5, top-k 20, top-p 0.9, seed 1, one draw each):
+
+| | n | passed | finished | still capped |
+| --- | ---: | ---: | ---: | ---: |
+| GSM8K | 6 | 0 | 1 | 5 |
+| HumanEval | 40 | 11 | 13 | 27 |
+
+Sampling unsticks 14 of the 46, and 11 of those HumanEval problems pass
+(3 of them passed despite hitting the cap, because the code came before the
+loop). The other 32 still run to 2048, so most of the looping comes from the
+model itself and not only from greedy decoding. Substituting these draws would put
+HumanEval near 0.81, but that mixes decoding strategies, so treat it as rough.
+A sampled run over the whole task is the clean comparison.
+
 ## Going forward
 
 Evaluate generative tasks with `--max-new-tokens 2048` or more and the fixed
-extractor. The remaining 46 capped problems are the test case for whether
-sampling (temp 0.5, top-k 20, top-p 0.9) breaks the greedy loops.
+extractor. Sampling alone leaves about 70% of the loops in place. The next lever
+to try is the presence penalty of 1.5 that stopped the v1 tool-call loops (bonsai ADR-005).
