@@ -60,6 +60,9 @@ from tasks.spellingbee import SpellingBee
 # answers and score 0% under strict. Lenient extractor walks patterns
 # from most-specific to most-permissive, normalizing the matched number.
 _RE_STRICT = re.compile(r"####\s*(-?[0-9][0-9\.,]*)")
+# Qwen3-family models often close with LaTeX "\boxed{N}"; without this the
+# hint regex grabs a number from the working-out instead.
+_RE_BOXED = re.compile(r"\\boxed\{\s*\$?\s*(-?[0-9][0-9\.,]*)")
 _RE_HINT = re.compile(
     r"(?:final\s*answer|the\s*answer\s*is|my\s*final\s*answer|"
     r"answer\s*[:=]|gives\s*us)\s*[*:#`'\"$]*\s*(-?[0-9][0-9\.,]*)",
@@ -74,13 +77,16 @@ def _normalize_num(s):
 
 
 def lenient_extract(completion):
-    """Try strict #### first, then 'final answer'/'answer is' hints,
-    then **N** bold, then last bare integer in the tail. Returns
-    normalized number string or None.
+    """Try strict #### first, then the last \\boxed{N}, then 'final
+    answer'/'answer is' hints, then **N** bold, then last bare integer in
+    the tail. Returns normalized number string or None.
     """
     m = _RE_STRICT.search(completion)
     if m:
         return _normalize_num(m.group(1))
+    matches = list(_RE_BOXED.finditer(completion))
+    if matches:
+        return _normalize_num(matches[-1].group(1))
     matches = list(_RE_HINT.finditer(completion))
     if matches:
         return _normalize_num(matches[-1].group(1))
