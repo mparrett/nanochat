@@ -1,0 +1,16 @@
+Loading prism-ml/Ternary-Bonsai-4B-mlx-2bit...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00, 34828.15it/s]
+  loaded in 1.4s
+  vocab=151669 arch=mlx_lm.models.qwen3
+
+=== SpellingBee ===
+  [5/200] passed=3 acc=0.600  [10/200] passed=8 acc=0.800  [15/200] passed=12 acc=0.800  [20/200] passed=17 acc=0.850  [25/200] passed=19 acc=0.760  [30/200] passed=21 acc=0.700  [35/200] passed=25 acc=0.714  [40/200] passed=27 acc=0.675  [45/200] passed=29 acc=0.644  [50/200] passed=32 acc=0.640  [55/200] passed=35 acc=0.636  [60/200] passed=38 acc=0.633  [65/200] passed=40 acc=0.615  [70/200] passed=44 acc=0.629  [75/200] passed=46 acc=0.613  [80/200] passed=50 acc=0.625  [85/200] passed=53 acc=0.624  [90/200] passed=54 acc=0.600  [95/200] passed=57 acc=0.600  [100/200] passed=61 acc=0.610  [105/200] passed=64 acc=0.610  [110/200] passed=69 acc=0.627  [115/200] passed=73 acc=0.635  [120/200] passed=77 acc=0.642  [125/200] passed=81 acc=0.648  [130/200] passed=84 acc=0.646  [135/200] passed=88 acc=0.652  [140/200] passed=91 acc=0.650  [145/200] passed=94 acc=0.648  [150/200] passed=98 acc=0.653  [155/200] passed=101 acc=0.652  [160/200] passed=104 acc=0.650  [165/200] passed=109 acc=0.661  [170/200] passed=114 acc=0.671  [175/200] passed=119 acc=0.680  [180/200] passed=124 acc=0.689  [185/200] passed=128 acc=0.692  [190/200] passed=131 acc=0.689  [195/200] passed=136 acc=0.697  [200/200] passed=141 acc=0.705  (1501.9s)
+  SpellingBee: 70.50% (200 problems)
+
+==================================================
+Summary — prism-ml/Ternary-Bonsai-4B-mlx-2bit
+==================================================
+  SpellingBee       70.50%  centered=+0.7050  (n=200)
+  wall             1502.0s
+
+Report: runs/truncation_audit/bonsai_4b_spellingbee_2048.md

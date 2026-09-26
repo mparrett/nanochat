@@ -86,6 +86,17 @@ completion has 16 "Wait"/"But" pivots, and 15 of the 23 have already written
 code. The model is second-guessing its answer, often over an ambiguous
 docstring, so a token-level penalty has little to act on.
 
+## SpellingBee: the gap is real
+
+SpellingBee is the other generative task in ChatCORE, and the largest single
+part of the gap to Qwen (−25pp). Rerunning 200 problems at 2048 with the fixed
+extractor gives **0.705, the same as May**. Only 13 completions ran past 512
+tokens. Scoring the same outputs May's way (old extractor, anything over 512
+counted wrong) gives 0.690. The failures are genuine: the model misreads the
+word ("initiatrix" as "initiator"), misparses the question ("how many is" as
+the word "is"), or never gives a number (12 of 59). May's reading, that ternary
+weights hurt character-level mapping, stands.
+
 ## Going forward
 
 Evaluate generative tasks with `--max-new-tokens 2048` or more and the fixed
