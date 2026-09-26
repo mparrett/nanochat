@@ -207,13 +207,17 @@ def run_categorical(task, model, tokenizer, max_problems, no_system_prompt, delt
 
 def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
                    temperature, no_system_prompt, lenient, delta_mem_attached,
-                   dump=None):
-    n = min(len(task), max_problems or len(task))
+                   dump=None, only_ids=None):
+    if only_ids is None:
+        ids = list(range(min(len(task), max_problems or len(task))))
+    else:
+        ids = sorted(only_ids)
+    n = len(ids)
     sampler = make_sampler(temp=temperature)
     passed, total = 0, 0
     f1_sum, em_sum, aux_n = 0.0, 0, 0  # HotpotQA stashes _f1/_em on conv
     t0 = time.perf_counter()
-    for i in range(n):
+    for k, i in enumerate(ids):
         if delta_mem_attached:
             reset_delta_mem_states(model)
         conv = task[i]
@@ -242,9 +246,9 @@ def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
             f1_sum += conv["_f1"]
             em_sum += conv["_em"]
             aux_n += 1
-        if (i + 1) % 5 == 0 or i + 1 == n:
+        if (k + 1) % 5 == 0 or k + 1 == n:
             tail = f" f1={f1_sum/aux_n:.3f} em={em_sum/aux_n:.3f}" if aux_n else ""
-            print(f"\r  [{i+1}/{n}] passed={passed} acc={passed/total:.3f}{tail}", end="", flush=True)
+            print(f"\r  [{k+1}/{n}] passed={passed} acc={passed/total:.3f}{tail}", end="", flush=True)
     dt = time.perf_counter() - t0
     print(f"  ({dt:.1f}s)")
     aux = {"f1_mean": f1_sum / aux_n, "em_mean": em_sum / aux_n} if aux_n else None
@@ -336,13 +340,23 @@ def main():
                    help="Append one record per generative problem (completion, "
                    "gen_tokens, finish_reason, hit_cap, passed). Written "
                    "incrementally so a partial run is still readable.")
+    p.add_argument("--only-ids", default=None, metavar="PATH",
+                   help="JSON file mapping generative task name to a list of "
+                   "problem indices; runs only those (e.g. re-running the "
+                   "problems that hit max_new_tokens). Overrides -x for them.")
     args = p.parse_args()
+    only_ids = None
+    if args.only_ids:
+        with open(args.only_ids) as f:
+            only_ids = json.load(f)
 
     model_id = BONSAI_SHORT_NAMES.get(args.model.lower(), args.model)
     task_names = ALL_TASKS if args.task_name is None else args.task_name.split("|")
     for t in task_names:
         if t not in TASK_CTORS:
             p.error(f"unknown task: {t} (choices: {','.join(ALL_TASKS)})")
+        if only_ids is not None and t not in only_ids:
+            p.error(f"--only-ids file has no entry for task {t}")
 
     print(f"Loading {model_id}...")
     t0 = time.perf_counter()
@@ -383,7 +397,7 @@ def main():
                                           cap, args.max_new_tokens,
                                           args.temperature, args.no_system_prompt,
                                           args.lenient_extract, delta_mem_attached,
-                                          dump)
+                                          dump, only_ids and only_ids.get(tname))
         results[tname] = acc
         totals[tname] = n
         if aux is not None:
