@@ -1,0 +1,21 @@
+Loading prism-ml/Ternary-Bonsai-4B-mlx-2bit...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00, 8505.25it/s]
+  loaded in 1.2s
+  vocab=151669 arch=mlx_lm.models.qwen3
+
+=== GSM8K ===
+  [5/200] passed=3 acc=0.600  [10/200] passed=7 acc=0.700  [15/200] passed=12 acc=0.800  [20/200] passed=16 acc=0.800  [25/200] passed=20 acc=0.800  [30/200] passed=21 acc=0.700  [35/200] passed=25 acc=0.714  [40/200] passed=29 acc=0.725  [45/200] passed=32 acc=0.711  [50/200] passed=37 acc=0.740  [55/200] passed=42 acc=0.764  [60/200] passed=46 acc=0.767  [65/200] passed=50 acc=0.769  [70/200] passed=55 acc=0.786  [75/200] passed=58 acc=0.773  [80/200] passed=63 acc=0.787  [85/200] passed=68 acc=0.800  [90/200] passed=71 acc=0.789  [95/200] passed=76 acc=0.800  [100/200] passed=80 acc=0.800  [105/200] passed=84 acc=0.800  [110/200] passed=87 acc=0.791  [115/200] passed=90 acc=0.783  [120/200] passed=94 acc=0.783  [125/200] passed=98 acc=0.784  [130/200] passed=102 acc=0.785  [135/200] passed=106 acc=0.785  [140/200] passed=110 acc=0.786  [145/200] passed=115 acc=0.793  [150/200] passed=120 acc=0.800  [155/200] passed=124 acc=0.800  [160/200] passed=127 acc=0.794  [165/200] passed=131 acc=0.794  [170/200] passed=136 acc=0.800  [175/200] passed=139 acc=0.794  [180/200] passed=142 acc=0.789  [185/200] passed=146 acc=0.789  [190/200] passed=150 acc=0.789  [195/200] passed=154 acc=0.790  [200/200] passed=158 acc=0.790  (1260.2s)
+  GSM8K: 79.00% (200 problems)
+
+=== HumanEval ===
+  [5/164] passed=3 acc=0.600  [10/164] passed=3 acc=0.300  [15/164] passed=5 acc=0.333  [20/164] passed=10 acc=0.500  [25/164] passed=14 acc=0.560  [30/164] passed=18 acc=0.600  [35/164] passed=22 acc=0.629  [40/164] passed=25 acc=0.625  [45/164] passed=28 acc=0.622  [50/164] passed=32 acc=0.640  [55/164] passed=34 acc=0.618  [60/164] passed=36 acc=0.600  [65/164] passed=38 acc=0.585  [70/164] passed=41 acc=0.586  [75/164] passed=43 acc=0.573  [80/164] passed=48 acc=0.600  [85/164] passed=50 acc=0.588  [90/164] passed=52 acc=0.578  [95/164] passed=55 acc=0.579  [100/164] passed=58 acc=0.580  [105/164] passed=61 acc=0.581  [110/164] passed=64 acc=0.582  [115/164] passed=66 acc=0.574  [120/164] passed=69 acc=0.575  [125/164] passed=70 acc=0.560  [130/164] passed=72 acc=0.554  [135/164] passed=75 acc=0.556  [140/164] passed=79 acc=0.564  [145/164] passed=84 acc=0.579  [150/164] passed=89 acc=0.593  [155/164] passed=91 acc=0.587  [160/164] passed=94 acc=0.588  [164/164] passed=96 acc=0.585  (2428.3s)
+  HumanEval: 58.54% (164 problems)
+
+==================================================
+Summary — prism-ml/Ternary-Bonsai-4B-mlx-2bit
+==================================================
+  GSM8K             79.00%  centered=+0.7900  (n=200)
+  HumanEval         58.54%  centered=+0.5854  (n=164)
+  wall             3691.3s
+
+Report: runs/truncation_audit/bonsai_4b_512.md

@@ -1,0 +1,21 @@
+Loading prism-ml/Ternary-Bonsai-4B-mlx-2bit...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00, 16052.56it/s]
+  loaded in 1.2s
+  vocab=151669 arch=mlx_lm.models.qwen3
+
+=== GSM8K ===
+  [5/16] passed=4 acc=0.800  [10/16] passed=7 acc=0.700  [15/16] passed=9 acc=0.600  [16/16] passed=10 acc=0.625  (390.0s)
+  GSM8K: 62.50% (16 problems)
+
+=== HumanEval ===
+  [5/102] passed=2 acc=0.400  [10/102] passed=2 acc=0.200  [15/102] passed=6 acc=0.400  [20/102] passed=11 acc=0.550  [25/102] passed=14 acc=0.560  [30/102] passed=17 acc=0.567  [35/102] passed=17 acc=0.486  [40/102] passed=18 acc=0.450  [45/102] passed=21 acc=0.467  [50/102] passed=24 acc=0.480  [55/102] passed=26 acc=0.473  [60/102] passed=29 acc=0.483  [65/102] passed=31 acc=0.477  [70/102] passed=36 acc=0.514  [75/102] passed=40 acc=0.533  [80/102] passed=45 acc=0.562  [85/102] passed=49 acc=0.576  [90/102] passed=53 acc=0.589  [95/102] passed=57 acc=0.600  [100/102] passed=60 acc=0.600  [102/102] passed=62 acc=0.608  (4056.8s)
+  HumanEval: 60.78% (102 problems)
+
+==================================================
+Summary — prism-ml/Ternary-Bonsai-4B-mlx-2bit
+==================================================
+  GSM8K             62.50%  centered=+0.6250  (n=16)
+  HumanEval         60.78%  centered=+0.6078  (n=102)
+  wall             4449.5s
+
+Report: runs/truncation_audit/bonsai_4b_2048_capped.md
