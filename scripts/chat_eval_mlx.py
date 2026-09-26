@@ -206,14 +206,13 @@ def run_categorical(task, model, tokenizer, max_problems, no_system_prompt, delt
 
 
 def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
-                   temperature, no_system_prompt, lenient, delta_mem_attached,
+                   sampler, no_system_prompt, lenient, delta_mem_attached,
                    dump=None, only_ids=None):
     if only_ids is None:
         ids = list(range(min(len(task), max_problems or len(task))))
     else:
         ids = sorted(only_ids)
     n = len(ids)
-    sampler = make_sampler(temp=temperature)
     passed, total = 0, 0
     f1_sum, em_sum, aux_n = 0.0, 0, 0  # HotpotQA stashes _f1/_em on conv
     t0 = time.perf_counter()
@@ -278,7 +277,8 @@ def write_report(out_path, model_id, results, totals, args, wall_total, chatcore
         "",
         f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         f"Total wall: {wall_total:.1f}s",
-        f"Args: {caps_str} temp={args.temperature} "
+        f"Args: {caps_str} temp={args.temperature} top_k={args.top_k} "
+        f"top_p={args.top_p} seed={args.seed} "
         f"max_new_tokens={args.max_new_tokens} no_system_prompt={args.no_system_prompt} "
         f"lenient_extract={args.lenient_extract}",
         delta_mem_line,
@@ -322,6 +322,10 @@ def main():
                    help="Override -x for generative tasks (GSM8K, HumanEval, SpellingBee).")
     p.add_argument("-t", "--temperature", type=float, default=0.0,
                    help="Sampling temperature (0 = greedy, matches nanochat default)")
+    p.add_argument("--top-k", type=int, default=0, help="0 = off")
+    p.add_argument("--top-p", type=float, default=0.0, help="0 = off")
+    p.add_argument("--seed", type=int, default=0,
+                   help="mx.random seed, so sampled runs are repeatable")
     p.add_argument("--max-new-tokens", type=int, default=256,
                    help="Max generated tokens for generative tasks (default 256, less than nanochat 512 for smoke speed)")
     p.add_argument("--no-system-prompt", action="store_true",
@@ -345,6 +349,8 @@ def main():
                    "problem indices; runs only those (e.g. re-running the "
                    "problems that hit max_new_tokens). Overrides -x for them.")
     args = p.parse_args()
+    mx.random.seed(args.seed)
+    sampler = make_sampler(temp=args.temperature, top_k=args.top_k, top_p=args.top_p)
     only_ids = None
     if args.only_ids:
         with open(args.only_ids) as f:
@@ -395,7 +401,7 @@ def main():
             cap = args.max_problems_gen if args.max_problems_gen is not None else args.max_problems
             acc, n, aux = run_generative(task, model, tokenizer,
                                           cap, args.max_new_tokens,
-                                          args.temperature, args.no_system_prompt,
+                                          sampler, args.no_system_prompt,
                                           args.lenient_extract, delta_mem_attached,
                                           dump, only_ids and only_ids.get(tname))
         results[tname] = acc
