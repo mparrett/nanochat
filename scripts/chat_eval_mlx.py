@@ -37,7 +37,7 @@ from pathlib import Path
 import mlx.core as mx
 from mlx_lm import load
 from mlx_lm.generate import stream_generate
-from mlx_lm.sample_utils import make_sampler
+from mlx_lm.sample_utils import make_logits_processors, make_sampler
 
 from nanochat.delta_mem_mlx import (
     DeltaMemConfig,
@@ -206,7 +206,7 @@ def run_categorical(task, model, tokenizer, max_problems, no_system_prompt, delt
 
 
 def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
-                   sampler, no_system_prompt, lenient, delta_mem_attached,
+                   gen_kwargs, no_system_prompt, lenient, delta_mem_attached,
                    dump=None, only_ids=None):
     if only_ids is None:
         ids = list(range(min(len(task), max_problems or len(task))))
@@ -226,7 +226,7 @@ def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
         completion, last = "", None
         for last in stream_generate(
             model, tokenizer, prompt=prompt_str, max_tokens=max_new_tokens,
-            sampler=sampler,
+            **gen_kwargs,
         ):
             completion += last.text
         ok = evaluate_completion(task, conv, completion, lenient)
@@ -279,6 +279,7 @@ def write_report(out_path, model_id, results, totals, args, wall_total, chatcore
         f"Total wall: {wall_total:.1f}s",
         f"Args: {caps_str} temp={args.temperature} top_k={args.top_k} "
         f"top_p={args.top_p} seed={args.seed} "
+        f"presence_penalty={args.presence_penalty}@{args.presence_context} "
         f"max_new_tokens={args.max_new_tokens} no_system_prompt={args.no_system_prompt} "
         f"lenient_extract={args.lenient_extract}",
         delta_mem_line,
@@ -326,6 +327,11 @@ def main():
     p.add_argument("--top-p", type=float, default=0.0, help="0 = off")
     p.add_argument("--seed", type=int, default=0,
                    help="mx.random seed, so sampled runs are repeatable")
+    p.add_argument("--presence-penalty", type=float, default=0.0, help="0 = off")
+    p.add_argument("--presence-context", type=int, default=20,
+                   help="Tokens the presence penalty looks back over. mlx-lm's "
+                   "default is 20; set it to max-new-tokens to match vLLM, which "
+                   "counts the whole generation.")
     p.add_argument("--max-new-tokens", type=int, default=256,
                    help="Max generated tokens for generative tasks (default 256, less than nanochat 512 for smoke speed)")
     p.add_argument("--no-system-prompt", action="store_true",
@@ -350,7 +356,13 @@ def main():
                    "problems that hit max_new_tokens). Overrides -x for them.")
     args = p.parse_args()
     mx.random.seed(args.seed)
-    sampler = make_sampler(temp=args.temperature, top_k=args.top_k, top_p=args.top_p)
+    gen_kwargs = {
+        "sampler": make_sampler(temp=args.temperature, top_k=args.top_k, top_p=args.top_p),
+        "logits_processors": make_logits_processors(
+            presence_penalty=args.presence_penalty,
+            presence_context_size=args.presence_context,
+        ),
+    }
     only_ids = None
     if args.only_ids:
         with open(args.only_ids) as f:
@@ -401,7 +413,7 @@ def main():
             cap = args.max_problems_gen if args.max_problems_gen is not None else args.max_problems
             acc, n, aux = run_generative(task, model, tokenizer,
                                           cap, args.max_new_tokens,
-                                          sampler, args.no_system_prompt,
+                                          gen_kwargs, args.no_system_prompt,
                                           args.lenient_extract, delta_mem_attached,
                                           dump, only_ids and only_ids.get(tname))
         results[tname] = acc
