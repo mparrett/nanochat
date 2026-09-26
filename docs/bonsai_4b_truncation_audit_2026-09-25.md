@@ -75,8 +75,10 @@ mlx-lm's default window is 20 tokens, which is far shorter than these loops.
 | GSM8K | 5 | 0 | 1 | 4 |
 | HumanEval | 27 | 9 | 8 | 19 |
 
-9 more HumanEval problems pass. There was no unpenalized second draw on these 32,
-so some of that gain could be ordinary seed-to-seed variance and not the penalty.
+9 more HumanEval problems pass, but a control run shows no penalty effect. A
+second unpenalized draw (seed 2) on the same 32 gets 7 passes (1 GSM8K, 6 HumanEval)
+and 8 finished, against the penalty's 9 passes and 9 finished. Only 4 problems pass
+in both runs. What rescues a problem is a lucky draw, not the penalty.
 
 The 23 still capped are not repeating text. Their median share of duplicated
 lines is 2%, against 4% for the same problems without the penalty. The median
