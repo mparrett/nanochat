@@ -1,0 +1,65 @@
+=== chunk 1, lambda 1.0 ===
+Loading prism-ml/Ternary-Bonsai-4B-mlx-2bit...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00, 20068.44it/s]
+  loaded in 1.7s
+  vocab=151669 arch=mlx_lm.models.qwen3
+  marker penalty 1.0 on 28 tokens
+
+=== GSM8K ===
+  [4/4] passed=3 acc=0.750  (73.7s)
+  GSM8K: 75.00% (4 problems)
+
+=== HumanEval ===
+  [5/10] passed=4 acc=0.800  [10/10] passed=6 acc=0.600  (410.6s)
+  HumanEval: 60.00% (10 problems)
+
+==================================================
+Summary — prism-ml/Ternary-Bonsai-4B-mlx-2bit
+==================================================
+  GSM8K             75.00%  centered=+0.7500  (n=4)
+  HumanEval         60.00%  centered=+0.6000  (n=10)
+  wall             486.4s
+=== chunk 2, lambda 1.0 ===
+Loading prism-ml/Ternary-Bonsai-4B-mlx-2bit...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00, 8769.45it/s]
+  loaded in 1.8s
+  vocab=151669 arch=mlx_lm.models.qwen3
+  marker penalty 1.0 on 28 tokens
+  resume: 14 problems already in runs/marker_penalty/lam_1.0.jsonl
+
+=== GSM8K ===
+  [4/4] passed=2 acc=0.500  (45.4s)
+  GSM8K: 50.00% (4 problems)
+
+=== HumanEval ===
+  [5/9] passed=1 acc=0.200  [9/9] passed=4 acc=0.444  (481.8s)
+  HumanEval: 44.44% (9 problems)
+
+==================================================
+Summary — prism-ml/Ternary-Bonsai-4B-mlx-2bit
+==================================================
+  GSM8K             50.00%  centered=+0.5000  (n=4)
+  HumanEval         44.44%  centered=+0.4444  (n=9)
+  wall             529.3s
+=== chunk 3, lambda 1.0 ===
+Loading prism-ml/Ternary-Bonsai-4B-mlx-2bit...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00, 20589.15it/s]
+  loaded in 1.4s
+  vocab=151669 arch=mlx_lm.models.qwen3
+  marker penalty 1.0 on 28 tokens
+  resume: 27 problems already in runs/marker_penalty/lam_1.0.jsonl
+
+=== GSM8K ===
+  [4/4] passed=3 acc=0.750  (59.5s)
+  GSM8K: 75.00% (4 problems)
+
+=== HumanEval ===
+  [5/9] passed=2 acc=0.400  [9/9] passed=4 acc=0.444  (414.0s)
+  HumanEval: 44.44% (9 problems)
+
+==================================================
+Summary — prism-ml/Ternary-Bonsai-4B-mlx-2bit
+==================================================
+  GSM8K             75.00%  centered=+0.7500  (n=4)
+  HumanEval         44.44%  centered=+0.4444  (n=9)
+  wall             475.6s
