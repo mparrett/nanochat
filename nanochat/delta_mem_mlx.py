@@ -95,6 +95,10 @@ class DeltaMemLayer(nn.Module):
         self.config = config
         self.rank = config.rank
         self.delta_scaling = config.delta_scaling
+        # Extra multiplier on δ_o only. 1.0 reproduces the trained adapter; >1
+        # compensates for backbones (e.g. ternary Bonsai) whose attention outputs
+        # dwarf the correction the adapter was trained to make on fp Qwen3.
+        self.o_scale = 1.0
         # Memory read/write projections (act on hidden_size → rank)
         self.memory_q_proj = mx.zeros((self.rank, hidden_size))
         self.memory_k_proj = mx.zeros((self.rank, hidden_size))
@@ -156,7 +160,7 @@ class DeltaMemLayer(nn.Module):
     def project_deltas(self, reads: mx.array) -> tuple[mx.array, mx.array]:
         """Returns (δ_q, δ_o) shaped (B, T, q_out), (B, T, o_out). Scaled by α/rank."""
         delta_q = (reads @ self.delta_q_proj.T) * self.delta_scaling
-        delta_o = (reads @ self.delta_o_proj.T) * self.delta_scaling
+        delta_o = (reads @ self.delta_o_proj.T) * (self.delta_scaling * self.o_scale)
         return delta_q, delta_o
 
 

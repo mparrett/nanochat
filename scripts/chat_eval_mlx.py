@@ -294,7 +294,8 @@ def chatcore(results):
 
 
 def write_report(out_path, model_id, results, totals, args, wall_total, chatcore_val, aux_by_task=None):
-    delta_mem_line = f"δ-mem: {args.delta_mem}" if args.delta_mem else "δ-mem: off"
+    delta_mem_line = (f"δ-mem: {args.delta_mem} o_scale={args.delta_mem_o_scale}"
+                      if args.delta_mem else "δ-mem: off")
     caps_parts = [f"max_problems={args.max_problems}"]
     if args.max_problems_cat is not None:
         caps_parts.append(f"cat={args.max_problems_cat}")
@@ -383,6 +384,10 @@ def main():
                    "adapter.safetensors + delta_mem_config.json). Per-problem "
                    "state reset is applied automatically. See "
                    "scripts/convert_delta_mem_adapter.py.")
+    p.add_argument("--delta-mem-o-scale", type=float, default=1.0,
+                   help="Multiply δ-mem's attention-output correction by this. "
+                   "The adapter was trained on fp Qwen3; on ternary Bonsai the "
+                   "correction is ~5x weaker relative to the attention output.")
     p.add_argument("--dump-jsonl", default=None, metavar="PATH",
                    help="Append one record per generative problem (completion, "
                    "gen_tokens, finish_reason, hit_cap, passed). Written "
@@ -446,6 +451,10 @@ def main():
         n_loaded = load_delta_mem_adapter(model, str(adapter_st))
         print(f"  δ-mem attached: {len(wrapped)} layers wrapped, {n_loaded} tensors loaded")
         print(f"  δ-mem config: rank={cfg.rank} alpha={cfg.alpha} delta_heads={cfg.delta_heads}")
+        if args.delta_mem_o_scale != 1.0:
+            for layer in model.model.layers:
+                layer.self_attn.delta_mem.o_scale = args.delta_mem_o_scale
+            print(f"  δ-mem o_scale: {args.delta_mem_o_scale}")
         delta_mem_attached = True
 
     dump = open(args.dump_jsonl, "a") if args.dump_jsonl else None
