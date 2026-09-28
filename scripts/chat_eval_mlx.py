@@ -114,6 +114,28 @@ def evaluate_completion(task, conv, completion, lenient):
     return int(pred is not None and pred == ref)
 
 
+# High-specificity hesitation markers from arXiv 2606.00206. Broad connectives
+# ("but", "however", "actually") are left out on purpose: suppressing them
+# everywhere cost faithfulness in the bonsai agent tests (Round 6, Exp 3).
+HESITATION_MARKERS = [
+    "wait", "hmm", "alternatively", "reconsider", "rethink", "backtrack",
+    "retry", "recheck", "revisit", "confused", "wrong", "mistake", "incorrect",
+]
+
+
+def marker_token_ids(tokenizer, words):
+    """IDs of every single-token spelling of each word. Multi-token spellings
+    are skipped rather than approximated by their first piece."""
+    ids = set()
+    for w in words:
+        w = w.strip()
+        for v in {w, w.capitalize(), " " + w, " " + w.capitalize()}:
+            enc = tokenizer.encode(v, add_special_tokens=False)
+            if len(enc) == 1:
+                ids.add(enc[0])
+    return sorted(ids)
+
+
 BONSAI_SHORT_NAMES = {
     "1.7b": "prism-ml/Ternary-Bonsai-1.7B-mlx-2bit",
     "4b":   "prism-ml/Ternary-Bonsai-4B-mlx-2bit",
@@ -207,18 +229,25 @@ def run_categorical(task, model, tokenizer, max_problems, no_system_prompt, delt
 
 def run_generative(task, model, tokenizer, max_problems, max_new_tokens,
                    gen_kwargs, no_system_prompt, lenient, delta_mem_attached,
-                   dump=None, only_ids=None):
+                   dump=None, only_ids=None, seed=0, skip=frozenset()):
     if only_ids is None:
         ids = list(range(min(len(task), max_problems or len(task))))
     else:
         ids = sorted(only_ids)
+    ids = [i for i in ids if i not in skip]
     n = len(ids)
+    if n == 0:
+        print("  nothing to run (all done)")
+        return None, 0, None
     passed, total = 0, 0
     f1_sum, em_sum, aux_n = 0.0, 0, 0  # HotpotQA stashes _f1/_em on conv
     t0 = time.perf_counter()
     for k, i in enumerate(ids):
         if delta_mem_attached:
             reset_delta_mem_states(model)
+        # Seed per problem, not per run, so a sampled draw doesn't depend on
+        # which chunk or resume the problem ran in.
+        mx.random.seed(seed + i)
         conv = task[i]
         prompt_str = render_prompt(tokenizer, conv, no_system_prompt)
         # stream_generate rather than generate: the final response carries
@@ -332,6 +361,14 @@ def main():
                    help="Tokens the presence penalty looks back over. mlx-lm's "
                    "default is 20; set it to max-new-tokens to match vLLM, which "
                    "counts the whole generation.")
+    p.add_argument("--marker-penalty", type=float, default=0.0,
+                   help="Subtract this from the logits of hesitation markers "
+                   "(arXiv 2606.00206). 0 = off.")
+    p.add_argument("--markers", default=",".join(HESITATION_MARKERS),
+                   help="Comma-separated marker words; each is biased in every "
+                   "single-token spelling (with/without leading space, capitalized).")
+    p.add_argument("--resume", action="store_true",
+                   help="Skip problems already recorded in --dump-jsonl.")
     p.add_argument("--max-new-tokens", type=int, default=256,
                    help="Max generated tokens for generative tasks (default 256, less than nanochat 512 for smoke speed)")
     p.add_argument("--no-system-prompt", action="store_true",
@@ -355,14 +392,8 @@ def main():
                    "problem indices; runs only those (e.g. re-running the "
                    "problems that hit max_new_tokens). Overrides -x for them.")
     args = p.parse_args()
-    mx.random.seed(args.seed)
-    gen_kwargs = {
-        "sampler": make_sampler(temp=args.temperature, top_k=args.top_k, top_p=args.top_p),
-        "logits_processors": make_logits_processors(
-            presence_penalty=args.presence_penalty,
-            presence_context_size=args.presence_context,
-        ),
-    }
+    if args.resume and not args.dump_jsonl:
+        p.error("--resume needs --dump-jsonl")
     only_ids = None
     if args.only_ids:
         with open(args.only_ids) as f:
@@ -381,6 +412,26 @@ def main():
     model, tokenizer = load(model_id)
     print(f"  loaded in {time.perf_counter()-t0:.1f}s")
     print(f"  vocab={len(tokenizer.vocab)} arch={type(model).__module__}")
+
+    logit_bias = None
+    if args.marker_penalty:
+        marker_ids = marker_token_ids(tokenizer, args.markers.split(","))
+        logit_bias = {i: -args.marker_penalty for i in marker_ids}
+        print(f"  marker penalty {args.marker_penalty} on {len(marker_ids)} tokens")
+    gen_kwargs = {
+        "sampler": make_sampler(temp=args.temperature, top_k=args.top_k, top_p=args.top_p),
+        "logits_processors": make_logits_processors(
+            logit_bias=logit_bias,
+            presence_penalty=args.presence_penalty,
+            presence_context_size=args.presence_context,
+        ),
+    }
+
+    done = set()
+    if args.resume and Path(args.dump_jsonl).exists():
+        with open(args.dump_jsonl) as f:
+            done = {(r["task"], r["idx"]) for r in map(json.loads, f)}
+        print(f"  resume: {len(done)} problems already in {args.dump_jsonl}")
 
     delta_mem_attached = False
     if args.delta_mem:
@@ -415,7 +466,11 @@ def main():
                                           cap, args.max_new_tokens,
                                           gen_kwargs, args.no_system_prompt,
                                           args.lenient_extract, delta_mem_attached,
-                                          dump, only_ids and only_ids.get(tname))
+                                          dump, only_ids and only_ids.get(tname),
+                                          seed=args.seed,
+                                          skip={i for t, i in done if t == type(task).__name__})
+            if acc is None:
+                continue
         results[tname] = acc
         totals[tname] = n
         if aux is not None:
