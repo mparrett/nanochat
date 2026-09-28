@@ -1,0 +1,71 @@
+=== chunk 1, o_scale 10 ===
+Loading prism-ml/Ternary-Bonsai-4B-mlx-2bit...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00, 8870.13it/s]
+  loaded in 1.3s
+  vocab=151669 arch=mlx_lm.models.qwen3
+  δ-mem attached: 36 layers wrapped, 252 tensors loaded
+  δ-mem config: rank=8 alpha=16.0 delta_heads=('q', 'o')
+  δ-mem o_scale: 10.0
+
+=== GSM8K ===
+  [4/4] passed=3 acc=0.750  (75.5s)
+  GSM8K: 75.00% (4 problems)
+
+=== HumanEval ===
+  [5/10] passed=3 acc=0.600  [10/10] passed=6 acc=0.600  (375.1s)
+  HumanEval: 60.00% (10 problems)
+
+==================================================
+Summary — prism-ml/Ternary-Bonsai-4B-mlx-2bit
+==================================================
+  GSM8K             75.00%  centered=+0.7500  (n=4)
+  HumanEval         60.00%  centered=+0.6000  (n=10)
+  wall             453.5s
+=== chunk 2, o_scale 10 ===
+Loading prism-ml/Ternary-Bonsai-4B-mlx-2bit...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00, 20956.55it/s]
+  loaded in 2.2s
+  vocab=151669 arch=mlx_lm.models.qwen3
+  resume: 14 problems already in runs/delta_mem_scale/o_scale_10.jsonl
+  δ-mem attached: 36 layers wrapped, 252 tensors loaded
+  δ-mem config: rank=8 alpha=16.0 delta_heads=('q', 'o')
+  δ-mem o_scale: 10.0
+
+=== GSM8K ===
+  [4/4] passed=2 acc=0.500  (86.0s)
+  GSM8K: 50.00% (4 problems)
+
+=== HumanEval ===
+  [5/9] passed=0 acc=0.000  [9/9] passed=3 acc=0.333  (488.5s)
+  HumanEval: 33.33% (9 problems)
+
+==================================================
+Summary — prism-ml/Ternary-Bonsai-4B-mlx-2bit
+==================================================
+  GSM8K             50.00%  centered=+0.5000  (n=4)
+  HumanEval         33.33%  centered=+0.3333  (n=9)
+  wall             578.1s
+=== chunk 3, o_scale 10 ===
+Loading prism-ml/Ternary-Bonsai-4B-mlx-2bit...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Fetching 7 files: 100%|██████████| 7/7 [00:00<00:00, 9471.01it/s]
+  loaded in 1.7s
+  vocab=151669 arch=mlx_lm.models.qwen3
+  resume: 27 problems already in runs/delta_mem_scale/o_scale_10.jsonl
+  δ-mem attached: 36 layers wrapped, 252 tensors loaded
+  δ-mem config: rank=8 alpha=16.0 delta_heads=('q', 'o')
+  δ-mem o_scale: 10.0
+
+=== GSM8K ===
+  [4/4] passed=3 acc=0.750  (140.3s)
+  GSM8K: 75.00% (4 problems)
+
+=== HumanEval ===
+  [5/9] passed=3 acc=0.600  [9/9] passed=4 acc=0.444  (599.5s)
+  HumanEval: 44.44% (9 problems)
+
+==================================================
+Summary — prism-ml/Ternary-Bonsai-4B-mlx-2bit
+==================================================
+  GSM8K             75.00%  centered=+0.7500  (n=4)
+  HumanEval         44.44%  centered=+0.4444  (n=9)
+  wall             742.6s
